@@ -46,9 +46,7 @@ extern crate alloc;
 extern crate std;
 
 // Re-export the core traits/types so consumers only depend on this crate.
-pub use tpt_math_prob_core::{
-    Distribution, Rng, Sampler, SplitMix64, Standard,
-};
+pub use tpt_math_prob_core::{Distribution, Rng, Sampler, SplitMix64, Standard};
 
 use core::fmt;
 
@@ -58,7 +56,11 @@ use alloc::vec::Vec;
 /// Absolute value without relying on `f64::abs` (kept `no_std`-portable).
 #[inline]
 fn fabs(x: f64) -> f64 {
-    if x < 0.0 { -x } else { x }
+    if x < 0.0 {
+        -x
+    } else {
+        x
+    }
 }
 
 /// Draw a single `f64` from [`Standard`] (avoids ambiguous-trait inference).
@@ -183,7 +185,9 @@ where
     S: Clone,
 {
     fn clone(&self) -> Self {
-        InverseCdfSampler { cdf: self.cdf.clone() }
+        InverseCdfSampler {
+            cdf: self.cdf.clone(),
+        }
     }
 }
 impl<S: AsRef<[f64]>> Copy for InverseCdfSampler<S> where S: Copy {}
@@ -192,7 +196,9 @@ where
     S: fmt::Debug,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("InverseCdfSampler").field("cdf", &self.cdf).finish()
+        f.debug_struct("InverseCdfSampler")
+            .field("cdf", &self.cdf)
+            .finish()
     }
 }
 impl<S: AsRef<[f64]>> PartialEq for InverseCdfSampler<S>
@@ -222,7 +228,7 @@ impl<S: AsRef<[f64]>> InverseCdfSampler<S> {
         }
         let mut prev = 0.0;
         for &c in slice {
-            if !c.is_finite() || c < 0.0 || c > 1.0 {
+            if !c.is_finite() || !(0.0..=1.0).contains(&c) {
                 return Err(SamplerError::InvalidCdf);
             }
             if c < prev {
@@ -334,10 +340,7 @@ pub fn categorical(weights: &[f64]) -> Result<WeightedIndex, SamplerError> {
 /// let i = sample_categorical(&[1.0, 1.0, 1.0], &mut rng).unwrap();
 /// assert!(i < 3);
 /// ```
-pub fn sample_categorical<R: Rng + ?Sized>(
-    weights: &[f64],
-    rng: &mut R,
-) -> Option<usize> {
+pub fn sample_categorical<R: Rng + ?Sized>(weights: &[f64], rng: &mut R) -> Option<usize> {
     let total = validate_weights(weights).ok()?;
     let mut u = uniform_f64(rng) * total;
     for (i, &w) in weights.iter().enumerate() {
@@ -395,7 +398,9 @@ where
     S: Clone,
 {
     fn clone(&self) -> Self {
-        SystematicResampler { sampler: self.sampler.clone() }
+        SystematicResampler {
+            sampler: self.sampler.clone(),
+        }
     }
 }
 impl<S: AsRef<[f64]>> Copy for SystematicResampler<S> where S: Copy {}
@@ -422,14 +427,18 @@ where
 impl SystematicResampler<Vec<f64>> {
     /// Build from unnormalised `weights`.
     pub fn from_weights(weights: &[f64]) -> Result<Self, SamplerError> {
-        Ok(SystematicResampler { sampler: InverseCdfSampler::from_weights(weights)? })
+        Ok(SystematicResampler {
+            sampler: InverseCdfSampler::from_weights(weights)?,
+        })
     }
 }
 
 impl<S: AsRef<[f64]>> SystematicResampler<S> {
     /// Build from an existing normalised CDF (`InverseCdfSampler::from_cdf`).
     pub fn new(cdf: S) -> Result<Self, SamplerError> {
-        Ok(SystematicResampler { sampler: InverseCdfSampler::from_cdf(cdf)? })
+        Ok(SystematicResampler {
+            sampler: InverseCdfSampler::from_cdf(cdf)?,
+        })
     }
 
     /// Number of source categories.
@@ -540,7 +549,11 @@ impl<'a, T> ReservoirSampler<'a, T> {
     /// Current contents (the first `min(seen, cap)` slots are live).
     pub fn sample(&self) -> &[T] {
         let live = self.seen as usize;
-        let n = if live < self.buf.len() { live } else { self.buf.len() };
+        let n = if live < self.buf.len() {
+            live
+        } else {
+            self.buf.len()
+        };
         &self.buf[..n]
     }
 
@@ -697,7 +710,11 @@ impl Uniform {
         if !lo.is_finite() || !hi.is_finite() || lo >= hi {
             return Err(SamplerError::InvalidInterval);
         }
-        Ok(Uniform { lo, hi, width: hi - lo })
+        Ok(Uniform {
+            lo,
+            hi,
+            width: hi - lo,
+        })
     }
 
     /// Lower bound.
@@ -738,7 +755,7 @@ impl Bernoulli {
     ///
     /// Returns [`SamplerError::InvalidProbability`] if `p` is outside `[0, 1]`.
     pub fn new(p: f64) -> Result<Self, SamplerError> {
-        if !p.is_finite() || p < 0.0 || p > 1.0 {
+        if !p.is_finite() || !(0.0..=1.0).contains(&p) {
             return Err(SamplerError::InvalidProbability);
         }
         Ok(Bernoulli { p })
@@ -804,7 +821,12 @@ where
         if !m.is_finite() || m <= 0.0 {
             return Err(SamplerError::InvalidBound);
         }
-        Ok(RejectionSampler { target, proposal, m, max_iterations: 1024 })
+        Ok(RejectionSampler {
+            target,
+            proposal,
+            m,
+            max_iterations: 1024,
+        })
     }
 
     /// Borrow the target density.
@@ -871,8 +893,8 @@ where
 /// Convenient re-exports for sampling work.
 pub mod prelude {
     pub use crate::{
-        Bernoulli, Density, DensityFn, Distribution, InverseCdfSampler, Rng, RejectionSampler,
-        ReservoirSampler, Sampler, SamplerError, SystematicResampler, Uniform,
+        Bernoulli, Density, DensityFn, Distribution, InverseCdfSampler, RejectionSampler,
+        ReservoirSampler, Rng, Sampler, SamplerError, SystematicResampler, Uniform,
     };
     pub use tpt_math_prob_core::{SplitMix64, Standard};
 
@@ -1022,12 +1044,18 @@ mod tests {
                         // [floor, ceil] of its expectation.
                         let lo = (n_f * p).floor() as usize;
                         let hi = (n_f * p).ceil() as usize;
-                        assert!(c >= lo && c <= hi, "scheme {scheme:?} bin {i}: {c} not in [{lo},{hi}]");
+                        assert!(
+                            c >= lo && c <= hi,
+                            "scheme {scheme:?} bin {i}: {c} not in [{lo},{hi}]"
+                        );
                     } else {
                         // Multinomial / stratified have variance; only check
                         // the empirical mean is approximately correct.
                         let mean = c as f64 / n_f;
-                        assert!((mean - p).abs() < 0.05, "scheme {scheme:?} bin {i}: mean {mean} vs {p}");
+                        assert!(
+                            (mean - p).abs() < 0.05,
+                            "scheme {scheme:?} bin {i}: mean {mean} vs {p}"
+                        );
                     }
                 }
             }
@@ -1106,7 +1134,13 @@ mod tests {
     #[test]
     fn rejection_triangular_mean() {
         // Target: f(x) = 2x on [0,1] (mean 2/3). Proposal: Uniform(0,1), m=2.
-        let target = DensityFn(|x: f64| if x >= 0.0 && x <= 1.0 { 2.0 * x } else { 0.0 });
+        let target = DensityFn(|x: f64| {
+            if (0.0..=1.0).contains(&x) {
+                2.0 * x
+            } else {
+                0.0
+            }
+        });
         let proposal = Uniform::new(0.0, 1.0).unwrap();
         let rs = RejectionSampler::new(target, proposal, 2.0).unwrap();
         let mut rng = SplitMix64::seed_from_u64(SEED);
@@ -1114,7 +1148,7 @@ mod tests {
         let trials = 50000u32;
         for _ in 0..trials {
             let x = rs.sample(&mut rng);
-            assert!(x >= 0.0 && x <= 1.0);
+            assert!((0.0..=1.0).contains(&x));
             sum += x;
         }
         let mean = sum / trials as f64;

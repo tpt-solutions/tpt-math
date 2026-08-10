@@ -8,10 +8,10 @@ authors.workspace = true
 description = "Sampling strategies."
 
 [dependencies]
-tpt-math-prob-core = { workspace = true }
+tpt-math-prob-core = { path = "../tpt-math-prob-core", default-features = false }
 
 [features]
 default = ["std"]
-std = []
-alloc = []
+std = ["tpt-math-prob-core/std"]
+alloc = ["tpt-math-prob-core/alloc"]
 

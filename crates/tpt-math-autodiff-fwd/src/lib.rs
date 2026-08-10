@@ -1,4 +1,5 @@
 #![no_std]
+#![allow(clippy::wrong_self_convention)]
 //! Forward-mode automatic differentiation via dual numbers.
 //!
 //! A [`Dual<T, N>`] pairs a value with a vector of `N` first-derivatives, one
@@ -24,8 +25,8 @@
 //!
 //! [`Dual`]: Dual
 
-use tpt_math_numeric::{Float, One, Zero};
 use core::ops::{Add, Div, Mul, Neg, Sub};
+use tpt_math_numeric::{Float, One, Zero};
 
 /// A dual number: a value `re` together with `N` derivatives `du`.
 ///
@@ -40,7 +41,10 @@ pub struct Dual<T, const N: usize = 1> {
 impl<T: Zero + Copy, const N: usize> Dual<T, N> {
     /// A constant (zero derivative in every direction).
     pub fn constant(re: T) -> Self {
-        Dual { re, du: [T::zero(); N] }
+        Dual {
+            re,
+            du: [T::zero(); N],
+        }
     }
 }
 
@@ -80,7 +84,12 @@ impl<T, const N: usize> Dual<T, N> {
 
 impl<T, const N: usize> Dual<T, N>
 where
-    T: Copy + Add<T, Output = T> + Sub<T, Output = T> + Mul<T, Output = T> + Div<T, Output = T> + Zero,
+    T: Copy
+        + Add<T, Output = T>
+        + Sub<T, Output = T>
+        + Mul<T, Output = T>
+        + Div<T, Output = T>
+        + Zero,
 {
     /// Construct from a value and explicit derivative vector.
     pub fn new(re: T, du: [T; N]) -> Self {
@@ -112,20 +121,25 @@ macro_rules! impl_binop {
 impl_binop!(Add, add, |a, b| a + b, |_a, da, _b, db| da + db);
 impl_binop!(Sub, sub, |a, b| a - b, |_a, da, _b, db| da - db);
 impl_binop!(Mul, mul, |a, b| a * b, |a, da, b, db| a * db + b * da);
-impl_binop!(
-    Div,
-    div,
-    |a, b| a / b,
-    |a, da, b, db| (da * b - a * db) / (b * b)
-);
+impl_binop!(Div, div, |a, b| a / b, |a, da, b, db| (da * b - a * db)
+    / (b * b));
 
 impl<T, const N: usize> Dual<T, N>
 where
-    T: Copy + Add<T, Output = T> + Sub<T, Output = T> + Mul<T, Output = T> + Div<T, Output = T> + Zero + Neg<Output = T>,
+    T: Copy
+        + Add<T, Output = T>
+        + Sub<T, Output = T>
+        + Mul<T, Output = T>
+        + Div<T, Output = T>
+        + Zero
+        + Neg<Output = T>,
 {
     /// Negate.
-    pub fn neg(self) -> Dual<T, N> {
-        Dual { re: -self.re, du: core::array::from_fn(|i| -self.du[i]) }
+    pub fn negate(self) -> Dual<T, N> {
+        Dual {
+            re: -self.re,
+            du: core::array::from_fn(|i| -self.du[i]),
+        }
     }
 }
 
@@ -136,19 +150,28 @@ where
     /// `sin(self)` with propagated derivative `cos(re) * du`.
     pub fn sin(self) -> Dual<T, N> {
         let c = self.re.cos();
-        Dual { re: self.re.sin(), du: core::array::from_fn(|i| self.du[i] * c) }
+        Dual {
+            re: self.re.sin(),
+            du: core::array::from_fn(|i| self.du[i] * c),
+        }
     }
 
     /// `cos(self)` with propagated derivative `-sin(re) * du`.
     pub fn cos(self) -> Dual<T, N> {
         let s = self.re.sin();
-        Dual { re: self.re.cos(), du: core::array::from_fn(|i| -self.du[i] * s) }
+        Dual {
+            re: self.re.cos(),
+            du: core::array::from_fn(|i| -self.du[i] * s),
+        }
     }
 
     /// `exp(self)` with propagated derivative `exp(re) * du`.
     pub fn exp(self) -> Dual<T, N> {
         let e = self.re.exp();
-        Dual { re: e, du: core::array::from_fn(|i| self.du[i] * e) }
+        Dual {
+            re: e,
+            du: core::array::from_fn(|i| self.du[i] * e),
+        }
     }
 
     /// `ln(self)` with propagated derivative `du / re`.

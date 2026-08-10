@@ -10,10 +10,10 @@ description = "Linear algebra paired with tpt-math-units for dimensional safety 
 [dependencies]
 nalgebra = { version = "0.33.3", default-features = false, features = ["libm", "macros"] }
 num-traits = { version = "0.2.19", default-features = false, features = ["libm"] }
-tpt-math-units = { workspace = true }
+tpt-math-units = { path = "../tpt-math-units", default-features = false }
 
 [features]
 default = ["std"]
 std = ["nalgebra/std", "tpt-math-units/std", "num-traits/std"]
-alloc = []
+alloc = ["nalgebra/alloc", "tpt-math-units/alloc"]
 

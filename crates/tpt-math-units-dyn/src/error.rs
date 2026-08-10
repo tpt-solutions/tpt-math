@@ -68,7 +68,10 @@ impl fmt::Display for UnitError {
                 write!(f, "dimension exponent overflow in `{context}`")
             }
             Self::NoIntegerRoot { dimension, root } => {
-                write!(f, "dimension [{dimension}] has no integer root of order {root}")
+                write!(
+                    f,
+                    "dimension [{dimension}] has no integer root of order {root}"
+                )
             }
             Self::Malformed { input, reason } => {
                 write!(f, "malformed quantity `{input}`: {reason}")

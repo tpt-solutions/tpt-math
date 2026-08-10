@@ -76,11 +76,7 @@ impl UnitDef {
     /// let smoot = UnitDef::new(String::from("smoot"), Dimension::LENGTH, 1.702);
     /// assert_eq!(smoot.to_base(1.0), 1.702);
     /// ```
-    pub fn new(
-        symbol: impl Into<Cow<'static, str>>,
-        dimension: Dimension,
-        scale: f64,
-    ) -> Self {
+    pub fn new(symbol: impl Into<Cow<'static, str>>, dimension: Dimension, scale: f64) -> Self {
         Self {
             symbol: symbol.into(),
             dimension,
@@ -218,7 +214,11 @@ pub static BUILTIN_UNITS: &[UnitDef] = &[
     u("1", Dimension::DIMENSIONLESS, 1.0),
     u("rad", Dimension::DIMENSIONLESS, 1.0),
     u("radian", Dimension::DIMENSIONLESS, 1.0),
-    u("deg", Dimension::DIMENSIONLESS, std::f64::consts::PI / 180.0),
+    u(
+        "deg",
+        Dimension::DIMENSIONLESS,
+        std::f64::consts::PI / 180.0,
+    ),
     u("°", Dimension::DIMENSIONLESS, std::f64::consts::PI / 180.0),
     u("%", Dimension::DIMENSIONLESS, 1.0e-2),
     u("ppm", Dimension::DIMENSIONLESS, 1.0e-6),
@@ -427,11 +427,9 @@ impl UnitRegistry {
     ///
     /// Returns [`UnitError::UnknownUnit`] if the symbol is not registered.
     pub fn quantity(&self, value: f64, symbol: &str) -> Result<DynQuantity> {
-        let def = self
-            .get(symbol)
-            .ok_or_else(|| UnitError::UnknownUnit {
-                name: symbol.to_owned(),
-            })?;
+        let def = self.get(symbol).ok_or_else(|| UnitError::UnknownUnit {
+            name: symbol.to_owned(),
+        })?;
         Ok(DynQuantity::from_base(def.to_base(value), def.dimension))
     }
 
@@ -555,10 +553,16 @@ mod tests {
         let (dim, scale) = lookup("kWh").unwrap();
         assert_eq!(dim, Dimension::ENERGY);
         assert!((scale - 3.6e6).abs() < 1e-6);
-        assert_eq!(lookup("N").unwrap().0, Dimension::MASS * Dimension::ACCELERATION);
+        assert_eq!(
+            lookup("N").unwrap().0,
+            Dimension::MASS * Dimension::ACCELERATION
+        );
         assert_eq!(lookup("W").unwrap().0, Dimension::ENERGY / Dimension::TIME);
         assert_eq!(lookup("Pa").unwrap().0, Dimension::FORCE / Dimension::AREA);
-        assert_eq!(lookup("V").unwrap().0, Dimension::POWER / Dimension::ELECTRIC_CURRENT);
+        assert_eq!(
+            lookup("V").unwrap().0,
+            Dimension::POWER / Dimension::ELECTRIC_CURRENT
+        );
     }
 
     #[test]
@@ -597,7 +601,10 @@ mod tests {
         // Replacing a definition returns the old one.
         let previous = registry.define("smoot", Dimension::LENGTH, 1.7);
         assert_eq!(previous.map(|d| d.scale), Some(1.702));
-        assert_eq!(registry.remove("m").map(|d| d.dimension), Some(Dimension::LENGTH));
+        assert_eq!(
+            registry.remove("m").map(|d| d.dimension),
+            Some(Dimension::LENGTH)
+        );
         assert!(!registry.contains("m"));
         assert_eq!(registry.symbols().collect::<Vec<_>>(), vec!["smoot"]);
         assert_eq!(registry.definitions().count(), 1);

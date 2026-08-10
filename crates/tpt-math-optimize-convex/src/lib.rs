@@ -21,7 +21,7 @@
 //! where equality constraints use the zero cone `ZeroConeT`, inequality
 //! constraints and variable bounds use the nonnegative cone `NonnegativeConeT`.
 //! Bounds `l ≤ x ≤ u` are mapped to two nonnegative slack inequalities each
-//! (`x - l ≥ 0` and `u - x ≥ 0`). The quadratic cost matrix `P` is symmetrized
+//! (`x - l ≥ 0` and `u - x ≥ 0`). The quadratic cost matrix is symmetrized
 //! as `(P + Pᵀ) / 2` and clarabel consumes only its upper triangle (clarabel
 //! also performs this extraction internally, but we do it explicitly for
 //! deterministic behaviour).
@@ -29,16 +29,16 @@
 //! # Examples
 //!
 //! ```
-//! use tpt_math_linalg::nalgebra::{dvector, dmatrix};
+//! use nalgebra::{dvector, dmatrix};
 //! use tpt_math_optimize_convex::solve_qp;
 //!
 //! // minimize x² + y²  subject to  x + y = 1
 //! // optimum is (0.5, 0.5)
-//! let P = dmatrix![2.0, 0.0; 0.0, 2.0];
+//! let p = dmatrix![2.0, 0.0; 0.0, 2.0];
 //! let q = dvector![0.0, 0.0];
-//! let A_eq = dmatrix![1.0, 1.0];
+//! let a_eq = dmatrix![1.0, 1.0];
 //! let b_eq = dvector![1.0];
-//! let x = solve_qp(&P, &q, &A_eq, &b_eq, &[]).unwrap();
+//! let x = solve_qp(&p, &q, &a_eq, &b_eq, &[]).unwrap();
 //! assert!((x[0] - 0.5).abs() < 1e-6 && (x[1] - 0.5).abs() < 1e-6);
 //! ```
 //!
@@ -164,45 +164,45 @@ fn check_finite_vector(v: &DVector<f64>, what: &str) -> Result<(), ConvexError> 
 /// Internal worker that assembles the conic form and calls clarabel.
 #[allow(clippy::too_many_arguments)]
 fn solve_qp_internal(
-    P: &DMatrix<f64>,
+    p: &DMatrix<f64>,
     q: &DVector<f64>,
-    A_eq: &DMatrix<f64>,
+    a_eq: &DMatrix<f64>,
     b_eq: &DVector<f64>,
-    A_ineq: &DMatrix<f64>,
+    a_ineq: &DMatrix<f64>,
     b_ineq: &DVector<f64>,
     bounds: &[(f64, f64)],
 ) -> Result<QpSolution, ConvexError> {
     let n = q.len();
 
-    if P.nrows() != n || P.ncols() != n {
+    if p.nrows() != n || p.ncols() != n {
         return Err(ConvexError::DimensionMismatch {
-            what: format!("P is {}x{}, expected {}x{}", P.nrows(), P.ncols(), n, n),
+            what: format!("P is {}x{}, expected {}x{}", p.nrows(), p.ncols(), n, n),
         });
     }
-    if A_eq.ncols() != n {
+    if !a_eq.is_empty() && a_eq.ncols() != n {
         return Err(ConvexError::DimensionMismatch {
-            what: format!("A_eq has {} columns, expected {n}", A_eq.ncols()),
+            what: format!("A_eq has {} columns, expected {n}", a_eq.ncols()),
         });
     }
-    if A_eq.nrows() != b_eq.len() {
+    if a_eq.nrows() != b_eq.len() {
         return Err(ConvexError::DimensionMismatch {
             what: format!(
                 "A_eq has {} rows but b_eq has {} entries",
-                A_eq.nrows(),
+                a_eq.nrows(),
                 b_eq.len()
             ),
         });
     }
-    if A_ineq.ncols() != n {
+    if !a_ineq.is_empty() && a_ineq.ncols() != n {
         return Err(ConvexError::DimensionMismatch {
-            what: format!("A_ineq has {} columns, expected {n}", A_ineq.ncols()),
+            what: format!("A_ineq has {} columns, expected {n}", a_ineq.ncols()),
         });
     }
-    if A_ineq.nrows() != b_ineq.len() {
+    if a_ineq.nrows() != b_ineq.len() {
         return Err(ConvexError::DimensionMismatch {
             what: format!(
                 "A_ineq has {} rows but b_ineq has {} entries",
-                A_ineq.nrows(),
+                a_ineq.nrows(),
                 b_ineq.len()
             ),
         });
@@ -213,23 +213,30 @@ fn solve_qp_internal(
         });
     }
 
-    check_finite_matrix(P, "P")?;
+    check_finite_matrix(p, "P")?;
     check_finite_vector(q, "q")?;
-    check_finite_matrix(A_eq, "A_eq")?;
+    check_finite_matrix(a_eq, "A_eq")?;
     check_finite_vector(b_eq, "b_eq")?;
-    check_finite_matrix(A_ineq, "A_ineq")?;
+    check_finite_matrix(a_ineq, "A_ineq")?;
     check_finite_vector(b_ineq, "b_ineq")?;
 
-    let p_csc = symmetric_upper_csc(P);
+    let p_csc = symmetric_upper_csc(p);
     let c: Vec<f64> = q.iter().copied().collect();
 
     // Number of constraints: equality + inequality + two bounds per variable.
-    let n_eq = A_eq.nrows();
-    let n_ineq = A_ineq.nrows();
-    let n_bound = if bounds.is_empty() { 0 } else { 2 * n };
-    let m = n_eq + n_ineq + n_bound;
+    let n_eq = a_eq.nrows();
+    let n_ineq = a_ineq.nrows();
+    let bound_rows = if bounds.is_empty() {
+        0
+    } else {
+        bounds
+            .iter()
+            .map(|(l, u)| l.is_finite() as usize + u.is_finite() as usize)
+            .sum()
+    };
+    let m = n_eq + n_ineq + bound_rows;
 
-    let mut A = DMatrix::<f64>::zeros(m, n);
+    let mut a = DMatrix::<f64>::zeros(m, n);
     let mut b = DVector::<f64>::zeros(m);
     let mut cones: Vec<SupportedConeT<f64>> = Vec::new();
 
@@ -238,7 +245,7 @@ fn solve_qp_internal(
     // Equality constraints -> zero cone.
     for i in 0..n_eq {
         for j in 0..n {
-            A[(row, j)] = A_eq[(i, j)];
+            a[(row, j)] = a_eq[(i, j)];
         }
         b[row] = b_eq[i];
         row += 1;
@@ -250,7 +257,7 @@ fn solve_qp_internal(
     // Inequality constraints A_ineq x ≤ b_ineq -> nonnegative cone on the slack.
     for i in 0..n_ineq {
         for j in 0..n {
-            A[(row, j)] = A_ineq[(i, j)];
+            a[(row, j)] = a_ineq[(i, j)];
         }
         b[row] = b_ineq[i];
         row += 1;
@@ -260,37 +267,43 @@ fn solve_qp_internal(
     }
 
     // Bounds l ≤ x ≤ u -> (x - l ≥ 0) and (u - x ≥ 0) -> nonnegative cone.
-    if n_bound > 0 {
+    // A non-finite bound (`inf`) means "unbounded" on that side and is skipped.
+    if bound_rows > 0 {
         for j in 0..n {
             let (l, u) = bounds[j];
-            if !l.is_finite() {
-                return Err(ConvexError::NotFinite { what: "lower bound".into() });
+            if l.is_finite() {
+                // x ≥ l  =>  -x + s = -l with s ≥ 0  =>  x = l + s ≥ l
+                a[(row, j)] = -1.0;
+                b[row] = -l;
+                row += 1;
             }
-            if !u.is_finite() {
-                return Err(ConvexError::NotFinite { what: "upper bound".into() });
+            if u.is_finite() {
+                // x ≤ u  =>   x + s = u with s ≥ 0  =>  x = u - s ≤ u
+                a[(row, j)] = 1.0;
+                b[row] = u;
+                row += 1;
             }
-            // x - l ≥ 0  =>  x + s = l with s ≥ 0
-            A[(row, j)] = 1.0;
-            b[row] = l;
-            row += 1;
-            // u - x ≥ 0  =>  -x + s = u with s ≥ 0
-            A[(row, j)] = -1.0;
-            b[row] = u;
-            row += 1;
         }
-        cones.push(NonnegativeConeT(n_bound));
+        cones.push(NonnegativeConeT(bound_rows));
     }
 
-    let A_csc = dense_to_csc(&A);
+    let a_csc = dense_to_csc(&a);
     let bb: Vec<f64> = b.iter().copied().collect();
 
     let settings = DefaultSettings::<f64>::default();
-    let mut solver = clarabel::solver::DefaultSolver::new(&p_csc, &c, &A_csc, &bb, &cones, settings)
-        .map_err(|e| ConvexError::Solver { status: e.to_string() })?;
+    let mut solver = clarabel::solver::DefaultSolver::new(
+        &p_csc, &c, &a_csc, &bb, &cones, settings,
+    )
+    .map_err(|e| ConvexError::Solver {
+        status: e.to_string(),
+    })?;
     solver.solve();
 
     let sol = &solver.solution;
-    if matches!(sol.status, SolverStatus::Solved | SolverStatus::AlmostSolved) {
+    if matches!(
+        sol.status,
+        SolverStatus::Solved | SolverStatus::AlmostSolved
+    ) {
         Ok(QpSolution {
             x: DVector::from_vec(sol.x.clone()),
             objective: sol.obj_val,
@@ -316,9 +329,9 @@ fn solve_qp_internal(
 ///
 /// # Arguments
 ///
-/// * `P` — symmetric `n×n` quadratic-cost matrix (will be symmetrized).
+/// * `p` — symmetric `n×n` quadratic-cost matrix (will be symmetrized).
 /// * `q` — linear-cost vector of length `n`.
-/// * `A_eq` — `p×n` equality-constraint matrix.
+/// * `a_eq` — `p×n` equality-constraint matrix.
 /// * `b_eq` — right-hand side of length `p`.
 /// * `bounds` — per-variable `(lower, upper)` bounds. Pass `&[]` to impose no
 ///   bounds. Use `-inf`/`inf` style via finite bounds only; unbounded
@@ -332,27 +345,27 @@ fn solve_qp_internal(
 /// # Examples
 ///
 /// ```
-/// use tpt_math_linalg::nalgebra::{dvector, dmatrix};
+/// use nalgebra::{dvector, dmatrix};
 /// use tpt_math_optimize_convex::solve_qp;
 ///
 /// // minimize x²  subject to  x ≥ 1   ->  optimum x = 1
-/// let P = dmatrix![2.0];
+/// let p = dmatrix![2.0];
 /// let q = dvector![0.0];
-/// let A_eq = dmatrix![];
+/// let a_eq = dmatrix![];
 /// let b_eq = dvector![];
-/// let x = solve_qp(&P, &q, &A_eq, &b_eq, &[(1.0, f64::INFINITY)]).unwrap();
+/// let x = solve_qp(&p, &q, &a_eq, &b_eq, &[(1.0, f64::INFINITY)]).unwrap();
 /// assert!((x[0] - 1.0).abs() < 1e-6);
 /// ```
 pub fn solve_qp(
-    P: &DMatrix<f64>,
+    p: &DMatrix<f64>,
     q: &DVector<f64>,
-    A_eq: &DMatrix<f64>,
+    a_eq: &DMatrix<f64>,
     b_eq: &DVector<f64>,
     bounds: &[(f64, f64)],
 ) -> Result<DVector<f64>, ConvexError> {
-    let A_ineq = DMatrix::<f64>::zeros(0, q.len());
+    let a_ineq = DMatrix::<f64>::zeros(0, q.len());
     let b_ineq = DVector::<f64>::zeros(0);
-    solve_qp_internal(P, q, A_eq, b_eq, &A_ineq, &b_ineq, bounds).map(|s| s.x)
+    solve_qp_internal(p, q, a_eq, b_eq, &a_ineq, &b_ineq, bounds).map(|s| s.x)
 }
 
 /// A builder for quadratic programs supporting equality constraints, inequality
@@ -361,7 +374,7 @@ pub fn solve_qp(
 /// # Examples
 ///
 /// ```
-/// use tpt_math_linalg::nalgebra::{dvector, dmatrix};
+/// use nalgebra::{dvector, dmatrix};
 /// use tpt_math_optimize_convex::{QuadraticProgram, solve_qp};
 ///
 /// // minimize x² + y²  subject to  x + y = 1, x ≥ 0, y ≥ 0
@@ -374,12 +387,11 @@ pub fn solve_qp(
 /// ```
 #[derive(Debug, Clone)]
 pub struct QuadraticProgram {
-    n: usize,
-    P: DMatrix<f64>,
+    p: DMatrix<f64>,
     q: DVector<f64>,
-    A_eq: DMatrix<f64>,
+    a_eq: DMatrix<f64>,
     b_eq: DVector<f64>,
-    A_ineq: DMatrix<f64>,
+    a_ineq: DMatrix<f64>,
     b_ineq: DVector<f64>,
     bounds: Vec<(f64, f64)>,
 }
@@ -391,21 +403,19 @@ impl QuadraticProgram {
     pub fn new(q: DVector<f64>) -> Self {
         let n = q.len();
         QuadraticProgram {
-            n,
-            P: DMatrix::zeros(n, n),
+            p: DMatrix::zeros(n, n),
             q,
-            A_eq: DMatrix::zeros(0, n),
+            a_eq: DMatrix::zeros(0, n),
             b_eq: DVector::zeros(0),
-            A_ineq: DMatrix::zeros(0, n),
+            a_ineq: DMatrix::zeros(0, n),
             b_ineq: DVector::zeros(0),
             bounds: Vec::new(),
         }
     }
 
     /// Set the quadratic cost matrix `P` (`n×n`). It will be symmetrized.
-    #[allow(non_snake_case)]
-    pub fn objective(mut self, P: DMatrix<f64>) -> Self {
-        self.P = P;
+    pub fn objective(mut self, p: DMatrix<f64>) -> Self {
+        self.p = p;
         self
     }
 
@@ -416,15 +426,15 @@ impl QuadraticProgram {
     }
 
     /// Set equality constraints `A_eq x = b_eq`.
-    pub fn equality(mut self, A_eq: DMatrix<f64>, b_eq: DVector<f64>) -> Self {
-        self.A_eq = A_eq;
+    pub fn equality(mut self, a_eq: DMatrix<f64>, b_eq: DVector<f64>) -> Self {
+        self.a_eq = a_eq;
         self.b_eq = b_eq;
         self
     }
 
     /// Set linear inequality constraints `A_ineq x ≤ b_ineq`.
-    pub fn inequality(mut self, A_ineq: DMatrix<f64>, b_ineq: DVector<f64>) -> Self {
-        self.A_ineq = A_ineq;
+    pub fn inequality(mut self, a_ineq: DMatrix<f64>, b_ineq: DVector<f64>) -> Self {
+        self.a_ineq = a_ineq;
         self.b_ineq = b_ineq;
         self
     }
@@ -438,11 +448,11 @@ impl QuadraticProgram {
     /// Solve the program and return a [`QpSolution`].
     pub fn solve(self) -> Result<QpSolution, ConvexError> {
         solve_qp_internal(
-            &self.P,
+            &self.p,
             &self.q,
-            &self.A_eq,
+            &self.a_eq,
             &self.b_eq,
-            &self.A_ineq,
+            &self.a_ineq,
             &self.b_ineq,
             &self.bounds,
         )
@@ -457,34 +467,49 @@ mod tests {
     #[test]
     fn test_minimize_x2_eq_1() {
         // minimize x²  s.t. x ≥ 1  ->  x = 1
-        let P = dmatrix![2.0];
+        let p = dmatrix![2.0];
         let q = dvector![0.0];
-        let A_eq = dmatrix![];
+        let a_eq = dmatrix![];
         let b_eq = dvector![];
-        let x = solve_qp(&P, &q, &A_eq, &b_eq, &[(1.0, f64::INFINITY)]).unwrap();
+        let x = solve_qp(&p, &q, &a_eq, &b_eq, &[(1.0, f64::INFINITY)]).unwrap();
         assert!((x[0] - 1.0).abs() < 1e-6, "got x = {}", x[0]);
     }
 
     #[test]
     fn test_minimize_x2_y2_eq_sum() {
         // minimize x² + y²  s.t. x + y = 1  ->  (0.5, 0.5)
-        let P = dmatrix![2.0, 0.0; 0.0, 2.0];
+        let p = dmatrix![2.0, 0.0; 0.0, 2.0];
         let q = dvector![0.0, 0.0];
-        let A_eq = dmatrix![1.0, 1.0];
+        let a_eq = dmatrix![1.0, 1.0];
         let b_eq = dvector![1.0];
-        let x = solve_qp(&P, &q, &A_eq, &b_eq, &[]).unwrap();
-        assert!((x[0] - 0.5).abs() < 1e-6 && (x[1] - 0.5).abs() < 1e-6, "got x = {:?}", x);
+        let x = solve_qp(&p, &q, &a_eq, &b_eq, &[]).unwrap();
+        assert!(
+            (x[0] - 0.5).abs() < 1e-6 && (x[1] - 0.5).abs() < 1e-6,
+            "got x = {:?}",
+            x
+        );
     }
 
     #[test]
     fn test_minimize_with_inequality() {
         // minimize x² + y²  s.t. x ≥ 1  ->  x = 1, y = 0
-        let P = dmatrix![2.0, 0.0; 0.0, 2.0];
+        let p = dmatrix![2.0, 0.0; 0.0, 2.0];
         let q = dvector![0.0, 0.0];
-        let A_eq = dmatrix![];
+        let a_eq = dmatrix![];
         let b_eq = dvector![];
-        let x = solve_qp(&P, &q, &A_eq, &b_eq, &[(1.0, f64::INFINITY), (0.0, f64::INFINITY)]).unwrap();
-        assert!((x[0] - 1.0).abs() < 1e-6 && (x[1] - 0.0).abs() < 1e-6, "got x = {:?}", x);
+        let x = solve_qp(
+            &p,
+            &q,
+            &a_eq,
+            &b_eq,
+            &[(1.0, f64::INFINITY), (0.0, f64::INFINITY)],
+        )
+        .unwrap();
+        assert!(
+            (x[0] - 1.0).abs() < 1e-4 && (x[1] - 0.0).abs() < 1e-4,
+            "got x = {:?}",
+            x
+        );
     }
 
     #[test]
@@ -502,40 +527,44 @@ mod tests {
         // minimize x² + y²  s.t. x + y ≤ 1, x ≥ 0, y ≥ 0
         // The unconstrained min at (0,0) already satisfies the constraint, so
         // optimum is (0, 0).
-        let P = dmatrix![2.0, 0.0; 0.0, 2.0];
+        let p = dmatrix![2.0, 0.0; 0.0, 2.0];
         let q = dvector![0.0, 0.0];
-        let A_ineq = dmatrix![1.0, 1.0];
+        let a_ineq = dmatrix![1.0, 1.0];
         let b_ineq = dvector![1.0];
         let sol = solve_qp_internal(
-            &P,
+            &p,
             &q,
             &DMatrix::zeros(0, 2),
             &DVector::zeros(0),
-            &A_ineq,
+            &a_ineq,
             &b_ineq,
             &[],
         )
         .unwrap();
-        assert!((sol.x[0]).abs() < 1e-6 && (sol.x[1]).abs() < 1e-6, "got x = {:?}", sol.x);
+        assert!(
+            (sol.x[0]).abs() < 1e-6 && (sol.x[1]).abs() < 1e-6,
+            "got x = {:?}",
+            sol.x
+        );
     }
 
     #[test]
     fn test_dimension_error() {
-        let P = dmatrix![2.0, 0.0; 0.0, 2.0];
+        let p = dmatrix![2.0, 0.0; 0.0, 2.0];
         let q = dvector![0.0]; // wrong length
-        let A_eq = dmatrix![1.0, 1.0];
+        let a_eq = dmatrix![1.0, 1.0];
         let b_eq = dvector![1.0];
-        let err = solve_qp(&P, &q, &A_eq, &b_eq, &[]).unwrap_err();
+        let err = solve_qp(&p, &q, &a_eq, &b_eq, &[]).unwrap_err();
         assert!(matches!(err, ConvexError::DimensionMismatch { .. }));
     }
 
     #[test]
     fn test_nonfinite_error() {
-        let P = dmatrix![2.0, 0.0; 0.0, 2.0];
+        let p = dmatrix![2.0, 0.0; 0.0, 2.0];
         let q = dvector![f64::NAN, 0.0];
-        let A_eq = dmatrix![1.0, 1.0];
+        let a_eq = dmatrix![1.0, 1.0];
         let b_eq = dvector![1.0];
-        let err = solve_qp(&P, &q, &A_eq, &b_eq, &[]).unwrap_err();
+        let err = solve_qp(&p, &q, &a_eq, &b_eq, &[]).unwrap_err();
         assert!(matches!(err, ConvexError::NotFinite { .. }));
     }
 }

@@ -1,4 +1,5 @@
 #![no_std]
+#![allow(clippy::wrong_self_convention)]
 //! Linear algebra with compile-time dimensional safety.
 //!
 //! [`nalgebra`] is a powerful, `no_std`-capable dense linear-algebra library,
@@ -38,7 +39,6 @@
 //! [`uom`]: tpt_math_units
 //! [`tpt_math_units`]: tpt_math_units
 
-use num_traits::Zero;
 pub use nalgebra;
 pub use tpt_math_units;
 
@@ -68,7 +68,10 @@ pub struct Mat<U, V, T = f64> {
 impl<U, T> Vec<U, T> {
     /// Wrap a raw nalgebra dynamic vector, tagging it with unit `U`.
     pub fn from_raw(raw: nalgebra::DVector<T>) -> Self {
-        Vec { raw, _unit: PhantomData }
+        Vec {
+            raw,
+            _unit: PhantomData,
+        }
     }
 
     /// Borrow the underlying dimensionless nalgebra vector.
@@ -91,7 +94,10 @@ impl<U, V, T> Mat<U, V, T> {
     /// Wrap a raw nalgebra dynamic matrix, tagging rows with `U` and columns
     /// with `V`.
     pub fn from_raw(raw: nalgebra::DMatrix<T>) -> Self {
-        Mat { raw, _unit: PhantomData }
+        Mat {
+            raw,
+            _unit: PhantomData,
+        }
     }
 
     /// Borrow the underlying dimensionless nalgebra matrix.
@@ -211,7 +217,7 @@ where
     nalgebra::DMatrix<T>: Neg<Output = nalgebra::DMatrix<T>>,
 {
     /// Negate every component.
-    pub fn neg(self) -> Mat<U, V, T> {
+    pub fn negate(self) -> Mat<U, V, T> {
         Mat::from_raw(-self.raw)
     }
 }
@@ -263,15 +269,30 @@ mod tests {
 
     #[test]
     fn matrix_mul_propagates_units() {
-        let m = Mat::<Length, Time>::from_raw(nalgebra::DMatrix::from_row_slice(2, 2, &[1.0_f64, 2.0, 3.0, 4.0]));
-        let n = Mat::<Time, Velocity>::from_raw(nalgebra::DMatrix::from_row_slice(2, 2, &[1.0_f64, 0.0, 0.0, 1.0]));
+        let m = Mat::<Length, Time>::from_raw(nalgebra::DMatrix::from_row_slice(
+            2,
+            2,
+            &[1.0_f64, 2.0, 3.0, 4.0],
+        ));
+        let n = Mat::<Time, Velocity>::from_raw(nalgebra::DMatrix::from_row_slice(
+            2,
+            2,
+            &[1.0_f64, 0.0, 0.0, 1.0],
+        ));
         let p: Mat<Length, Velocity> = m * n;
-        assert_eq!(p.raw(), &nalgebra::DMatrix::from_row_slice(2, 2, &[1.0_f64, 2.0, 3.0, 4.0]));
+        assert_eq!(
+            p.raw(),
+            &nalgebra::DMatrix::from_row_slice(2, 2, &[1.0_f64, 2.0, 3.0, 4.0])
+        );
     }
 
     #[test]
     fn matrix_times_vector() {
-        let m = Mat::<Length, Time>::from_raw(nalgebra::DMatrix::from_row_slice(2, 2, &[2.0_f64, 0.0, 0.0, 2.0]));
+        let m = Mat::<Length, Time>::from_raw(nalgebra::DMatrix::from_row_slice(
+            2,
+            2,
+            &[2.0_f64, 0.0, 0.0, 2.0],
+        ));
         let v = Vec::<Time>::from_raw(nalgebra::DVector::from_row_slice(&[1.0, 2.0]));
         let r: Vec<Length> = m * v;
         assert_eq!(r.raw(), &nalgebra::DVector::from_row_slice(&[2.0, 4.0]));
@@ -279,7 +300,8 @@ mod tests {
 
     #[test]
     fn transpose_swaps_unit_tags() {
-        let m = Mat::<Length, Time>::from_raw(nalgebra::DMatrix::from_row_slice(1, 2, &[1.0_f64, 2.0]));
+        let m =
+            Mat::<Length, Time>::from_raw(nalgebra::DMatrix::from_row_slice(1, 2, &[1.0_f64, 2.0]));
         let t: Mat<Time, Length> = m.transpose();
         assert_eq!(t.nrows(), 2);
         assert_eq!(t.ncols(), 1);

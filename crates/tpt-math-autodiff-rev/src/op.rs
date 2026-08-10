@@ -163,13 +163,19 @@ impl Partials {
     /// An empty row, for leaves that have no operands.
     #[must_use]
     pub const fn none() -> Self {
-        Partials { entries: [(0, 0.0); MAX_OPERANDS], len: 0 }
+        Partials {
+            entries: [(0, 0.0); MAX_OPERANDS],
+            len: 0,
+        }
     }
 
     /// A row with a single entry, for unary operations.
     #[must_use]
     pub const fn unary(operand: usize, derivative: f64) -> Self {
-        Partials { entries: [(operand, derivative), (0, 0.0)], len: 1 }
+        Partials {
+            entries: [(operand, derivative), (0, 0.0)],
+            len: 1,
+        }
     }
 
     /// A row with two entries, for binary operations.
@@ -178,7 +184,10 @@ impl Partials {
     /// pass simply accumulates both contributions.
     #[must_use]
     pub const fn binary(lhs: usize, d_lhs: f64, rhs: usize, d_rhs: f64) -> Self {
-        Partials { entries: [(lhs, d_lhs), (rhs, d_rhs)], len: 2 }
+        Partials {
+            entries: [(lhs, d_lhs), (rhs, d_rhs)],
+            len: 2,
+        }
     }
 
     /// The populated `(operand index, derivative)` pairs.
@@ -242,9 +251,18 @@ mod tests {
     #[test]
     fn arithmetic_rules() {
         let values = [3.0, 4.0];
-        assert_eq!(Op::Add(0, 1).diff(7.0, &values).as_slice(), &[(0, 1.0), (1, 1.0)]);
-        assert_eq!(Op::Sub(0, 1).diff(-1.0, &values).as_slice(), &[(0, 1.0), (1, -1.0)]);
-        assert_eq!(Op::Mul(0, 1).diff(12.0, &values).as_slice(), &[(0, 4.0), (1, 3.0)]);
+        assert_eq!(
+            Op::Add(0, 1).diff(7.0, &values).as_slice(),
+            &[(0, 1.0), (1, 1.0)]
+        );
+        assert_eq!(
+            Op::Sub(0, 1).diff(-1.0, &values).as_slice(),
+            &[(0, 1.0), (1, -1.0)]
+        );
+        assert_eq!(
+            Op::Mul(0, 1).diff(12.0, &values).as_slice(),
+            &[(0, 4.0), (1, 3.0)]
+        );
         assert_eq!(Op::Neg(0).diff(-3.0, &values).as_slice(), &[(0, -1.0)]);
 
         let div = Op::Div(0, 1).diff(0.75, &values);
@@ -256,14 +274,26 @@ mod tests {
     fn transcendental_rules() {
         let x = 0.7_f64;
         let values = [x, 0.0];
-        assert!(close(Op::Sin(0).diff(x.sin(), &values).as_slice()[0].1, x.cos()));
-        assert!(close(Op::Cos(0).diff(x.cos(), &values).as_slice()[0].1, -x.sin()));
+        assert!(close(
+            Op::Sin(0).diff(x.sin(), &values).as_slice()[0].1,
+            x.cos()
+        ));
+        assert!(close(
+            Op::Cos(0).diff(x.cos(), &values).as_slice()[0].1,
+            -x.sin()
+        ));
         assert!(close(
             Op::Tan(0).diff(x.tan(), &values).as_slice()[0].1,
             1.0 / (x.cos() * x.cos())
         ));
-        assert!(close(Op::Exp(0).diff(x.exp(), &values).as_slice()[0].1, x.exp()));
-        assert!(close(Op::Ln(0).diff(x.ln(), &values).as_slice()[0].1, 1.0 / x));
+        assert!(close(
+            Op::Exp(0).diff(x.exp(), &values).as_slice()[0].1,
+            x.exp()
+        ));
+        assert!(close(
+            Op::Ln(0).diff(x.ln(), &values).as_slice()[0].1,
+            1.0 / x
+        ));
         assert!(close(
             Op::Sqrt(0).diff(x.sqrt(), &values).as_slice()[0].1,
             0.5 / x.sqrt()
@@ -274,8 +304,14 @@ mod tests {
     fn power_rules() {
         let x = 2.0_f64;
         let values = [x];
-        assert!(close(Op::Powi(0, 3).diff(x.powi(3), &values).as_slice()[0].1, 12.0));
-        assert!(close(Op::Powi(0, 0).diff(1.0, &values).as_slice()[0].1, 0.0));
+        assert!(close(
+            Op::Powi(0, 3).diff(x.powi(3), &values).as_slice()[0].1,
+            12.0
+        ));
+        assert!(close(
+            Op::Powi(0, 0).diff(1.0, &values).as_slice()[0].1,
+            0.0
+        ));
         assert!(close(
             Op::Powf(0, 0.5).diff(x.sqrt(), &values).as_slice()[0].1,
             0.5 / x.sqrt()

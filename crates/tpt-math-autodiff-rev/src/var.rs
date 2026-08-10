@@ -1,9 +1,7 @@
 //! The tape-bound scalar handle and its arithmetic.
 
 use core::fmt;
-use core::ops::{
-    Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssign,
-};
+use core::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssign};
 use core::ptr;
 
 use crate::op::Op;

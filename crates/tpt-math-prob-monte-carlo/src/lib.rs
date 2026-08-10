@@ -318,8 +318,7 @@ mod tests {
         let mut rng = SplitMix64::seed_from_u64(13);
         // Identical target and proposal give a weight of exactly 1, so this is
         // a zero-variance estimator: `est` equals `1.0` and `stderr` is `0`.
-        let (est, _stderr) =
-            importance(&mut rng, 100_000, &Standard, |_x| 1.0, |_x| 1.0, |_x| 1.0);
+        let (est, _stderr) = importance(&mut rng, 100_000, &Standard, |_x| 1.0, |_x| 1.0, |_x| 1.0);
         assert!((est - 1.0).abs() < 1e-12);
     }
 

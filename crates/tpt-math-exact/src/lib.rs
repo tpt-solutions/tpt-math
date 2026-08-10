@@ -53,7 +53,7 @@ where
     /// Construct an interval. Panics in debug builds if `lo > hi`.
     pub fn new(lo: T, hi: T) -> Self {
         debug_assert!(
-            !lo.clone().partial_cmp(&hi).map_or(false, |o| o == core::cmp::Ordering::Greater),
+            !(lo.clone().partial_cmp(&hi) == Some(core::cmp::Ordering::Greater)),
             "interval lower bound must not exceed upper bound"
         );
         Interval { lo, hi }
@@ -71,8 +71,13 @@ where
 
     /// True if `x` lies within `[lo, hi]`.
     pub fn contains(&self, x: &T) -> bool {
-        self.lo.partial_cmp(x).map_or(false, |o| o != core::cmp::Ordering::Greater)
-            && self.hi.partial_cmp(x).map_or(false, |o| o != core::cmp::Ordering::Less)
+        self.lo
+            .partial_cmp(x)
+            .is_some_and(|o| o != core::cmp::Ordering::Greater)
+            && self
+                .hi
+                .partial_cmp(x)
+                .is_some_and(|o| o != core::cmp::Ordering::Less)
     }
 
     /// The smallest interval containing both `self` and `other`.
@@ -139,8 +144,14 @@ macro_rules! impl_binop {
                 let b = self.lo.clone().$op(rhs.hi.clone());
                 let c = self.hi.clone().$op(rhs.lo.clone());
                 let d = self.hi.clone().$op(rhs.hi.clone());
-                let lo = core::cmp::min(core::cmp::min(a.clone(), b.clone()), core::cmp::min(c.clone(), d.clone()));
-                let hi = core::cmp::max(core::cmp::max(a.clone(), b.clone()), core::cmp::max(c.clone(), d.clone()));
+                let lo = core::cmp::min(
+                    core::cmp::min(a.clone(), b.clone()),
+                    core::cmp::min(c.clone(), d.clone()),
+                );
+                let hi = core::cmp::max(
+                    core::cmp::max(a.clone(), b.clone()),
+                    core::cmp::max(c.clone(), d.clone()),
+                );
                 Interval::new(lo, hi)
             }
         }

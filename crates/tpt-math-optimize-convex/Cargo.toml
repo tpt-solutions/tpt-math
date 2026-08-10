@@ -11,6 +11,9 @@ description = "Convex / QP optimization (wrap clarabel)."
 clarabel = "0.11.1"
 tpt-math-linalg = { workspace = true }
 
+[dev-dependencies]
+nalgebra = { version = "0.33.3", default-features = false, features = ["libm", "macros"] }
+
 [features]
 default = []
 

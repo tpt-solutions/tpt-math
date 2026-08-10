@@ -79,8 +79,8 @@ use rand::rand_core::RngCore;
 /// let quad: u64 = core.next_u64();
 /// let _ = (word, quad);
 /// ```
+#[derive(Debug)]
 pub struct CoreRng<R: ?Sized>(pub R);
-
 impl<R: Rng + ?Sized> RngCore for CoreRng<R> {
     #[inline]
     fn next_u32(&mut self) -> u32 {

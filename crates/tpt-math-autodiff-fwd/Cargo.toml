@@ -8,10 +8,10 @@ authors.workspace = true
 description = "Forward-mode autodiff (dual numbers)."
 
 [dependencies]
-tpt-math-numeric = { workspace = true }
+tpt-math-numeric = { path = "../tpt-math-numeric", default-features = false }
 
 [features]
 default = ["std"]
-std = []
-alloc = []
+std = ["tpt-math-numeric/std"]
+alloc = ["tpt-math-numeric/alloc"]
 

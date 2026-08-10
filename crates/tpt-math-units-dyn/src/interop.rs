@@ -133,10 +133,14 @@ mod tests {
         assert!(DynQuantity::from(energy).approx_eq(&dynamic, 1e-6));
 
         let power: DynQuantity = "1.5 kW".parse().unwrap();
-        assert!((Power::try_from(power).unwrap().get::<tpt_math_units::si::power::watt>()
-            - 1500.0)
-            .abs()
-            < 1e-9);
+        assert!(
+            (Power::try_from(power)
+                .unwrap()
+                .get::<tpt_math_units::si::power::watt>()
+                - 1500.0)
+                .abs()
+                < 1e-9
+        );
     }
 
     #[test]

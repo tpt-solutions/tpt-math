@@ -267,8 +267,7 @@ mod tests {
     /// The convenience wrapper produces the same answers as manual taping.
     #[test]
     fn value_and_gradient_helper() {
-        let (value, grad) =
-            value_and_gradient(&[2.0, 3.0], |_tape, v| v[0] * v[1] + v[0].sin());
+        let (value, grad) = value_and_gradient(&[2.0, 3.0], |_tape, v| v[0] * v[1] + v[0].sin());
         assert_close(value, 6.0 + 2.0_f64.sin());
         assert_close(grad[0], 3.0 + 2.0_f64.cos());
         assert_close(grad[1], 2.0);

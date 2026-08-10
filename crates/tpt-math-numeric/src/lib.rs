@@ -17,12 +17,9 @@
 //! [`libm`]: libm
 
 pub use num_traits::{
-    cast,
-    float::FloatConst,
-    real::Real,
-    CheckedAdd, CheckedDiv, CheckedMul, CheckedNeg, CheckedRem, CheckedShl, CheckedShr,
-    CheckedSub, Float, FromPrimitive, Inv, Num, NumAssign, NumAssignOps, NumCast, NumOps,
-    One, Pow, PrimInt, Signed, ToPrimitive, Unsigned, Zero,
+    cast, float::FloatConst, real::Real, CheckedAdd, CheckedDiv, CheckedMul, CheckedNeg,
+    CheckedRem, CheckedShl, CheckedShr, CheckedSub, Float, FromPrimitive, Inv, Num, NumAssign,
+    NumAssignOps, NumCast, NumOps, One, Pow, PrimInt, Signed, ToPrimitive, Unsigned, Zero,
 };
 
 pub use num_traits;

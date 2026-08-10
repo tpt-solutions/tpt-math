@@ -8,7 +8,13 @@ authors.workspace = true
 description = "Permissive-license symbolic math (CAS)."
 
 [dependencies]
+num-traits = "0.2"
+tpt-math-exact = { workspace = true, optional = true }
 
 [features]
-default = []
+default = ["std"]
+std = []
+alloc = []
+exact = ["dep:tpt-math-exact"]
 
+[dev-dependencies]

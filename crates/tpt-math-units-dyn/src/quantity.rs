@@ -163,9 +163,11 @@ impl DynQuantity {
     ///
     /// Same as [`DynQuantity::convert_to`].
     pub fn convert_to_with(&self, unit_name: &str, registry: &UnitRegistry) -> Result<f64> {
-        let def = registry.get(unit_name).ok_or_else(|| UnitError::UnknownUnit {
-            name: unit_name.to_owned(),
-        })?;
+        let def = registry
+            .get(unit_name)
+            .ok_or_else(|| UnitError::UnknownUnit {
+                name: unit_name.to_owned(),
+            })?;
         if def.dimension != self.dim {
             return Err(UnitError::DimensionMismatch {
                 context: "convert_to",
@@ -304,13 +306,10 @@ impl DynQuantity {
     /// assert_eq!(*side.dim(), Dimension::LENGTH);
     /// ```
     pub fn try_sqrt(&self) -> Result<Self> {
-        let dim = self
-            .dim
-            .checked_root(2)
-            .ok_or(UnitError::NoIntegerRoot {
-                dimension: self.dim,
-                root: 2,
-            })?;
+        let dim = self.dim.checked_root(2).ok_or(UnitError::NoIntegerRoot {
+            dimension: self.dim,
+            root: 2,
+        })?;
         Ok(Self::from_base(self.value.sqrt(), dim))
     }
 
@@ -416,10 +415,13 @@ impl FromStr for DynQuantity {
             });
         }
 
-        let value: f64 = trimmed[..split].trim().parse().map_err(|_| UnitError::Malformed {
-            input: s.to_owned(),
-            reason: "invalid numeric value",
-        })?;
+        let value: f64 = trimmed[..split]
+            .trim()
+            .parse()
+            .map_err(|_| UnitError::Malformed {
+                input: s.to_owned(),
+                reason: "invalid numeric value",
+            })?;
         let unit = trimmed[split..].trim();
         if unit.is_empty() {
             Ok(Self::dimensionless(value))

@@ -525,7 +525,10 @@ mod tests {
         assert_eq!(Dimension::DIMENSIONLESS.to_string(), "1");
         assert_eq!(Dimension::LENGTH.to_string(), "m");
         assert_eq!(Dimension::ENERGY.to_string(), "m^2·kg·s^-2");
-        assert_eq!(Dimension::ELECTRIC_POTENTIAL.to_string(), "m^2·kg·s^-3·A^-1");
+        assert_eq!(
+            Dimension::ELECTRIC_POTENTIAL.to_string(),
+            "m^2·kg·s^-3·A^-1"
+        );
     }
 
     #[test]
