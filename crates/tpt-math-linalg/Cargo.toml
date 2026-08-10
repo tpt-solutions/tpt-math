@@ -8,11 +8,12 @@ authors.workspace = true
 description = "Linear algebra paired with tpt-math-units for dimensional safety (wrap nalgebra)."
 
 [dependencies]
-nalgebra = "0.33.3"
+nalgebra = { version = "0.33.3", default-features = false, features = ["libm", "macros"] }
+num-traits = { version = "0.2.19", default-features = false, features = ["libm"] }
 tpt-math-units = { workspace = true }
 
 [features]
 default = ["std"]
-std = []
+std = ["nalgebra/std", "tpt-math-units/std", "num-traits/std"]
 alloc = []
 

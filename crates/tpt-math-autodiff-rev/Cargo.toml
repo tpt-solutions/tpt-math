@@ -11,5 +11,9 @@ description = "Reverse-mode / tape autodiff."
 tpt-math-autodiff-fwd = { workspace = true }
 
 [features]
-default = []
+default = ["std"]
+# The tape needs an allocator and `f64` transcendentals, so this crate is
+# std-only for now; the feature exists for consistency with the sibling
+# autodiff crates.
+std = ["tpt-math-autodiff-fwd/std"]
 

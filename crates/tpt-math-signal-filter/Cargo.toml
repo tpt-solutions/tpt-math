@@ -8,6 +8,7 @@ authors.workspace = true
 description = "FIR/IIR filters, windowing."
 
 [dependencies]
+tpt-math-numeric = { workspace = true }
 tpt-math-signal-fft = { workspace = true }
 
 [features]

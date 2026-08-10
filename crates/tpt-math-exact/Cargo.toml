@@ -8,12 +8,13 @@ authors.workspace = true
 description = "Arbitrary-precision rational + interval arithmetic."
 
 [dependencies]
-num-bigint = "0.5.1"
-num-rational = "0.4.2"
+num-bigint = { version = "0.5.1", default-features = false, features = ["std"] }
+num-rational = { version = "0.4.2", default-features = false, features = ["num-bigint", "std"] }
+num-traits = { version = "0.2.19", default-features = false, features = ["libm"] }
 tpt-math-numeric = { workspace = true }
 
 [features]
 default = ["std"]
-std = []
+std = ["tpt-math-numeric/std", "num-bigint/std", "num-rational/std", "num-traits/std"]
 alloc = []
 

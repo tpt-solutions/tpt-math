@@ -9,6 +9,13 @@ description = "General numerical optimization (wrap argmin)."
 
 [dependencies]
 argmin = "0.11.0"
+# `argmin` itself only pulls in the `primitives` math backend; the `nalgebra`
+# `ArgminMath` impls (needed for `DVector`/`DMatrix` parameters) live behind
+# this feature and must match the nalgebra version used by `tpt-math-linalg`.
+argmin-math = { version = "0.5.1", default-features = false, features = [
+    "primitives",
+    "nalgebra_v0_33",
+] }
 tpt-math-linalg = { workspace = true }
 
 [features]
