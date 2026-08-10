@@ -1,0 +1,18 @@
+[package]
+name = "tpt-math-linalg"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "Linear algebra paired with tpt-math-units for dimensional safety (wrap nalgebra)."
+
+[dependencies]
+nalgebra = "0.33.3"
+tpt-math-units = { workspace = true }
+
+[features]
+default = ["std"]
+std = []
+alloc = []
+

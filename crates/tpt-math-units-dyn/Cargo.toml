@@ -1,0 +1,15 @@
+[package]
+name = "tpt-math-units-dyn"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "Runtime dimension-checked units for dynamic/config payloads."
+
+[dependencies]
+tpt-math-units = { workspace = true }
+
+[features]
+default = []
+

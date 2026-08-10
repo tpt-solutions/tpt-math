@@ -1,0 +1,19 @@
+[package]
+name = "tpt-math-numeric"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "Scalar numeric trait glue (wrap num-traits + libm)."
+
+[dependencies]
+libm = { version = "0.2.16", optional = true }
+num-traits = { version = "0.2.19", default-features = false, features = ["libm"] }
+
+[features]
+default = ["std"]
+std = ["num-traits/std"]
+alloc = []
+libm = ["dep:libm"]
+

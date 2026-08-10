@@ -1,0 +1,15 @@
+[package]
+name = "tpt-math-signal-filter"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "FIR/IIR filters, windowing."
+
+[dependencies]
+tpt-math-signal-fft = { workspace = true }
+
+[features]
+default = []
+

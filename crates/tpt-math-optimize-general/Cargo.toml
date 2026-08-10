@@ -1,0 +1,16 @@
+[package]
+name = "tpt-math-optimize-general"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "General numerical optimization (wrap argmin)."
+
+[dependencies]
+argmin = "0.11.0"
+tpt-math-linalg = { workspace = true }
+
+[features]
+default = []
+

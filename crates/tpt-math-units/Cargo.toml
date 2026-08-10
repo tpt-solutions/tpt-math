@@ -1,0 +1,18 @@
+[package]
+name = "tpt-math-units"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "Compile-time typed units (wrap uom)."
+
+[dependencies]
+uom = { version = "0.38.0", default-features = false, features = ["si", "f32", "f64", "autoconvert"] }
+num-traits = { version = "0.2.19", default-features = false, features = ["libm"] }
+
+[features]
+default = ["std"]
+std = ["num-traits/std"]
+alloc = []
+

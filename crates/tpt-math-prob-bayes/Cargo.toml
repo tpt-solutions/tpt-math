@@ -1,0 +1,15 @@
+[package]
+name = "tpt-math-prob-bayes"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "Bayesian inference primitives."
+
+[dependencies]
+tpt-math-prob-core = { workspace = true }
+
+[features]
+default = []
+

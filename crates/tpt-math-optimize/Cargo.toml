@@ -1,0 +1,18 @@
+[package]
+name = "tpt-math-optimize"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "Umbrella: re-exports general+convex."
+
+[dependencies]
+tpt-math-optimize-general = { workspace = true, optional = true }
+tpt-math-optimize-convex = { workspace = true, optional = true }
+
+[features]
+default = ["tpt-math-optimize-general", "tpt-math-optimize-convex"]
+tpt-math-optimize-general = ["dep:tpt-math-optimize-general"]
+tpt-math-optimize-convex = ["dep:tpt-math-optimize-convex"]
+

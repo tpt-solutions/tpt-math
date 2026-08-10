@@ -1,0 +1,16 @@
+[package]
+name = "tpt-math-signal-fft"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "FFT (wrap rustfft)."
+
+[dependencies]
+rustfft = "6.4.1"
+tpt-math-numeric = { workspace = true }
+
+[features]
+default = []
+

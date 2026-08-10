@@ -1,0 +1,24 @@
+[package]
+name = "tpt-math-prob"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "Umbrella: re-exports tpt-math-prob-* behind features."
+
+[dependencies]
+tpt-math-prob-monte-carlo = { workspace = true, optional = true }
+tpt-math-prob-bayes = { workspace = true, optional = true }
+tpt-math-prob-sampler = { workspace = true, optional = true }
+tpt-math-prob-markov = { workspace = true, optional = true }
+tpt-math-prob-dist = { workspace = true, optional = true }
+
+[features]
+default = ["tpt-math-prob-monte-carlo", "tpt-math-prob-bayes", "tpt-math-prob-sampler", "tpt-math-prob-markov", "tpt-math-prob-dist"]
+tpt-math-prob-monte-carlo = ["dep:tpt-math-prob-monte-carlo"]
+tpt-math-prob-bayes = ["dep:tpt-math-prob-bayes"]
+tpt-math-prob-sampler = ["dep:tpt-math-prob-sampler"]
+tpt-math-prob-markov = ["dep:tpt-math-prob-markov"]
+tpt-math-prob-dist = ["dep:tpt-math-prob-dist"]
+

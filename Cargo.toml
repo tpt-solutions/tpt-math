@@ -1,0 +1,75 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/tpt-math-numeric",
+    "crates/tpt-math-units",
+    "crates/tpt-math-units-dyn",
+    "crates/tpt-math-exact",
+    "crates/tpt-math-linalg",
+    "crates/tpt-math-prob-core",
+    "crates/tpt-math-prob-dist",
+    "crates/tpt-math-prob-bayes",
+    "crates/tpt-math-prob-markov",
+    "crates/tpt-math-prob-monte-carlo",
+    "crates/tpt-math-prob-sampler",
+    "crates/tpt-math-prob",
+    "crates/tpt-math-stats",
+    "crates/tpt-math-autodiff-fwd",
+    "crates/tpt-math-autodiff-rev",
+    "crates/tpt-math-autodiff",
+    "crates/tpt-math-symbolic",
+    "crates/tpt-math-optimize-general",
+    "crates/tpt-math-optimize-convex",
+    "crates/tpt-math-optimize",
+    "crates/tpt-math-signal-fft",
+    "crates/tpt-math-signal-filter",
+    "crates/tpt-math-signal",
+]
+exclude = []
+
+[workspace.package]
+description = "tpt-math — the numeric substrate for tpt-science/tpt-engineering/tpt-formal"
+authors = ["TPT Solutions"]
+edition = "2021"
+rust-version = "1.75"
+license = "MIT OR Apache-2.0"
+homepage = "https://github.com/tpt-solutions/tpt-math"
+repository = "https://github.com/tpt-solutions/tpt-math"
+
+[workspace.dependencies]
+tpt-math-numeric = { version = "0.1.0", path = "crates/tpt-math-numeric" }
+tpt-math-units = { version = "0.1.0", path = "crates/tpt-math-units" }
+tpt-math-units-dyn = { version = "0.1.0", path = "crates/tpt-math-units-dyn" }
+tpt-math-exact = { version = "0.1.0", path = "crates/tpt-math-exact" }
+tpt-math-linalg = { version = "0.1.0", path = "crates/tpt-math-linalg" }
+tpt-math-prob-core = { version = "0.1.0", path = "crates/tpt-math-prob-core" }
+tpt-math-prob-dist = { version = "0.1.0", path = "crates/tpt-math-prob-dist" }
+tpt-math-prob-bayes = { version = "0.1.0", path = "crates/tpt-math-prob-bayes" }
+tpt-math-prob-markov = { version = "0.1.0", path = "crates/tpt-math-prob-markov" }
+tpt-math-prob-monte-carlo = { version = "0.1.0", path = "crates/tpt-math-prob-monte-carlo" }
+tpt-math-prob-sampler = { version = "0.1.0", path = "crates/tpt-math-prob-sampler" }
+tpt-math-prob = { version = "0.1.0", path = "crates/tpt-math-prob" }
+tpt-math-stats = { version = "0.1.0", path = "crates/tpt-math-stats" }
+tpt-math-autodiff-fwd = { version = "0.1.0", path = "crates/tpt-math-autodiff-fwd" }
+tpt-math-autodiff-rev = { version = "0.1.0", path = "crates/tpt-math-autodiff-rev" }
+tpt-math-autodiff = { version = "0.1.0", path = "crates/tpt-math-autodiff" }
+tpt-math-symbolic = { version = "0.1.0", path = "crates/tpt-math-symbolic" }
+tpt-math-optimize-general = { version = "0.1.0", path = "crates/tpt-math-optimize-general" }
+tpt-math-optimize-convex = { version = "0.1.0", path = "crates/tpt-math-optimize-convex" }
+tpt-math-optimize = { version = "0.1.0", path = "crates/tpt-math-optimize" }
+tpt-math-signal-fft = { version = "0.1.0", path = "crates/tpt-math-signal-fft" }
+tpt-math-signal-filter = { version = "0.1.0", path = "crates/tpt-math-signal-filter" }
+tpt-math-signal = { version = "0.1.0", path = "crates/tpt-math-signal" }
+
+[workspace.lints.rust]
+unsafe_op_in_unsafe_fn = "warn"
+
+[workspace.lints.clippy]
+all = "warn"
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+strip = "symbols"
+overflow-checks = true

@@ -1,0 +1,18 @@
+[package]
+name = "tpt-math-autodiff"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "Umbrella: re-exports fwd+rev."
+
+[dependencies]
+tpt-math-autodiff-fwd = { workspace = true, optional = true }
+tpt-math-autodiff-rev = { workspace = true, optional = true }
+
+[features]
+default = ["tpt-math-autodiff-fwd", "tpt-math-autodiff-rev"]
+tpt-math-autodiff-fwd = ["dep:tpt-math-autodiff-fwd"]
+tpt-math-autodiff-rev = ["dep:tpt-math-autodiff-rev"]
+

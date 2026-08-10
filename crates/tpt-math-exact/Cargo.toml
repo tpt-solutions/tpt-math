@@ -1,0 +1,19 @@
+[package]
+name = "tpt-math-exact"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "Arbitrary-precision rational + interval arithmetic."
+
+[dependencies]
+num-bigint = "0.5.1"
+num-rational = "0.4.2"
+tpt-math-numeric = { workspace = true }
+
+[features]
+default = ["std"]
+std = []
+alloc = []
+

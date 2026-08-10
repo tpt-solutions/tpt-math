@@ -1,0 +1,183 @@
+DESIGN DOCUMENT: tpt-math (MATH FOUNDATION)
+
+BEFORE YOU WRITE ANYTHING BELOW: check tpt-rust-map/registry.toml (in the
+sibling tpt-rust-map repo) for an existing foundation or external crate
+before adding a new one here. Every crate name in this repo carries the
+tpt-math- prefix. A crate is only a valid wrap target if its CURRENT
+license is MIT OR Apache-2.0 (or more permissive) — Apache-2.0-ONLY is
+always disqualifying, no exceptions (see tpt-rust-map/docs/adr/0007). If
+it passes that check, default to wrapping; reimplementation still needs
+one written reason (no_std/alloc gap upstream, or a determinism need
+upstream doesn't meet). Prefer many small crates + a thin umbrella crate
+over one broad crate. Every crate:
+license = "MIT OR Apache-2.0".
+
+PROJECT OVERVIEW
+tpt-math is the numeric substrate every other tpt-solutions foundation repo
+(tpt-science, tpt-engineering, tpt-formal) and, eventually, every platform
+repo depends on: units, exact arithmetic, linear algebra, probability,
+statistics, automatic differentiation, symbolic math, optimization, and
+signal processing. It exists because tpt-zero-formal, tpt-zero-text, and
+tpt-rust6 each independently built overlapping pieces of this substrate
+from scratch, with zero cross-repo Cargo dependencies between them —
+confirmed by reading their actual Cargo.toml files. tpt-math is the single
+place this gets built once, properly, and depended on going forward.
+
+ECOSYSTEM GAP JUSTIFICATION
+Most of this substrate already has a mature, permissively-licensed answer
+in the Rust ecosystem (2026) — this repo wraps those instead of rebuilding
+them:
+- nalgebra (linalg) and faer (dense-matrix performance) — dual MIT/Apache,
+  years of numerical hardening. Do not rebuild dense-linalg kernels.
+- statrs (hypothesis tests/regression), rand/rand_distr (sampling), argmin
+  (general optimization), clarabel (convex/QP), rustfft (FFT), uom
+  (compile-time units), num-bigint/num-rational (exact arithmetic) — all
+  mature, dual/permissively licensed.
+- SciRS2 (github.com/cool-japan/scirs) already covers broad SciPy-
+  equivalent ground across most of this list, but is Apache-2.0-only. This
+  repo stays narrower and composable, and dual-licensed, rather than
+  competing with it.
+
+Genuine gaps this repo fills instead of wrapping:
+- Runtime, dynamic-dimension unit checking (uom's power is compile-time
+  generics; dynamic/config-driven payloads need a runtime-checked type) —
+  already identified as a gap in tpt-rust2's own spec.txt.
+- Permissive-license symbolic math (a CAS): Symbolica exists but is
+  source-available/non-commercial-limited, not MIT OR Apache-2.0.
+- Reverse-mode/tape autodiff with compile-time macros: no clean, broadly-
+  adopted permissive equivalent exists standalone (outside full NN
+  frameworks like burn/candle, which bundle far more than needed here).
+- Pairing linear algebra with dimensional safety: nalgebra is dimensionless
+  and uom has no vector/matrix types — nobody in the Rust ecosystem
+  combines the two. This is this repo's most genuinely novel contribution.
+
+CORE PRINCIPLES
+Wrap, don't rebuild, by default. Many small crates + one thin umbrella per
+concern (the tokio/bevy/rand pattern) — never one broad multi-purpose
+crate; an unrelated internal change should not force a version bump on
+every consumer. no_std/std tiering via Cargo features on one crate, never
+via a separately forked crate. Every crate dual-licensed MIT OR Apache-2.0.
+
+CRATE INVENTORY
+
+  tpt-math-numeric
+    Wrap num-traits + libm. Scalar numeric trait glue. no_std.
+
+  tpt-math-exact
+    Thin-wrap num-bigint/num-rational; build the interval-arithmetic layer
+    on top (kept as one crate — interval arithmetic doesn't make sense
+    without an exact numeric type underneath it). Arbitrary-precision
+    rational + interval arithmetic, eliminating floating-point rounding
+    error. Consolidates tpt-formal-lab's tpt-exact-math. no_std+alloc.
+    Depends on: tpt-math-numeric.
+
+  tpt-math-units
+    Wrap uom (no_std-capable — disable its default std feature). Compile-
+    time typed units. no_std.
+
+  tpt-math-units-dyn
+    Build. Runtime dimension-checked units for dynamic/config-driven
+    payloads — the gap uom's compile-time generics can't cover. Consolidates
+    tpt-rust2's tpt-units-runtime. Depends on: tpt-math-units.
+
+  tpt-math-linalg
+    Wrap nalgebra. Pair with tpt-math-units for dimensionally-checked
+    vectors/matrices — the real differentiator, not the matrix math
+    itself. Consolidates tpt-zero-formal's tpt-zero-linalg and tpt-zero-
+    text's tpt-zero-matrix (two independent no_std matrix implementations
+    that never knew about each other). no_std. Depends on: tpt-math-units.
+    Backend decision: nalgebra only, not a dual nalgebra+faer facade —
+    rebuilding dense-linalg kernels wastes effort you won't get back, and
+    nalgebra/faer don't share a trait surface so a facade is real ongoing
+    maintenance for uncertain payoff. A platform with proven extreme
+    dense-matrix performance needs depends on faer directly, unwrapped.
+
+  tpt-math-prob-core
+    Build. Shared Distribution/Sampler traits that the tpt-math-prob-*
+    crates below all implement against. no_std. Depends on: tpt-math-numeric.
+
+  tpt-math-prob-dist
+    Wrap rand_distr. Standard distributions. no_std. Consolidates
+    tpt-zero-formal's tpt-zero-dist. Depends on: tpt-math-prob-core.
+
+  tpt-math-prob-bayes
+    Build. Bayesian inference primitives. Consolidates tpt-zero-formal's
+    tpt-zero-bayes. Depends on: tpt-math-prob-core.
+
+  tpt-math-prob-markov
+    Build. Markov chains / HMM. Consolidates tpt-zero-formal's
+    tpt-zero-markov. Depends on: tpt-math-prob-core.
+
+  tpt-math-prob-monte-carlo
+    Build. Monte Carlo methods. Consolidates tpt-zero-formal's
+    tpt-zero-monte-carlo. Depends on: tpt-math-prob-core.
+
+  tpt-math-prob-sampler
+    Build. Sampling strategies. no_std. Consolidates tpt-zero-formal's
+    tpt-zero-sampler and tpt-zero-rand. Depends on: tpt-math-prob-core.
+
+  tpt-math-prob (umbrella)
+    Re-exports the five tpt-math-prob-* crates above behind Cargo
+    features, so a consumer wanting "all of probability" gets one
+    dependency line without forcing the five to release together.
+
+  tpt-math-stats
+    Wrap statrs for hypothesis tests / regression. Consolidates
+    tpt-zero-formal's tpt-zero-stats and tpt-rust6's tpt-stat. Depends on:
+    tpt-math-prob-core.
+
+  tpt-math-autodiff-fwd
+    Build small: dual numbers over tpt-math-numeric. Forward-mode autodiff.
+    no_std. Depends on: tpt-math-numeric.
+
+  tpt-math-autodiff-rev
+    Build: reverse-mode/tape autodiff. Consolidates tpt-rust6's tpt-grad/
+    tpt-grad-macro and tpt-zero-formal's tpt-zero-grad — genuine IP, no
+    clean permissive equivalent exists standalone. Depends on:
+    tpt-math-autodiff-fwd.
+
+  tpt-math-autodiff (umbrella)
+    Re-exports fwd + rev.
+
+  tpt-math-symbolic
+    Build: permissive-license symbolic math (CAS) — genuine, unfilled
+    ecosystem gap (Symbolica exists but is source-available/non-commercial-
+    limited). Consolidates tpt-rust6's tpt-sym. Optionally depends on:
+    tpt-math-exact (for exact-rational coefficients) — whether tpt-math-
+    symbolic should default to this or stay generic/f64-first via a
+    Coefficient trait is an open design call, not decided here; make the
+    call when this crate is actually implemented, not before.
+
+  tpt-math-optimize-general
+    Wrap argmin. General numerical optimization. Depends on: tpt-math-linalg.
+
+  tpt-math-optimize-convex
+    Wrap clarabel. Convex / QP optimization. Depends on: tpt-math-linalg.
+
+  tpt-math-optimize (umbrella)
+    Re-exports general + convex.
+
+  tpt-math-signal-fft
+    Wrap rustfft. FFT. Depends on: tpt-math-numeric.
+
+  tpt-math-signal-filter
+    Build: FIR/IIR filters, windowing. Depends on: tpt-math-signal-fft.
+
+  tpt-math-signal (umbrella)
+    Re-exports fft + filter.
+
+BUILD ORDER
+tpt-math-numeric -> tpt-math-units -> tpt-math-exact -> tpt-math-linalg ->
+tpt-math-prob-core -> (tpt-math-prob-dist/bayes/markov/monte-carlo/sampler,
+any order) -> tpt-math-prob (umbrella) -> tpt-math-stats ->
+tpt-math-autodiff-fwd -> tpt-math-autodiff-rev -> tpt-math-autodiff
+(umbrella) -> tpt-math-symbolic -> tpt-math-optimize-*/tpt-math-signal-*
+(either order) -> their umbrellas.
+
+REPO CONVENTIONS
+Cargo workspace under crates/, one crate per directory. [workspace.package]
+carries license = "MIT OR Apache-2.0", edition, rust-version shared via
+`.workspace = true`. Root LICENSE-MIT/LICENSE-APACHE, rustfmt.toml,
+deny.toml, rust-toolchain.toml, CI workflow seeded from
+tpt-rust-map/template/. Every crate registered in tpt-rust-map/registry.toml
+with status = "planned" before implementation starts.
