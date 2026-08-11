@@ -22,3 +22,6 @@ default = ["tpt-math-optimize-general", "tpt-math-optimize-convex"]
 tpt-math-optimize-general = ["dep:tpt-math-optimize-general"]
 tpt-math-optimize-convex = ["dep:tpt-math-optimize-convex"]
 
+
+[lints]
+workspace = true

@@ -22,3 +22,6 @@ default = ["tpt-math-signal-filter", "tpt-math-signal-fft"]
 tpt-math-signal-filter = ["dep:tpt-math-signal-filter"]
 tpt-math-signal-fft = ["dep:tpt-math-signal-fft"]
 
+
+[lints]
+workspace = true

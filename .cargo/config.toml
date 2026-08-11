@@ -1,0 +1,4 @@
+[alias]
+# Run the workspace `xtask` tooling crate. `cargo xtask <cmd>` is equivalent to
+# `cargo run -p xtask -- <cmd>`.
+xtask = "run --quiet --package xtask --"

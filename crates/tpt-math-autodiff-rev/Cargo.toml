@@ -23,3 +23,6 @@ default = ["std"]
 # autodiff crates.
 std = ["tpt-math-autodiff-fwd/std"]
 
+
+[lints]
+workspace = true

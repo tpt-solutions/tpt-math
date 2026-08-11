@@ -34,14 +34,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      - run: cargo test --workspace
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest
+      # `cargo nextest` runs the integration/unit test binaries; doctests are
+      # covered separately because nextest does not execute them.
+      - run: cargo nextest run --workspace --all-features
+      - run: cargo test --workspace --all-features --doc
 
-  # NOTE: intentionally NOT `cargo build --workspace --target thumbv6m-none-eabi`.
-  # Per ADR 0001 (tpt-rust-map/docs/adr/0001-no-std-via-features-not-forks.md), a
-  # blind --workspace no_std build breaks the moment any std-only crate joins
-  # this repo. Once the first std-only crate lands, replace the crate list
-  # below with `xtask no-std-matrix` (reads the `no_std = true` entries for
-  # this repo from ../tpt-rust-map/registry.toml) instead of hand-maintaining it.
   no_std:
     runs-on: ubuntu-latest
     steps:
@@ -49,10 +49,11 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: thumbv6m-none-eabi
-      - run: |
-          # REPLACE with explicit -p <crate> flags for this repo's no_std = true
-          # crates once any crate is added.
-          echo "no crates yet — nothing to build"
+      # Builds the 8 `no_std = true` crates for a bare-metal target. Per ADR 0001
+      # (tpt-rust-map/docs/adr/0001-no-std-via-features-not-forks.md) we build
+      # only the no_std crates, not the whole workspace, so std-only crates don't
+      # break the job. `xtask no-std` owns the crate/feature list.
+      - run: cargo xtask no-std
 
   cargo-deny:
     runs-on: ubuntu-latest
@@ -61,3 +62,28 @@ jobs:
       - uses: EmbarkStudios/cargo-deny-action@v1
         with:
           command: check
+
+  # Feature-powerset CI for the four umbrella crates, so that every combination
+  # of their constituent re-export features is actually compiled and tested.
+  feature-powerset:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-hack
+      - run: >
+          cargo hack test --feature-powerset --workspace --all-targets
+          -p tpt-math-prob -p tpt-math-autodiff -p tpt-math-optimize -p tpt-math-signal
+
+  # Compile-only smoke test for the criterion benchmark targets. Benches are not
+  # run to pass/fail in CI (timing noise); we only confirm they build.
+  bench-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: >
+          cargo bench --no-run
+          -p tpt-math-linalg -p tpt-math-signal-fft -p tpt-math-optimize-convex -p tpt-math-exact

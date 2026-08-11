@@ -1,0 +1,8 @@
+.cargo_vcs_info.json
+CHANGELOG.md
+Cargo.lock
+Cargo.toml
+Cargo.toml.orig
+README.md
+benches/exact_bench.rs
+src/lib.rs

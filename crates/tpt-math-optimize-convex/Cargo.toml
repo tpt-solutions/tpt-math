@@ -19,7 +19,15 @@ tpt-math-linalg = { workspace = true }
 
 [dev-dependencies]
 nalgebra = { version = "0.33.3", default-features = false, features = ["libm", "macros"] }
+criterion = "0.5"
+
+[[bench]]
+name = "optimize_convex_bench"
+harness = false
 
 [features]
 default = []
 
+
+[lints]
+workspace = true

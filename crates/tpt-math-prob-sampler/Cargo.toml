@@ -21,3 +21,6 @@ default = ["std"]
 std = ["tpt-math-prob-core/std"]
 alloc = ["tpt-math-prob-core/alloc"]
 
+
+[lints]
+workspace = true

@@ -27,3 +27,6 @@ tpt-math-linalg = { workspace = true }
 [features]
 default = []
 
+
+[lints]
+workspace = true

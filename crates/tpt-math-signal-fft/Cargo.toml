@@ -20,3 +20,13 @@ tpt-math-numeric = { workspace = true }
 [features]
 default = []
 
+
+[lints]
+workspace = true
+
+[dev-dependencies]
+criterion = "0.5"
+
+[[bench]]
+name = "signal_fft_bench"
+harness = false

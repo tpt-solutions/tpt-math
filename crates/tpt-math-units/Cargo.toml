@@ -22,3 +22,6 @@ default = ["std"]
 std = ["num-traits/std"]
 alloc = []
 
+
+[lints]
+workspace = true

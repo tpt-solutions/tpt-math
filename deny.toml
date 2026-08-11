@@ -3,8 +3,13 @@
 
 [advisories]
 version = 2
-yanked = "warn"
-ignore = []
+yanked = "deny"
+# `paste` (RUSTSEC-2024-0436) is unmaintained, but it is pulled in transitively
+# by `nalgebra` (via `simba`) and there is no safe in-tree upgrade — the only
+# remedy would be switching `nalgebra` for a fork. `paste` remains widely used
+# and functional (its author is dtolnay), so we intentionally ignore this
+# advisory rather than fail the build on an upstream we do not control.
+ignore = ["RUSTSEC-2024-0436"]
 
 [licenses]
 # All workspace crates are MIT OR Apache-2.0. The allow-list also permits the
@@ -33,5 +38,5 @@ multiple-versions = "warn"
 wildcards = "allow"
 
 [sources]
-unknown-registry = "warn"
-unknown-git = "warn"
+unknown-registry = "deny"
+unknown-git = "deny"

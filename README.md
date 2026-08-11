@@ -97,11 +97,39 @@ Downstream repos depend only on the leaf / umbrella crates they need:
 
 ## Repository layout
 
-- `crates/*` — the 23 workspace members.
+- `crates/*` — the 23 library workspace members.
+- `xtask/` — the developer-tooling crate (`cargo xtask …`).
+- `examples/` — `tpt-math-examples`, four unpublished cross-crate demos.
 - `Cargo.toml` — workspace manifest (`resolver = "2"`, shared `[workspace.package]`).
 - `deny.toml` — license / advisory / source hygiene (dual-license policy, ADR 0007).
 - `spec.txt` — the original build spec.
 - `todo.md` — the per-phase build checklist.
+
+## Depending on `tpt-math` before crates.io publication
+
+This repository is **not published to crates.io** in this build pass — every
+crate stops at `status = "git"` in `../tpt-rust-map/registry.toml`. Until the
+crates are published you can depend on them directly from git:
+
+```toml
+[dependencies]
+tpt-math-linalg = { git = "https://github.com/tpt-solutions/tpt-math", package = "tpt-math-linalg" }
+tpt-math-prob    = { git = "https://github.com/tpt-solutions/tpt-math", package = "tpt-math-prob" }
+```
+
+Pin to a commit or tag for reproducibility. The workspace also ships local
+tooling so you can sanity-check an integration before publishing:
+
+- **Examples** — `examples/` (`tpt-math-examples`, unpublished) holds four
+  runnable cross-crate programs (`units+linalg`, `prob+stats`,
+  `autodiff+optimize`, `symbolic+exact`). Run them all with `just examples`
+  or `cargo run -p tpt-math-examples --bin <name>`.
+- **Verification** — `cargo xtask check` (or `just check`) runs
+  `cargo fmt --check`, clippy with `-D warnings`, and `cargo-deny`. The
+  `no_std` crates are built for `thumbv6m-none-eabi` via `cargo xtask no-std`.
+- **Policy docs** — `SECURITY.md` (no-`unsafe` policy, `deny.toml` posture,
+  panic/`try_*` convention, symbolic recursion caveat) and `CONTRIBUTING.md`
+  (issues-only workflow, per-crate checklist, `deny.toml` license policy).
 
 ## License
 

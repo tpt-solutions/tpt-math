@@ -19,3 +19,6 @@ tpt-math-prob-core = { workspace = true }
 [features]
 default = []
 
+
+[lints]
+workspace = true

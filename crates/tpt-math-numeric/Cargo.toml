@@ -23,3 +23,6 @@ std = ["num-traits/std"]
 alloc = []
 libm = ["dep:libm"]
 
+
+[lints]
+workspace = true

@@ -24,3 +24,6 @@ alloc = []
 exact = ["dep:tpt-math-exact"]
 
 [dev-dependencies]
+
+[lints]
+workspace = true

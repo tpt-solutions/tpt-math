@@ -22,3 +22,6 @@ default = ["tpt-math-autodiff-fwd", "tpt-math-autodiff-rev"]
 tpt-math-autodiff-fwd = ["dep:tpt-math-autodiff-fwd"]
 tpt-math-autodiff-rev = ["dep:tpt-math-autodiff-rev"]
 
+
+[lints]
+workspace = true

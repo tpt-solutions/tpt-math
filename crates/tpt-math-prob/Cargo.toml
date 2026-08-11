@@ -28,3 +28,6 @@ tpt-math-prob-sampler = ["dep:tpt-math-prob-sampler"]
 tpt-math-prob-markov = ["dep:tpt-math-prob-markov"]
 tpt-math-prob-dist = ["dep:tpt-math-prob-dist"]
 
+
+[lints]
+workspace = true

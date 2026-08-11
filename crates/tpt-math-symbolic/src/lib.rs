@@ -15,6 +15,31 @@
 //! This keeps the crate genuinely coefficient-agnostic without forcing every
 //! consumer onto exact arithmetic.
 //!
+//! # Correctness caveats
+//!
+//! Two properties of this CAS are intentional but worth flagging before you
+//! depend on it:
+//!
+//! * **Unbounded recursion in `simplify`.** Simplification is implemented as
+//!   straight structural recursion over the expression tree ([`simplify`]).
+//!   It terminates for any finite, acyclic expression, but it is *not* guarded
+//!   against cyclic/self-referential input: building an expression that
+//!   contains itself (e.g. via `Rc`/interior mutability smuggled past the
+//!   ownership model, or a malicious parser) would recurse until the stack
+//!   overflows. Construction through the public [`Expr`] API produces acyclic
+//!   trees, so normal use is safe; only hand-built or externally-parsed input
+//!   needs scrutiny.
+//!
+//! * **`f64` round-trip breaks exactness for transcendental functions.**
+//!   [`Coefficient`] values are rendered through [`fmt::Display`] and parsed
+//!   back via `f64` when evaluating functions such as `sin`/`cos`/`exp`
+//!   (see [`apply_func`]). For the default `f64` coefficient this is the
+//!   identity path and is fine, but it means *exact* coefficients (the `exact`
+//!   feature's `BigRational`) are first coerced to `f64`, losing precision and
+//!   making transcendental results approximate even when the inputs were
+//!   exact. Algebraic simplification (add/mul/pow of rationals) stays exact;
+//!   only transcendentals go through the `f64` round-trip.
+//!
 //! ```
 //! use tpt_math_symbolic::{Expr64, Symbolic};
 //!
@@ -302,6 +327,8 @@ fn fold_add<C: Coefficient>(items: Vec<Expr<C>>) -> Expr<C> {
         return Expr::Const(const_acc);
     }
     let mut iter = terms.into_iter();
+    // Invariant-guarded: `terms` is non-empty because we early-returned above
+    // when `terms.is_empty()`, so `iter.next()` is guaranteed `Some`.
     let mut result = iter.next().unwrap();
     for t in iter {
         result = Expr::Add(Box::new(result), Box::new(t));
@@ -341,6 +368,8 @@ fn fold_mul<C: Coefficient>(items: Vec<Expr<C>>) -> Expr<C> {
         return Expr::Const(const_acc);
     }
     let mut iter = terms.into_iter();
+    // Invariant-guarded: `terms` is non-empty because we early-returned above
+    // when `terms.is_empty()`, so `iter.next()` is guaranteed `Some`.
     let mut result = iter.next().unwrap();
     for t in iter {
         result = Expr::Mul(Box::new(result), Box::new(t));

@@ -21,3 +21,6 @@ default = ["std"]
 std = ["tpt-math-numeric/std"]
 alloc = ["tpt-math-numeric/alloc"]
 
+
+[lints]
+workspace = true

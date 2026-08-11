@@ -138,6 +138,9 @@ impl<U, V, T: Clone> Mat<U, V, T> {
 
 impl<U, T> core::ops::Index<usize> for Vec<U, T> {
     type Output = T;
+    /// # Panics
+    ///
+    /// Panics if `i` is out of bounds for the underlying vector.
     fn index(&self, i: usize) -> &T {
         &self.raw[i]
     }
@@ -151,6 +154,11 @@ macro_rules! impl_vec_scalar {
             nalgebra::DVector<T>: $trait<T, Output = nalgebra::DVector<T>>,
         {
             type Output = Vec<U, T>;
+            /// # Panics
+            ///
+            /// Inherits any panic of the equivalent `nalgebra` scalar op (e.g.
+            /// division by zero yields a non-finite value rather than panicking
+            /// for `f64`; check the element type's contract).
             fn $fn(self, rhs: T) -> Vec<U, T> {
                 Vec::from_raw(self.raw $op rhs)
             }
@@ -168,6 +176,10 @@ macro_rules! impl_same_unit_binop {
             nalgebra::DVector<T>: $trait<Output = nalgebra::DVector<T>>,
         {
             type Output = $type<U, T>;
+            /// # Panics
+            ///
+            /// Panics if the two operands have mismatched dimensions (the
+            /// underlying `nalgebra` op panics on shape mismatch).
             fn $fn(self, rhs: $type<U, T>) -> $type<U, T> {
                 $type::from_raw(self.raw $op rhs.raw)
             }
@@ -195,6 +207,9 @@ where
     nalgebra::DMatrix<T>: Add<Output = nalgebra::DMatrix<T>>,
 {
     type Output = Mat<U, V, T>;
+    /// # Panics
+    ///
+    /// Panics if the two matrices have mismatched dimensions.
     fn add(self, rhs: Mat<U, V, T>) -> Mat<U, V, T> {
         Mat::from_raw(self.raw + rhs.raw)
     }
@@ -206,6 +221,9 @@ where
     nalgebra::DMatrix<T>: Sub<Output = nalgebra::DMatrix<T>>,
 {
     type Output = Mat<U, V, T>;
+    /// # Panics
+    ///
+    /// Panics if the two matrices have mismatched dimensions.
     fn sub(self, rhs: Mat<U, V, T>) -> Mat<U, V, T> {
         Mat::from_raw(self.raw - rhs.raw)
     }
@@ -228,6 +246,10 @@ where
     nalgebra::DMatrix<T>: Mul<nalgebra::DMatrix<T>, Output = nalgebra::DMatrix<T>>,
 {
     type Output = Mat<U, W, T>;
+    /// # Panics
+    ///
+    /// Panics if the operand matrices have incompatible inner dimensions for
+    /// multiplication (column count of `self` must equal row count of `rhs`).
     fn mul(self, rhs: Mat<V, W, T>) -> Mat<U, W, T> {
         Mat::from_raw(self.raw * rhs.raw)
     }
@@ -239,6 +261,9 @@ where
     nalgebra::DMatrix<T>: Mul<nalgebra::DVector<T>, Output = nalgebra::DVector<T>>,
 {
     type Output = Vec<U, T>;
+    /// # Panics
+    ///
+    /// Panics if the matrix column count does not match the vector length.
     fn mul(self, rhs: Vec<V, T>) -> Vec<U, T> {
         Vec::from_raw(self.raw * rhs.raw)
     }

@@ -24,6 +24,8 @@ members = [
     "crates/tpt-math-signal-fft",
     "crates/tpt-math-signal-filter",
     "crates/tpt-math-signal",
+    "xtask",
+    "examples",
 ]
 exclude = []
 
@@ -63,6 +65,7 @@ tpt-math-signal = { version = "0.1.0", path = "crates/tpt-math-signal" }
 
 [workspace.lints.rust]
 unsafe_op_in_unsafe_fn = "warn"
+unsafe_code = "forbid"
 
 [workspace.lints.clippy]
 all = "warn"

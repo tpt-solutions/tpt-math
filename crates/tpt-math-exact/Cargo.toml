@@ -24,3 +24,13 @@ default = ["std"]
 std = ["tpt-math-numeric/std", "num-bigint/std", "num-rational/std", "num-traits/std"]
 alloc = ["tpt-math-numeric/alloc"]
 
+
+[lints]
+workspace = true
+
+[dev-dependencies]
+criterion = "0.5"
+
+[[bench]]
+name = "exact_bench"
+harness = false

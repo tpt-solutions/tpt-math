@@ -23,3 +23,13 @@ default = ["std"]
 std = ["nalgebra/std", "tpt-math-units/std", "num-traits/std"]
 alloc = ["nalgebra/alloc", "tpt-math-units/alloc"]
 
+
+[lints]
+workspace = true
+
+[dev-dependencies]
+criterion = "0.5"
+
+[[bench]]
+name = "linalg_bench"
+harness = false

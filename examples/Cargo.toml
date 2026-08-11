@@ -1,0 +1,36 @@
+[package]
+name = "tpt-math-examples"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[[bin]]
+name = "units_linalg"
+path = "src/bin/units_linalg.rs"
+
+[[bin]]
+name = "prob_stats"
+path = "src/bin/prob_stats.rs"
+
+[[bin]]
+name = "autodiff_optimize"
+path = "src/bin/autodiff_optimize.rs"
+
+[[bin]]
+name = "symbolic_exact"
+path = "src/bin/symbolic_exact.rs"
+
+[dependencies]
+tpt-math-units = { workspace = true }
+tpt-math-linalg = { workspace = true }
+tpt-math-prob = { workspace = true }
+tpt-math-stats = { workspace = true }
+tpt-math-autodiff = { workspace = true }
+tpt-math-optimize = { workspace = true }
+tpt-math-symbolic = { workspace = true, features = ["exact"] }
+tpt-math-exact = { workspace = true }
+
+[lints]
+workspace = true
