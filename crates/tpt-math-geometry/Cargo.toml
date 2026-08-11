@@ -1,0 +1,26 @@
+[package]
+name = "tpt-math-geometry"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "Geometry module: points, translations, rotations, quaternions, isometries, similarities and projections. Built on tpt-math-linalg-fixed. No allocator."
+readme = "README.md"
+repository.workspace = true
+homepage.workspace = true
+documentation = "https://docs.rs/tpt-math-geometry"
+keywords = ["geometry", "rotation", "quaternion", "isometry", "no-std"]
+categories = ["mathematics", "science", "algorithms", "no-std"]
+
+[dependencies]
+tpt-math-linalg-fixed = { workspace = true }
+tpt-math-numeric = { path = "../tpt-math-numeric", default-features = false }
+
+[features]
+default = ["std"]
+std = ["tpt-math-linalg-fixed/std", "tpt-math-numeric/std"]
+alloc = ["tpt-math-linalg-fixed/alloc", "tpt-math-numeric/alloc"]
+
+[lints]
+workspace = true

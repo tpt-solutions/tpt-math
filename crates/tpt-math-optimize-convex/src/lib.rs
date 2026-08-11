@@ -1,3 +1,9 @@
+#![allow(
+    clippy::type_complexity,
+    clippy::manual_clamp,
+    clippy::manual_range_contains,
+    clippy::needless_range_loop
+)]
 //! Convex / quadratic optimization (in-house dense interior-point solver).
 //!
 //! This crate solves convex quadratic programs (QPs) of the form
@@ -466,11 +472,9 @@ fn solve_kkt(
     });
 
     let rh = DVector::from_vec(rhs.to_vec());
-    let delta = k
-        .solve(&rh)
-        .map_err(|_| ConvexError::Solver {
-            status: "singular KKT system (infeasible or ill-posed)".into(),
-        })?;
+    let delta = k.solve(&rh).map_err(|_| ConvexError::Solver {
+        status: "singular KKT system (infeasible or ill-posed)".into(),
+    })?;
     Ok(delta.iter().copied().collect())
 }
 
@@ -762,16 +766,8 @@ mod tests {
         let q = dv(&[0.0, 0.0]);
         let a_ineq = dm(1, 2, &[1.0, 1.0]);
         let b_ineq = dv(&[1.0]);
-        let sol = solve_qp_internal(
-            &p,
-            &q,
-            &dm(0, 2, &[]),
-            &dv(&[]),
-            &a_ineq,
-            &b_ineq,
-            &[],
-        )
-        .unwrap();
+        let sol =
+            solve_qp_internal(&p, &q, &dm(0, 2, &[]), &dv(&[]), &a_ineq, &b_ineq, &[]).unwrap();
         assert!(
             sol.x[0].abs() < 1e-6 && sol.x[1].abs() < 1e-6,
             "got x = {:?}",
@@ -889,7 +885,10 @@ mod tests {
         }
         // Feasibility.
         for &xi in &x {
-            assert!(xi >= -5.0 - 1e-6 && xi <= 5.0 + 1e-6, "infeasible x = {xi}");
+            assert!(
+                (-5.0 - 1e-6..=5.0 + 1e-6).contains(&xi),
+                "infeasible x = {xi}"
+            );
         }
     }
 }

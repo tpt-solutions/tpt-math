@@ -5,8 +5,8 @@
 //! descent minimizer in `tpt-math-optimize` (which wraps `argmin`).
 
 use tpt_math_autodiff::rev::value_and_gradient;
-use tpt_math_optimize::general::tpt_math_linalg_dense::DVector;
 use tpt_math_optimize::general::minimize_gradient_descent;
+use tpt_math_optimize::general::tpt_math_linalg_dense::DVector;
 
 fn main() {
     // f(x) = (x - 2)^2, minimized at x = 2 with f(2) = 0.

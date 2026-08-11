@@ -138,9 +138,8 @@ fn simulated_group_difference_is_detected() {
 
     // The same data seen as a regression on a 0/1 group indicator: the slope
     // is the difference in means.
-    let x: Vec<f64> = std::iter::repeat(0.0)
-        .take(control.len())
-        .chain(std::iter::repeat(1.0).take(treated.len()))
+    let x: Vec<f64> = std::iter::repeat_n(0.0, control.len())
+        .chain(std::iter::repeat_n(1.0, treated.len()))
         .collect();
     let y: Vec<f64> = control.iter().chain(treated.iter()).copied().collect();
     let (slope, intercept) = linear_regression(&x, &y);

@@ -1,5 +1,14 @@
 #![no_std]
 #![forbid(unsafe_code)]
+// Fixed-size matrix/vector algorithms are clearest with explicit indexing over
+// fixed-size arrays; the indexed-loop and manual-swap lints do not fit this
+// code, and the operator-impl lints misfire on componentwise arithmetic.
+#![allow(
+    clippy::needless_range_loop,
+    clippy::manual_swap,
+    clippy::suspicious_arithmetic_impl,
+    clippy::suspicious_op_assign_impl
+)]
 //! Const-generic, fixed-size (stack-allocated) linear algebra.
 //!
 //! This crate mirrors the `Vector3`/`Matrix4` layer of `nalgebra` but is
@@ -50,9 +59,10 @@ impl<T, const N: usize> Vector<T, N> {
     }
 
     /// Build element-by-element with `f(i)`.
-    pub fn from_fn(mut f: impl FnMut(usize) -> T) -> Self {
-        let mut data = array_init::<T, N>(|i| f(i));
-        Vector { data }
+    pub fn from_fn(f: impl FnMut(usize) -> T) -> Self {
+        Vector {
+            data: array_init::<T, N>(f),
+        }
     }
 
     /// Number of components.
@@ -101,7 +111,7 @@ impl<T: Scalar, const N: usize> Vector<T, N> {
 
 /// Per-size accessors (`.x()`, `.y()`, …) that only exist when the vector is
 /// large enough, so they can never panic on a too-small vector.
-impl<T: Copy> Vector<T, 2> {
+impl<T: Scalar + Copy> Vector<T, 2> {
     /// First component.
     pub fn x(&self) -> T {
         self.data[0]
@@ -112,7 +122,7 @@ impl<T: Copy> Vector<T, 2> {
     }
 }
 
-impl<T: Copy> Vector<T, 3> {
+impl<T: Scalar + Copy> Vector<T, 3> {
     /// First component.
     pub fn x(&self) -> T {
         self.data[0]
@@ -136,7 +146,7 @@ impl<T: Copy> Vector<T, 3> {
     }
 }
 
-impl<T: Copy> Vector<T, 4> {
+impl<T: Scalar + Copy> Vector<T, 4> {
     /// First component.
     pub fn x(&self) -> T {
         self.data[0]
@@ -155,7 +165,7 @@ impl<T: Copy> Vector<T, 4> {
     }
 }
 
-impl<T: Copy, const N: usize> Vector<T, N> {
+impl<T: Scalar + Copy, const N: usize> Vector<T, N> {
     /// 2-D perpendicular dot product (z-component of the 2-D cross product).
     /// Available on vectors of length ≥ 2; panics for `N < 2`.
     pub fn perp_dot(&self, other: &Vector<T, N>) -> T {
@@ -244,15 +254,15 @@ pub struct Matrix<T, const R: usize, const C: usize> {
     pub data: [[T; C]; R],
 }
 
-impl<T, const R: usize, const C: usize> Matrix<T, R, C> {
+impl<T: Scalar, const R: usize, const C: usize> Matrix<T, R, C> {
     /// Build from a row-major nested array.
     pub fn new(data: [[T; C]; R]) -> Self {
         Matrix { data }
     }
 
     /// Build element-by-element with `f(row, col)`.
-    pub fn from_fn(mut f: impl FnMut(usize, usize) -> T) -> Self {
-        let data = array2_init::<T, R, C>(|i, j| f(i, j));
+    pub fn from_fn(f: impl FnMut(usize, usize) -> T) -> Self {
+        let data = array2_init::<T, R, C>(f);
         Matrix { data }
     }
 
@@ -589,7 +599,7 @@ fn array_init<T, const N: usize>(f: impl FnMut(usize) -> T) -> [T; N] {
 }
 
 fn array2_init<T, const R: usize, const C: usize>(
-    f: impl FnMut(usize, usize) -> T,
+    mut f: impl FnMut(usize, usize) -> T,
 ) -> [[T; C]; R] {
     core::array::from_fn(|i| core::array::from_fn(|j| f(i, j)))
 }
@@ -597,12 +607,12 @@ fn array2_init<T, const R: usize, const C: usize>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tpt_math_numeric::Scalar;
+    use core::iter;
 
     /// A random-ish but reproducible RNG.
     fn rng() -> impl Iterator<Item = f64> {
         let mut state: u64 = 0x9e3779b97f4a7c15;
-        std::iter::from_fn(move || {
+        iter::from_fn(move || {
             state ^= state >> 30;
             state = state.wrapping_mul(0xbf58476d1ce4e5b9);
             state ^= state >> 27;
@@ -690,14 +700,23 @@ mod tests {
     fn random_invertible_2x2() {
         let mut r = rng();
         for _ in 0..50 {
-            let (a, b, c, d) = (r.next().unwrap(), r.next().unwrap(), r.next().unwrap(), r.next().unwrap());
+            let (a, b, c, d) = (
+                r.next().unwrap(),
+                r.next().unwrap(),
+                r.next().unwrap(),
+                r.next().unwrap(),
+            );
             let m = Matrix2::new([[a, b], [c, d]]) + Matrix2::identity();
             let inv = m.inverse().unwrap();
             let prod = m * inv;
             for i in 0..2 {
                 for j in 0..2 {
                     let want = if i == j { 1.0 } else { 0.0 };
-                    assert!(close(prod.data[i][j], want, 1e-9), "entry {i},{j} = {}", prod.data[i][j]);
+                    assert!(
+                        close(prod.data[i][j], want, 1e-9),
+                        "entry {i},{j} = {}",
+                        prod.data[i][j]
+                    );
                 }
             }
             assert!(close(m.determinant() * inv.determinant(), 1.0, 1e-8));
@@ -733,7 +752,11 @@ mod tests {
             let mut m = Matrix4::<f64>::identity();
             for i in 0..4 {
                 for j in 0..4 {
-                    m.data[i][j] = if i == j { 1.0 + r.next().unwrap() } else { r.next().unwrap() };
+                    m.data[i][j] = if i == j {
+                        1.0 + r.next().unwrap()
+                    } else {
+                        r.next().unwrap()
+                    };
                 }
             }
             let inv = m.inverse().unwrap();
@@ -759,7 +782,7 @@ mod tests {
         let cols = [Vector2::new([1.0_f64, 2.0]), Vector2::new([3.0, 4.0])];
         let m = Matrix2::from_columns(&cols).unwrap();
         assert_eq!(m.data, [[1.0, 3.0], [2.0, 4.0]]);
-        let a = Matrix2::from_array([1.0_f64, 2.0, 3.0, 4.0]);
+        let a = Matrix2::from_array(&[1.0_f64, 2.0, 3.0, 4.0]);
         assert_eq!(a.data, [[1.0, 2.0], [3.0, 4.0]]);
         assert!(Matrix2::from_columns(&cols[0..1]).is_none());
     }

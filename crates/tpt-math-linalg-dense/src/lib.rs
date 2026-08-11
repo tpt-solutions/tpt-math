@@ -1,5 +1,8 @@
 #![no_std]
 #![forbid(unsafe_code)]
+// Dense numeric kernels are clearest with explicit indexing; the indexed-loop
+// lint does not fit this code.
+#![allow(clippy::needless_range_loop)]
 //! Dense linear algebra over [`faer`].
 //!
 //! [`faer`](faer) is a high-performance, MIT-only licensed dense linear-algebra
@@ -99,9 +102,9 @@ impl<T> DVector<T> {
     }
 
     /// Build element-by-element with `f(i)`.
-    pub fn from_fn(n: usize, mut f: impl FnMut(usize) -> T) -> Self {
+    pub fn from_fn(n: usize, f: impl FnMut(usize) -> T) -> Self {
         DVector {
-            raw: Col::from_fn(n, move |i| f(i)),
+            raw: Col::from_fn(n, f),
         }
     }
 }
@@ -123,9 +126,7 @@ impl<T> DMatrix<T> {
         T: Clone,
     {
         DMatrix {
-            raw: Mat::from_fn(nrows, ncols, move |i, j| {
-                data[i + j * nrows].clone()
-            }),
+            raw: Mat::from_fn(nrows, ncols, move |i, j| data[i + j * nrows].clone()),
         }
     }
 
@@ -135,16 +136,14 @@ impl<T> DMatrix<T> {
         T: Clone,
     {
         DMatrix {
-            raw: Mat::from_fn(nrows, ncols, move |i, j| {
-                data[i * ncols + j].clone()
-            }),
+            raw: Mat::from_fn(nrows, ncols, move |i, j| data[i * ncols + j].clone()),
         }
     }
 
     /// Build element-by-element with `f(i, j)`.
-    pub fn from_fn(nrows: usize, ncols: usize, mut f: impl FnMut(usize, usize) -> T) -> Self {
+    pub fn from_fn(nrows: usize, ncols: usize, f: impl FnMut(usize, usize) -> T) -> Self {
         DMatrix {
-            raw: Mat::from_fn(nrows, ncols, move |i, j| f(i, j)),
+            raw: Mat::from_fn(nrows, ncols, f),
         }
     }
 
@@ -154,13 +153,7 @@ impl<T> DMatrix<T> {
         T: Scalar + Clone,
     {
         let n = v.len();
-        DMatrix::from_fn(n, n, |i, j| {
-            if i == j {
-                v[i].clone()
-            } else {
-                T::zero()
-            }
-        })
+        DMatrix::from_fn(n, n, |i, j| if i == j { v[i] } else { T::zero() })
     }
 }
 
@@ -263,7 +256,7 @@ impl<T: Scalar + Clone> DVector<T> {
     /// Transpose to a `1 x n` row matrix.
     pub fn transpose(&self) -> DMatrix<T> {
         let n = self.len();
-        DMatrix::from_fn(1, n, |_, j| self[j].clone())
+        DMatrix::from_fn(1, n, |_, j| self[j])
     }
 }
 
@@ -272,7 +265,7 @@ impl<T: Scalar + Clone> DMatrix<T> {
     /// Transpose, swapping rows and columns.
     pub fn transpose(&self) -> DMatrix<T> {
         let (m, n) = (self.nrows(), self.ncols());
-        DMatrix::from_fn(n, m, |i, j| self[(j, i)].clone())
+        DMatrix::from_fn(n, m, |i, j| self[(j, i)])
     }
 }
 
@@ -285,7 +278,7 @@ impl<T: Scalar> Add for DVector<T> {
     type Output = DVector<T>;
     fn add(self, rhs: DVector<T>) -> DVector<T> {
         let n = self.len();
-        DVector::from_fn(n, |i| self[i].clone() + rhs[i].clone())
+        DVector::from_fn(n, |i| self[i] + rhs[i])
     }
 }
 
@@ -294,7 +287,7 @@ impl<T: Scalar> Sub for DVector<T> {
     type Output = DVector<T>;
     fn sub(self, rhs: DVector<T>) -> DVector<T> {
         let n = self.len();
-        DVector::from_fn(n, |i| self[i].clone() - rhs[i].clone())
+        DVector::from_fn(n, |i| self[i] - rhs[i])
     }
 }
 
@@ -303,7 +296,7 @@ impl<T: Scalar> Neg for DVector<T> {
     type Output = DVector<T>;
     fn neg(self) -> DVector<T> {
         let n = self.len();
-        DVector::from_fn(n, |i| -self[i].clone())
+        DVector::from_fn(n, |i| -self[i])
     }
 }
 
@@ -312,7 +305,7 @@ impl<T: Scalar> Mul<T> for DVector<T> {
     type Output = DVector<T>;
     fn mul(self, rhs: T) -> DVector<T> {
         let n = self.len();
-        DVector::from_fn(n, |i| self[i].clone() * rhs.clone())
+        DVector::from_fn(n, |i| self[i] * rhs)
     }
 }
 
@@ -321,7 +314,7 @@ impl<T: Scalar> Div<T> for DVector<T> {
     type Output = DVector<T>;
     fn div(self, rhs: T) -> DVector<T> {
         let n = self.len();
-        DVector::from_fn(n, |i| self[i].clone() / rhs.clone())
+        DVector::from_fn(n, |i| self[i] / rhs)
     }
 }
 
@@ -330,7 +323,7 @@ impl<T: Scalar> Add<T> for DVector<T> {
     type Output = DVector<T>;
     fn add(self, rhs: T) -> DVector<T> {
         let n = self.len();
-        DVector::from_fn(n, |i| self[i].clone() + rhs.clone())
+        DVector::from_fn(n, |i| self[i] + rhs)
     }
 }
 
@@ -339,7 +332,7 @@ impl<T: Scalar> Sub<T> for DVector<T> {
     type Output = DVector<T>;
     fn sub(self, rhs: T) -> DVector<T> {
         let n = self.len();
-        DVector::from_fn(n, |i| self[i].clone() - rhs.clone())
+        DVector::from_fn(n, |i| self[i] - rhs)
     }
 }
 
@@ -348,7 +341,7 @@ impl<T: Scalar> Add for DMatrix<T> {
     type Output = DMatrix<T>;
     fn add(self, rhs: DMatrix<T>) -> DMatrix<T> {
         let (m, n) = (self.nrows(), self.ncols());
-        DMatrix::from_fn(m, n, |i, j| self[(i, j)].clone() + rhs[(i, j)].clone())
+        DMatrix::from_fn(m, n, |i, j| self[(i, j)] + rhs[(i, j)])
     }
 }
 
@@ -357,7 +350,7 @@ impl<T: Scalar> Sub for DMatrix<T> {
     type Output = DMatrix<T>;
     fn sub(self, rhs: DMatrix<T>) -> DMatrix<T> {
         let (m, n) = (self.nrows(), self.ncols());
-        DMatrix::from_fn(m, n, |i, j| self[(i, j)].clone() - rhs[(i, j)].clone())
+        DMatrix::from_fn(m, n, |i, j| self[(i, j)] - rhs[(i, j)])
     }
 }
 
@@ -366,7 +359,7 @@ impl<T: Scalar> Neg for DMatrix<T> {
     type Output = DMatrix<T>;
     fn neg(self) -> DMatrix<T> {
         let (m, n) = (self.nrows(), self.ncols());
-        DMatrix::from_fn(m, n, |i, j| -self[(i, j)].clone())
+        DMatrix::from_fn(m, n, |i, j| -self[(i, j)])
     }
 }
 
@@ -375,7 +368,7 @@ impl<T: Scalar> Mul<T> for DMatrix<T> {
     type Output = DMatrix<T>;
     fn mul(self, rhs: T) -> DMatrix<T> {
         let (m, n) = (self.nrows(), self.ncols());
-        DMatrix::from_fn(m, n, |i, j| self[(i, j)].clone() * rhs.clone())
+        DMatrix::from_fn(m, n, |i, j| self[(i, j)] * rhs)
     }
 }
 
@@ -384,7 +377,7 @@ impl<T: Scalar> Div<T> for DMatrix<T> {
     type Output = DMatrix<T>;
     fn div(self, rhs: T) -> DMatrix<T> {
         let (m, n) = (self.nrows(), self.ncols());
-        DMatrix::from_fn(m, n, |i, j| self[(i, j)].clone() / rhs.clone())
+        DMatrix::from_fn(m, n, |i, j| self[(i, j)] / rhs)
     }
 }
 
@@ -393,7 +386,7 @@ impl<T: Scalar> Add<T> for DMatrix<T> {
     type Output = DMatrix<T>;
     fn add(self, rhs: T) -> DMatrix<T> {
         let (m, n) = (self.nrows(), self.ncols());
-        DMatrix::from_fn(m, n, |i, j| self[(i, j)].clone() + rhs.clone())
+        DMatrix::from_fn(m, n, |i, j| self[(i, j)] + rhs)
     }
 }
 
@@ -402,7 +395,7 @@ impl<T: Scalar> Sub<T> for DMatrix<T> {
     type Output = DMatrix<T>;
     fn sub(self, rhs: T) -> DMatrix<T> {
         let (m, n) = (self.nrows(), self.ncols());
-        DMatrix::from_fn(m, n, |i, j| self[(i, j)].clone() - rhs.clone())
+        DMatrix::from_fn(m, n, |i, j| self[(i, j)] - rhs)
     }
 }
 
@@ -423,7 +416,7 @@ impl<T: Scalar> Mul<DMatrix<T>> for DMatrix<T> {
         DMatrix::from_fn(m, n, |i, j| {
             let mut s = T::zero();
             for kk in 0..k {
-                s = s + self[(i, kk)].clone() * rhs[(kk, j)].clone();
+                s = s + self[(i, kk)] * rhs[(kk, j)];
             }
             s
         })
@@ -442,7 +435,7 @@ impl<T: Scalar> Mul<DVector<T>> for DMatrix<T> {
         DVector::from_fn(m, |i| {
             let mut s = T::zero();
             for kk in 0..k {
-                s = s + self[(i, kk)].clone() * rhs[kk].clone();
+                s = s + self[(i, kk)] * rhs[kk];
             }
             s
         })
@@ -561,7 +554,9 @@ impl DMatrix<f64> {
 #[cfg(feature = "alloc")]
 fn partial_pivot_lu(m: &DMatrix<f64>) -> Result<(Vec<Vec<f64>>, Vec<usize>), DenseError> {
     let n = m.nrows();
-    let mut a: Vec<Vec<f64>> = (0..n).map(|i| (0..n).map(|j| m[(i, j)]).collect()).collect();
+    let mut a: Vec<Vec<f64>> = (0..n)
+        .map(|i| (0..n).map(|j| m[(i, j)]).collect())
+        .collect();
     let mut piv: Vec<usize> = (0..n).collect();
 
     for k in 0..n {
@@ -673,10 +668,7 @@ mod tests {
 
         let n = DMatrix::from_row_slice(2, 2, &[0.0_f64, 1.0, 1.0, 0.0]);
         let mm = m.clone() * n;
-        assert_eq!(
-            mm,
-            DMatrix::from_row_slice(2, 2, &[2.0_f64, 1.0, 4.0, 3.0])
-        );
+        assert_eq!(mm, DMatrix::from_row_slice(2, 2, &[2.0_f64, 1.0, 4.0, 3.0]));
     }
 
     #[test]

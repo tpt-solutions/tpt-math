@@ -27,12 +27,18 @@ ECOSYSTEM GAP JUSTIFICATION
 Most of this substrate already has a mature, permissively-licensed answer
 in the Rust ecosystem (2026) — this repo wraps those instead of rebuilding
 them:
-- nalgebra (linalg) and faer (dense-matrix performance) — dual MIT/Apache,
-  years of numerical hardening. Do not rebuild dense-linalg kernels.
+- faer (dense-matrix performance) — MIT-only, mature, years of numerical
+  hardening. Used directly (unwrapped) for dense-linalg kernels.
 - statrs (hypothesis tests/regression), rand/rand_distr (sampling), argmin
-  (general optimization), clarabel (convex/QP), rustfft (FFT), uom
-  (compile-time units), num-bigint/num-rational (exact arithmetic) — all
-  mature, dual/permissively licensed.
+  (general optimization), rustfft (FFT), uom (compile-time units),
+  num-bigint/num-rational (exact arithmetic) — all mature,
+  dual/permissively licensed.
+- NOTE: `nalgebra` and `clarabel` are Apache-2.0-ONLY, NOT dual MIT/Apache, and
+  are disqualified as wrap targets by the workspace license policy (ADR-0007).
+  Their roles were replaced in-tree: `nalgebra` by `tpt-math-linalg-dense`
+  (faer-backed) and `tpt-math-linalg-fixed` (hand-rolled fixed-size), and
+  `clarabel` by an in-house dense primal-dual interior-point QP solver in
+  `tpt-math-optimize-convex`. Do not reintroduce `nalgebra`/`clarabel`.
 - SciRS2 (github.com/cool-japan/scirs) already covers broad SciPy-
   equivalent ground across most of this list, but is Apache-2.0-only. This
   repo stays narrower and composable, and dual-licensed, rather than
@@ -50,6 +56,18 @@ Genuine gaps this repo fills instead of wrapping:
 - Pairing linear algebra with dimensional safety: nalgebra is dimensionless
   and uom has no vector/matrix types — nobody in the Rust ecosystem
   combines the two. This is this repo's most genuinely novel contribution.
+
+- Dense convex / quadratic-programming solving: the ecosystem's mature QP
+  solvers (e.g. clarabel, OSQP) are Apache-2.0-only and disqualified by
+  ADR-0007, so `tpt-math-optimize-convex` ships an in-house dense
+  primal-dual interior-point (Mehrotra predictor-corrector) QP solver.
+
+- Fixed-size (const-generic, allocator-free) linear algebra and a full
+  geometry module (points, rotations, quaternions, isometries, projections)
+  matching nalgebra's `Vector3`/`Matrix4`/`Rotation3` layer. This is a
+  deliberate scope expansion beyond the license-forced gap — we needed a
+  no-`nalgebra` replacement for the geometry layer — not a claim that the
+  ecosystem lacked such crates.
 
 CORE PRINCIPLES
 Wrap, don't rebuild, by default. Many small crates + one thin umbrella per
@@ -81,16 +99,36 @@ CRATE INVENTORY
     tpt-rust2's tpt-units-runtime. Depends on: tpt-math-units.
 
   tpt-math-linalg
-    Wrap nalgebra. Pair with tpt-math-units for dimensionally-checked
-    vectors/matrices — the real differentiator, not the matrix math
-    itself. Consolidates tpt-zero-formal's tpt-zero-linalg and tpt-zero-
-    text's tpt-zero-matrix (two independent no_std matrix implementations
-    that never knew about each other). no_std. Depends on: tpt-math-units.
-    Backend decision: nalgebra only, not a dual nalgebra+faer facade —
-    rebuilding dense-linalg kernels wastes effort you won't get back, and
-    nalgebra/faer don't share a trait surface so a facade is real ongoing
-    maintenance for uncertain payoff. A platform with proven extreme
-    dense-matrix performance needs depends on faer directly, unwrapped.
+    Pair tpt-math-linalg-dense (faer-backed DVector/DMatrix) with
+    tpt-math-units for dimensionally-checked vectors/matrices — the real
+    differentiator, not the matrix math itself. Consolidates tpt-zero-formal's
+    tpt-zero-linalg and tpt-zero-text's tpt-zero-matrix. no_std. Depends on:
+    tpt-math-linalg-dense, tpt-math-units.
+    Backend decision: tpt-math-linalg-dense (faer, MIT-only) only, never
+    nalgebra (Apache-2.0-only, disqualified by ADR-0007). A dual faer+nalgebra
+    facade was never considered; faer is used directly.
+
+  tpt-math-linalg-dense
+    Dense (dynamically-sized, heap-allocated) linear algebra over faer
+    (MIT-only): DVector/DMatrix with the common arithmetic, solve/inverse,
+    norm/dot, and the ArgminMath-family trait impls (behind its `argmin`
+    feature) that tpt-math-optimize needs. Owns the ArgminMath orphan-rule
+    impls so tpt-math-linalg and tpt-math-optimize share one storage backend.
+    no_std + alloc. Depends on: tpt-math-numeric.
+
+  tpt-math-linalg-fixed
+    Const-generic, fixed-size (stack-allocated, allocator-free) linear algebra
+    mirroring nalgebra's Vector3/Matrix4 layer: vectors/matrices, dot/cross,
+    norms,     matrix products, and closed-form determinant/inverse. no_std, no
+    allocator. Depends on: tpt-math-numeric.
+
+  tpt-math-geometry
+    Geometry module built on tpt-math-linalg-fixed: points, translations,
+    rotations (2-D and 3-D), unit quaternions, isometries, similarities,
+    uniform scaling, and perspective/orthographic projection matrices. A
+    from-scratch, no-nalgebra, allocator-free replacement for nalgebra's
+    geometry layer. no_std, no allocator. Depends on: tpt-math-linalg-fixed,
+    tpt-math-numeric.
 
   tpt-math-prob-core
     Build. Shared Distribution/Sampler traits that the tpt-math-prob-*
@@ -152,7 +190,9 @@ CRATE INVENTORY
     Wrap argmin. General numerical optimization. Depends on: tpt-math-linalg.
 
   tpt-math-optimize-convex
-    Wrap clarabel. Convex / QP optimization. Depends on: tpt-math-linalg.
+    In-house dense primal-dual interior-point (Mehrotra predictor-corrector)
+    QP solver — replaces clarabel (Apache-2.0-only, disqualified by
+    ADR-0007). Depends on: tpt-math-linalg-dense.
 
   tpt-math-optimize (umbrella)
     Re-exports general + convex.

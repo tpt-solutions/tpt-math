@@ -6,9 +6,9 @@
 //! elementwise API.
 
 use argmin_math::{
-    ArgminAdd, ArgminConj, ArgminDiv, ArgminDot, ArgminEye, ArgminInv, ArgminL1Norm,
-    ArgminL2Norm, ArgminMinMax,     ArgminMul, ArgminSignum,
-    ArgminSub, ArgminTranspose, ArgminZero, ArgminZeroLike, Error,
+    ArgminAdd, ArgminConj, ArgminDiv, ArgminDot, ArgminEye, ArgminInv, ArgminL1Norm, ArgminL2Norm,
+    ArgminMinMax, ArgminMul, ArgminSignum, ArgminSub, ArgminTranspose, ArgminZero, ArgminZeroLike,
+    Error,
 };
 
 use crate::{DMatrix, DVector, DenseError};
@@ -224,7 +224,9 @@ impl ArgminMul<f64, DMatrix<f64>> for DMatrix<f64> {
 
 impl ArgminMul<DMatrix<f64>, DMatrix<f64>> for DMatrix<f64> {
     fn mul(&self, other: &DMatrix<f64>) -> DMatrix<f64> {
-        DMatrix::from_fn(self.nrows(), self.ncols(), |i, j| self[(i, j)] * other[(i, j)])
+        DMatrix::from_fn(self.nrows(), self.ncols(), |i, j| {
+            self[(i, j)] * other[(i, j)]
+        })
     }
 }
 
@@ -237,7 +239,6 @@ impl ArgminMul<DVector<f64>, DVector<f64>> for DMatrix<f64> {
 // NOTE: `ArgminMul<DVector<f64>, DVector<f64>> for f64` (scalar * vector) is
 // provided once, in the `DVector` block above.
 
-
 impl ArgminDiv<f64, DMatrix<f64>> for DMatrix<f64> {
     fn div(&self, other: &f64) -> DMatrix<f64> {
         self.clone() / *other
@@ -246,13 +247,14 @@ impl ArgminDiv<f64, DMatrix<f64>> for DMatrix<f64> {
 
 impl ArgminDiv<DMatrix<f64>, DMatrix<f64>> for DMatrix<f64> {
     fn div(&self, other: &DMatrix<f64>) -> DMatrix<f64> {
-        DMatrix::from_fn(self.nrows(), self.ncols(), |i, j| self[(i, j)] / other[(i, j)])
+        DMatrix::from_fn(self.nrows(), self.ncols(), |i, j| {
+            self[(i, j)] / other[(i, j)]
+        })
     }
 }
 
 // NOTE: `ArgminDiv<DVector<f64>, DVector<f64>> for f64` (scalar / vector) is
 // provided once, in the `DVector` block above.
-
 
 impl ArgminDot<DMatrix<f64>, f64> for DMatrix<f64> {
     fn dot(&self, other: &DMatrix<f64>) -> f64 {

@@ -304,11 +304,8 @@ mod tests {
 
     #[test]
     fn matrix_mul_propagates_units() {
-        let m = Mat::<Length, Time>::from_raw(DMatrix::from_row_slice(
-            2,
-            2,
-            &[1.0_f64, 2.0, 3.0, 4.0],
-        ));
+        let m =
+            Mat::<Length, Time>::from_raw(DMatrix::from_row_slice(2, 2, &[1.0_f64, 2.0, 3.0, 4.0]));
         let n = Mat::<Time, Velocity>::from_raw(DMatrix::from_row_slice(
             2,
             2,
@@ -323,11 +320,8 @@ mod tests {
 
     #[test]
     fn matrix_times_vector() {
-        let m = Mat::<Length, Time>::from_raw(DMatrix::from_row_slice(
-            2,
-            2,
-            &[2.0_f64, 0.0, 0.0, 2.0],
-        ));
+        let m =
+            Mat::<Length, Time>::from_raw(DMatrix::from_row_slice(2, 2, &[2.0_f64, 0.0, 0.0, 2.0]));
         let v = Vec::<Time>::from_raw(DVector::from_row_slice(&[1.0, 2.0]));
         let r: Vec<Length> = m * v;
         assert_eq!(r.raw(), &DVector::from_row_slice(&[2.0, 4.0]));
@@ -335,8 +329,7 @@ mod tests {
 
     #[test]
     fn transpose_swaps_unit_tags() {
-        let m =
-            Mat::<Length, Time>::from_raw(DMatrix::from_row_slice(1, 2, &[1.0_f64, 2.0]));
+        let m = Mat::<Length, Time>::from_raw(DMatrix::from_row_slice(1, 2, &[1.0_f64, 2.0]));
         let t: Mat<Time, Length> = m.transpose();
         assert_eq!(t.nrows(), 2);
         assert_eq!(t.ncols(), 1);

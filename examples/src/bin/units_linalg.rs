@@ -24,12 +24,15 @@ fn main() {
     let duration = Time::new::<second>(2.0);
     let velocity = distance / duration;
     assert!((velocity.get::<meter_per_second>() - 5.0).abs() < 1e-9);
-    let v_vec = Vec::<Velocity>::from_raw(DVector::from_row_slice(&[velocity.get::<meter_per_second>()]));
+    let v_vec = Vec::<Velocity>::from_raw(DVector::from_row_slice(&[
+        velocity.get::<meter_per_second>()
+    ]));
 
     // Matrix multiplication propagates the row/column unit tags:
     // `Mat<Length, Time> * Mat<Time, Velocity> = Mat<Length, Velocity>`.
     let m = Mat::<Length, Time>::from_raw(DMatrix::from_row_slice(2, 2, &[1.0_f64, 2.0, 3.0, 4.0]));
-    let n = Mat::<Time, Velocity>::from_raw(DMatrix::from_row_slice(2, 2, &[1.0_f64, 0.0, 0.0, 1.0]));
+    let n =
+        Mat::<Time, Velocity>::from_raw(DMatrix::from_row_slice(2, 2, &[1.0_f64, 0.0, 0.0, 1.0]));
     let p: Mat<Length, Velocity> = m * n;
     assert_eq!(p.nrows(), 2);
     assert_eq!(p.ncols(), 2);
