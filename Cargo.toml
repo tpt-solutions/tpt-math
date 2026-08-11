@@ -2,10 +2,12 @@
 resolver = "2"
 members = [
     "crates/tpt-math-numeric",
+    "crates/tpt-math-linalg-dense",
     "crates/tpt-math-units",
     "crates/tpt-math-units-dyn",
     "crates/tpt-math-exact",
     "crates/tpt-math-linalg",
+    "crates/tpt-math-linalg-fixed",
     "crates/tpt-math-prob-core",
     "crates/tpt-math-prob-dist",
     "crates/tpt-math-prob-bayes",
@@ -33,17 +35,20 @@ exclude = []
 description = "tpt-math — the numeric substrate for tpt-science/tpt-engineering/tpt-formal"
 authors = ["TPT Solutions"]
 edition = "2021"
-rust-version = "1.75"
+rust-version = "1.84"
 license = "MIT OR Apache-2.0"
 homepage = "https://github.com/tpt-solutions/tpt-math"
 repository = "https://github.com/tpt-solutions/tpt-math"
 
 [workspace.dependencies]
+faer = { version = "0.24.4", default-features = false }
 tpt-math-numeric = { version = "0.1.0", path = "crates/tpt-math-numeric" }
+tpt-math-linalg-dense = { version = "0.1.0", path = "crates/tpt-math-linalg-dense", default-features = false }
 tpt-math-units = { version = "0.1.0", path = "crates/tpt-math-units" }
 tpt-math-units-dyn = { version = "0.1.0", path = "crates/tpt-math-units-dyn" }
 tpt-math-exact = { version = "0.1.0", path = "crates/tpt-math-exact" }
 tpt-math-linalg = { version = "0.1.0", path = "crates/tpt-math-linalg" }
+tpt-math-linalg-fixed = { version = "0.1.0", path = "crates/tpt-math-linalg-fixed" }
 tpt-math-prob-core = { version = "0.1.0", path = "crates/tpt-math-prob-core" }
 tpt-math-prob-dist = { version = "0.1.0", path = "crates/tpt-math-prob-dist" }
 tpt-math-prob-bayes = { version = "0.1.0", path = "crates/tpt-math-prob-bayes" }

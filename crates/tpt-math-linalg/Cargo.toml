@@ -14,14 +14,14 @@ keywords = ["linear-algebra", "matrix", "vector", "linalg", "no-std"]
 categories = ["mathematics", "science", "algorithms", "no-std"]
 
 [dependencies]
-nalgebra = { version = "0.33.3", default-features = false, features = ["libm", "macros"] }
-num-traits = { version = "0.2.19", default-features = false, features = ["libm"] }
+tpt-math-linalg-dense = { workspace = true }
 tpt-math-units = { path = "../tpt-math-units", default-features = false }
+tpt-math-numeric = { path = "../tpt-math-numeric", default-features = false }
 
 [features]
 default = ["std"]
-std = ["nalgebra/std", "tpt-math-units/std", "num-traits/std"]
-alloc = ["nalgebra/alloc", "tpt-math-units/alloc"]
+std = ["tpt-math-linalg-dense/std", "tpt-math-units/std", "tpt-math-numeric/std"]
+alloc = ["tpt-math-linalg-dense/alloc", "tpt-math-units/alloc", "tpt-math-numeric/alloc"]
 
 
 [lints]

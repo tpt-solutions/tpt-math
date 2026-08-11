@@ -1,12 +1,12 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use tpt_math_optimize_convex::nalgebra::{dmatrix, dvector};
+use tpt_math_linalg_dense::{DMatrix, DVector};
 use tpt_math_optimize_convex::solve_qp;
 
 fn bench_qp(c: &mut Criterion) {
-    let p = dmatrix![2.0, 0.0; 0.0, 2.0];
-    let q = dvector![0.0, 0.0];
-    let a_eq = dmatrix![1.0, 1.0];
-    let b_eq = dvector![1.0];
+    let p = DMatrix::from_row_slice(2, 2, &[2.0, 0.0, 0.0, 2.0]);
+    let q = DVector::from_vec(vec![0.0, 0.0]);
+    let a_eq = DMatrix::from_row_slice(1, 2, &[1.0, 1.0]);
+    let b_eq = DVector::from_vec(vec![1.0]);
 
     c.bench_function("qp 2x2", |b| {
         b.iter(|| {

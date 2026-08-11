@@ -21,8 +21,9 @@
 //! | [`minimize_conjugate_gradient`] | [`NonlinearConjugateGradient`] (Polak–Ribière+) + [`MoreThuenteLineSearch`] | cost, gradient |
 //! | [`minimize_newton`] | [`Newton`] | cost, gradient, Hessian |
 //!
-//! Parameters are plain [`DVector<f64>`](nalgebra::DVector)s from the very
-//! same `nalgebra` that [`tpt_math_linalg`] wraps, so unit-tagged
+//! Parameters are plain [`DVector<f64>`](tpt_math_linalg_dense::DVector)s from the very
+//! same `tpt-math-linalg-dense` (faer) backend that [`tpt_math_linalg`] wraps,
+//! so unit-tagged
 //! [`tpt_math_linalg::Vec`] values move in and out with
 //! [`point_from_tagged`] / [`point_to_tagged`]. Optimization itself is
 //! deliberately unit-less: a cost mixes every unit in the problem, so there is
@@ -33,7 +34,7 @@
 //! Minimize `f(x, y) = (x - 3)² + (y - 2)²` by gradient descent:
 //!
 //! ```
-//! use tpt_math_optimize_general::{minimize_gradient_descent, nalgebra::DVector};
+//! use tpt_math_optimize_general::{minimize_gradient_descent, tpt_math_linalg_dense::DVector};
 //!
 //! let cost = |p: &DVector<f64>| (p[0] - 3.0).powi(2) + (p[1] - 2.0).powi(2);
 //! let grad = |p: &DVector<f64>| DVector::from_vec(vec![2.0 * (p[0] - 3.0), 2.0 * (p[1] - 2.0)]);
@@ -48,7 +49,7 @@
 //! also reports the cost, the iteration count and why the solver stopped:
 //!
 //! ```
-//! use tpt_math_optimize_general::{minimize_newton, nalgebra::{DMatrix, DVector}};
+//! use tpt_math_optimize_general::{minimize_newton, tpt_math_linalg_dense::{DMatrix, DVector}};
 //!
 //! // f(x) = exp(x) - x, minimized at x = 0 with f(0) = 1.
 //! let cost = |p: &DVector<f64>| p[0].exp() - p[0];
@@ -82,7 +83,7 @@ pub use argmin::core;
 pub use argmin::solver;
 pub use argmin_math;
 pub use tpt_math_linalg;
-pub use tpt_math_linalg::nalgebra;
+pub use tpt_math_linalg::tpt_math_linalg_dense;
 
 use argmin::core::{
     CostFunction, Error, Executor, Gradient, Hessian, IterState, Problem, Solver, State,
@@ -93,7 +94,7 @@ use argmin::solver::conjugategradient::NonlinearConjugateGradient;
 use argmin::solver::gradientdescent::SteepestDescent;
 use argmin::solver::linesearch::MoreThuenteLineSearch;
 use argmin::solver::newton::Newton;
-use tpt_math_linalg::nalgebra::{DMatrix, DVector};
+use tpt_math_linalg_dense::{DMatrix, DVector};
 
 /// Default iteration budget used by [`Options::default`].
 pub const DEFAULT_MAX_ITERS: u64 = 100;
@@ -192,7 +193,7 @@ pub struct Solution {
 /// Copy a unit-tagged [`tpt_math_linalg::Vec`] into a raw parameter vector.
 ///
 /// ```
-/// use tpt_math_optimize_general::{point_from_tagged, TaggedVec, nalgebra::DVector};
+/// use tpt_math_optimize_general::{point_from_tagged, TaggedVec, tpt_math_linalg_dense::DVector};
 ///
 /// let tagged: TaggedVec<()> = TaggedVec::from_raw(DVector::from_vec(vec![1.0, 2.0]));
 /// assert_eq!(point_from_tagged(&tagged), DVector::from_vec(vec![1.0, 2.0]));
@@ -204,7 +205,7 @@ pub fn point_from_tagged<U>(v: &TaggedVec<U>) -> DVector<f64> {
 /// Tag a raw parameter vector with the unit `U`, undoing [`point_from_tagged`].
 ///
 /// ```
-/// use tpt_math_optimize_general::{point_to_tagged, TaggedVec, nalgebra::DVector};
+/// use tpt_math_optimize_general::{point_to_tagged, TaggedVec, tpt_math_linalg_dense::DVector};
 ///
 /// let tagged: TaggedVec<()> = point_to_tagged(DVector::from_vec(vec![1.0, 2.0]));
 /// assert_eq!(tagged.len(), 2);
@@ -223,7 +224,7 @@ pub fn point_to_tagged<U>(point: DVector<f64>) -> TaggedVec<U> {
 /// # Examples
 ///
 /// ```
-/// use tpt_math_optimize_general::{minimize_gradient_descent, nalgebra::DVector};
+/// use tpt_math_optimize_general::{minimize_gradient_descent, tpt_math_linalg_dense::DVector};
 ///
 /// // f(x) = x², minimized at x = 0.
 /// let cost = |p: &DVector<f64>| p[0] * p[0];
@@ -256,7 +257,7 @@ where
 /// # Examples
 ///
 /// ```
-/// use tpt_math_optimize_general::{minimize_gradient_descent_with, Options, nalgebra::DVector};
+/// use tpt_math_optimize_general::{minimize_gradient_descent_with, Options, tpt_math_linalg_dense::DVector};
 ///
 /// let cost = |p: &DVector<f64>| (p[0] - 1.0).powi(2);
 /// let grad = |p: &DVector<f64>| DVector::from_vec(vec![2.0 * (p[0] - 1.0)]);
@@ -301,7 +302,7 @@ where
 /// # Examples
 ///
 /// ```
-/// use tpt_math_optimize_general::{minimize_conjugate_gradient, nalgebra::DVector};
+/// use tpt_math_optimize_general::{minimize_conjugate_gradient, tpt_math_linalg_dense::DVector};
 ///
 /// // A stretched quadratic: gradient descent zig-zags here, CG does not.
 /// let cost = |p: &DVector<f64>| (p[0] - 3.0).powi(2) + 50.0 * (p[1] - 2.0).powi(2);
@@ -336,7 +337,7 @@ where
 /// # Examples
 ///
 /// ```
-/// use tpt_math_optimize_general::{minimize_conjugate_gradient_with, Options, nalgebra::DVector};
+/// use tpt_math_optimize_general::{minimize_conjugate_gradient_with, Options, tpt_math_linalg_dense::DVector};
 ///
 /// let cost = |p: &DVector<f64>| (p[0] - 3.0).powi(2) + (p[1] + 1.0).powi(2);
 /// let grad = |p: &DVector<f64>| {
@@ -393,7 +394,7 @@ where
 /// # Examples
 ///
 /// ```
-/// use tpt_math_optimize_general::{minimize_newton, nalgebra::{DMatrix, DVector}};
+/// use tpt_math_optimize_general::{minimize_newton, tpt_math_linalg_dense::{DMatrix, DVector}};
 ///
 /// // f(x, y) = (x - 3)² + (y - 2)²: one Newton step lands exactly on (3, 2).
 /// let cost = |p: &DVector<f64>| (p[0] - 3.0).powi(2) + (p[1] - 2.0).powi(2);
@@ -431,7 +432,7 @@ where
 /// ```
 /// use tpt_math_optimize_general::{
 ///     minimize_newton_with, Options,
-///     nalgebra::{DMatrix, DVector},
+///     tpt_math_linalg_dense::{DMatrix, DVector},
 /// };
 ///
 /// let cost = |p: &DVector<f64>| p[0].powi(2);

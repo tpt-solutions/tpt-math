@@ -1,0 +1,25 @@
+[package]
+name = "tpt-math-linalg-fixed"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "Const-generic fixed-size (stack-allocated) linear algebra. No allocator."
+readme = "README.md"
+repository.workspace = true
+homepage.workspace = true
+documentation = "https://docs.rs/tpt-math-linalg-fixed"
+keywords = ["linear-algebra", "matrix", "vector", "const-generic", "no-std"]
+categories = ["mathematics", "science", "algorithms", "no-std"]
+
+[dependencies]
+tpt-math-numeric = { path = "../tpt-math-numeric", default-features = false }
+
+[features]
+default = ["std"]
+std = ["tpt-math-numeric/std"]
+alloc = ["tpt-math-numeric/alloc"]
+
+[lints]
+workspace = true

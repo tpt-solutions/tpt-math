@@ -5,20 +5,19 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 authors.workspace = true
-description = "Convex / QP optimization (wrap clarabel)."
+description = "Convex / QP optimization (in-house dense primal-dual interior-point solver)."
 readme = "README.md"
 repository.workspace = true
 homepage.workspace = true
 documentation = "https://docs.rs/tpt-math-optimize-convex"
-keywords = ["convex-optimization", "qp", "solvers", "clarabel", "quadratic"]
+keywords = ["convex-optimization", "qp", "solvers", "interior-point", "quadratic"]
 categories = ["mathematics", "science", "algorithms"]
 
 [dependencies]
-clarabel = "0.11.1"
 tpt-math-linalg = { workspace = true }
+tpt-math-linalg-dense = { workspace = true }
 
 [dev-dependencies]
-nalgebra = { version = "0.33.3", default-features = false, features = ["libm", "macros"] }
 criterion = "0.5"
 
 [[bench]]

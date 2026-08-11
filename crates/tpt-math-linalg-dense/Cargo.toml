@@ -1,0 +1,40 @@
+[package]
+name = "tpt-math-linalg-dense"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "Dense linear algebra over faer (MIT-only): DVector/DMatrix with argmin trait impls. Replaces nalgebra as the storage backend for tpt-math-linalg/optimize."
+readme = "README.md"
+repository.workspace = true
+homepage.workspace = true
+documentation = "https://docs.rs/tpt-math-linalg-dense"
+keywords = ["linear-algebra", "matrix", "vector", "faer", "no-std"]
+categories = ["mathematics", "science", "algorithms", "no-std"]
+
+[dependencies]
+faer = { workspace = true }
+tpt-math-numeric = { path = "../tpt-math-numeric", default-features = false }
+argmin-math = { version = "0.5.1", default-features = false, features = ["primitives"], optional = true }
+anyhow = { version = "1", optional = true }
+
+[features]
+default = ["std"]
+# `std` pulls in faer's `std` feature and our own `alloc` (dynamic vectors need a heap).
+std = ["faer/std", "tpt-math-numeric/std", "alloc"]
+# Dynamic vectors/matrices always need an allocator; faer provides it internally.
+alloc = ["tpt-math-numeric/alloc"]
+# Enables the `ArgminMath`-family trait impls for `DVector<f64>` / `DMatrix<f64>` so
+# they can drive argmin solvers (no nalgebra backend required).
+argmin = ["dep:argmin-math", "dep:anyhow", "std"]
+
+[dev-dependencies]
+criterion = "0.5"
+
+[[bench]]
+name = "linalg_dense_bench"
+harness = false
+
+[lints]
+workspace = true

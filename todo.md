@@ -472,3 +472,169 @@ as the build phases above.*
 - [x] Run all 4 new examples; `cargo bench --no-run` on all 4 new bench targets
 - [x] `cargo package -p <each newly-fixed crate> --list` — confirms the
       README/CHANGELOG packaging bug is actually fixed
+
+## License-Compliance Fix — nalgebra + clarabel are Apache-2.0-only
+
+*`spec.txt` claims nalgebra, clarabel, and faer are all "dual MIT/Apache" or
+"permissively licensed" — verified false for all three (nalgebra: Apache-2.0
+only since v0.24.1; clarabel: Apache-2.0 only; faer: MIT only, not dual, but
+not disqualifying since only Apache-2.0-ONLY is disqualified per ADR-0007).
+nalgebra and clarabel are both disqualified as wrap targets under the
+workspace's own no-exceptions rule. Fix (Phase A, blocking): new
+`tpt-math-linalg-dense` crate wraps `faer` and owns its own `DVector`/
+`DMatrix` types (also solves an orphan-rule problem for `ArgminMath` impls);
+`tpt-math-optimize-convex` replaces `clarabel` with an in-repo dense
+primal-dual interior-point QP solver. Scope was then deliberately expanded
+(Phases B/C, not blocking, no existing consumer) into a fuller
+nalgebra-equivalent: `tpt-math-linalg-fixed` (const-generic fixed-size
+vectors/matrices, hand-rolled) and `tpt-math-geometry` (full geometry module:
+Point/Rotation/Translation/Isometry/Similarity/Scale/Quaternion/
+Perspective/Orthographic). Plan: `nalgebra-is-apache-only-unified-giraffe.md`.*
+
+- [ ] Bump workspace `rust-version` `1.75` → `1.84` (faer's MSRV)
+
+### Phase A — resolve the license violation (blocking)
+
+### tpt-math-linalg-dense (new crate)
+
+- [ ] Scaffold `crates/tpt-math-linalg-dense/` (Cargo.toml, `src/lib.rs`,
+      `benches/`)
+- [ ] Wire deps: `faer` (no_std+alloc feature set), `tpt-math-numeric` (reuse
+      its `Scalar` trait instead of a new bound)
+- [ ] Implement `DVector<T>`/`DMatrix<T>` wrapping `faer::Col<T>`/`Mat<T>`:
+      construction (`zeros`, `from_vec`, `from_row_slice`, `from_fn`,
+      `from_diagonal`), indexing, elementwise `Add`/`Sub`/`Neg`, scalar
+      `Mul`/`Div`, matrix\*matrix and matrix\*vector `Mul`, `transpose()`,
+      `norm()`, `dot()`, fallible dense solve/inverse (faer's partial-pivot LU)
+- [ ] Optional `argmin` feature: `ArgminMath`-family trait impls for
+      `DVector<f64>`/`DMatrix<f64>` (compiler-driven — implement whatever the
+      four `tpt-math-optimize-general` solvers actually require)
+- [ ] Unit tests: construction, indexing, arithmetic, transpose, solve/inverse
+      (including a deliberately singular matrix), norm/dot
+- [ ] Rustdoc
+- [ ] README.md + CHANGELOG.md
+- [ ] `cargo fmt` / `clippy` clean
+- [ ] `cargo deny check` clean
+- [ ] no_std+alloc verify (`cargo build --no-default-features --features alloc`)
+- [ ] Add to root `Cargo.toml` `[workspace] members` + `[workspace.dependencies]`;
+      add `faer` to `[workspace.dependencies]`
+
+### tpt-math-linalg: nalgebra → tpt-math-linalg-dense
+
+- [ ] `Cargo.toml`: drop `nalgebra`, add `tpt-math-linalg-dense`
+- [ ] `src/lib.rs`: `raw` field + all method bodies retargeted at the new
+      crate's types; `pub use tpt_math_linalg_dense;` replaces
+      `pub use nalgebra;`; `T: nalgebra::Scalar` → `T: tpt_math_numeric::Scalar`
+- [ ] Update the 4 existing unit tests to the new construction calls
+- [ ] `benches/linalg_bench.rs`: update construction calls
+- [ ] `README.md`: remove the "nalgebra is Apache-2.0 only, but permitted"
+      paragraph; update quick-start example and "Available operations"
+- [ ] `CHANGELOG.md`: note the backend swap
+
+### tpt-math-optimize-general: nalgebra/argmin-math → tpt-math-linalg-dense
+
+- [ ] `Cargo.toml`: drop `argmin-math`'s `nalgebra_v0_33` feature; add
+      `tpt-math-linalg-dense` (with `argmin` feature enabled)
+- [ ] `src/lib.rs`: `Param`/`Gradient`/`Hessian` types →
+      `tpt_math_linalg_dense::{DVector, DMatrix}`; solver logic
+      (`ClosureProblem`, `WithGradientTolerance`, `run()`, `validate()`)
+      unchanged
+- [ ] Update doctests + `tests` module to the new constructors
+- [ ] `README.md`: update code examples, drop `nalgebra_v0_33` mention
+
+### tpt-math-optimize-convex: clarabel → in-house dense IPM QP solver
+
+- [ ] `Cargo.toml`: drop `clarabel`, add `tpt-math-linalg-dense`
+- [ ] Drop `dense_to_csc`/`symmetric_upper_csc` sparse-conversion helpers
+- [ ] Implement dense primal-dual interior-point method (Mehrotra
+      predictor-corrector) against the existing `A x + s = b, s ∈ K`
+      formulation; KKT solves via `tpt-math-linalg-dense`'s faer-backed solve
+- [ ] Map solver outcomes (non-convergence, infeasible, unbounded) to
+      `ConvexError::Solver`; replace clarabel's `SolverStatus` with a local enum
+      or `String` status
+- [ ] Keep public API frozen: `solve_qp`, `QuadraticProgram` builder,
+      `ConvexError`, `QpSolution`
+- [ ] All 7 existing tests still pass at comparable tolerances
+- [ ] New tests: larger random QPs cross-checked against a brute-force/known
+      optimum, an infeasible QP, an unbounded QP
+- [ ] `benches/optimize_convex_bench.rs`: update construction calls
+- [ ] `README.md`: rewrite clarabel description as the in-house IPM
+
+### Phase B — tpt-math-linalg-fixed (new crate; scope expansion, not blocking)
+
+*Const-generic fixed-size dense linalg (nalgebra's Vector3/Matrix4 layer).
+No allocator needed. Depends only on tpt-math-numeric.*
+
+- [ ] Scaffold `crates/tpt-math-linalg-fixed/`
+- [ ] Implement `Vector<T, const N: usize>` / `Matrix<T, const R, const C>`
+      + nalgebra-style aliases (`Vector2/3/4/6`, `Matrix2/3/4`, `Matrix3x4`, ...)
+- [ ] Implement ops: elementwise `Add`/`Sub`/`Neg`, scalar `Mul`/`Div`,
+      componentwise `Mul`/`Div`, indexing + `.x()/.y()/.z()/.w()` accessors,
+      `dot()`, 3D `cross()` (+ 2D perp-dot), `norm()`/`normalize()`,
+      matrix\*matrix / matrix\*vector `Mul`, `transpose()`, `identity()`,
+      `from_fn`/`from_array`/`from_columns`
+- [ ] Implement closed-form determinant/inverse for 2×2/3×3/4×4
+- [ ] Unit tests: exact known-matrix inverse checks + property-based
+      random-invertible-matrix checks, per type/dimension combination
+- [ ] Rustdoc
+- [ ] README.md + CHANGELOG.md
+- [ ] `cargo fmt` / `clippy` clean
+- [ ] `cargo deny check` clean
+- [ ] no_std verify (no `alloc` feature needed — confirm genuinely
+      allocator-free)
+- [ ] Add to root `Cargo.toml` `[workspace] members` + `[workspace.dependencies]`
+
+### Phase C — tpt-math-geometry (new crate; scope expansion, not blocking)
+
+*Full geometry module, matching nalgebra's actual breadth. Built on
+tpt-math-linalg-fixed.*
+
+- [ ] Scaffold `crates/tpt-math-geometry/`
+- [ ] Implement `Point<T, const D>` (`Point2`/`Point3` aliases)
+- [ ] Implement `Translation<T, const D>`
+- [ ] Implement `Rotation<T, const D>` (2D angle constructor; 3D axis-angle +
+      Euler constructors; orthogonality guaranteed by construction)
+- [ ] Implement `Quaternion<T>` / `UnitQuaternion<T>` (Hamilton product,
+      conjugate, normalize, `Rotation3` conversion, `slerp`)
+- [ ] Implement `Isometry<T, const D>` (composition, inverse, point/vector
+      action; document the composition convention explicitly)
+- [ ] Implement `Similarity<T, const D>` and `Scale<T, const D>`
+- [ ] Implement `Perspective3<T>` / `Orthographic3<T>` (pick and document a
+      concrete handedness/depth-range convention)
+- [ ] Unit tests: known-value rotations (90°/180° per axis vs. textbook
+      matrices), round-trip `Rotation3 ↔ UnitQuaternion`, composition/inverse
+      identities (`t.inverse() * t ≈ identity`)
+- [ ] Rustdoc, with every convention (handedness, active/passive rotation,
+      row/column vectors) stated explicitly
+- [ ] README.md + CHANGELOG.md
+- [ ] `cargo fmt` / `clippy` clean
+- [ ] `cargo deny check` clean
+- [ ] no_std verify (no `alloc` feature needed)
+- [ ] Add to root `Cargo.toml` `[workspace] members` + `[workspace.dependencies]`
+
+### Workspace / docs cleanup
+
+- [ ] `spec.txt`: fix nalgebra/faer/clarabel license claims (~lines 30-33);
+      add dense QP solving to "Genuine gaps" (~lines 41-52) and note
+      fixed-size linalg/geometry as deliberate scope expansion, not a
+      license-forced gap; rewrite `tpt-math-linalg` crate inventory entry
+      (~lines 83-93); add `tpt-math-linalg-dense`/`tpt-math-linalg-fixed`/
+      `tpt-math-geometry` inventory entries; rewrite `tpt-math-optimize-convex`
+      inventory entry
+- [ ] `crates/tpt-math-optimize/README.md` (umbrella): update mentions
+- [ ] `examples/src/bin/units_linalg.rs`, `examples/src/bin/autodiff_optimize.rs`:
+      update construction calls
+- [ ] `deny.toml`: remove the `RUSTSEC-2024-0436` (`paste`/nalgebra→simba)
+      ignore entry once nalgebra is gone from the tree
+
+### Verification
+
+- [ ] `cargo test --workspace`
+- [ ] `cargo build -p tpt-math-linalg-dense -p tpt-math-linalg
+      --no-default-features --features alloc`
+- [ ] `cargo build -p tpt-math-linalg-fixed -p tpt-math-geometry
+      --no-default-features` (confirm allocator-free)
+- [ ] `cargo bench -p tpt-math-linalg -p tpt-math-optimize-convex` (sanity run)
+- [ ] `cargo doc --workspace --no-deps`
+- [ ] `cargo deny check licenses` — confirm nalgebra/clarabel no longer appear
+      in the dependency tree

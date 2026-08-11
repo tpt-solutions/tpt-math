@@ -12,8 +12,8 @@ Part of the [`tpt-math`](https://github.com/tpt-solutions/tpt-math) workspace �
 the numeric substrate for `tpt-science`, `tpt-engineering`, and `tpt-formal`.
 It is the general-purpose half of the optimisation layer (the convex/QP half is
 `tpt-math-optimize-convex`), and is re-exported by the `tpt-math-optimize`
-umbrella crate. Parameters are plain `nalgebra` `DVector<f64>`s from the very
-same `nalgebra` that `tpt-math-linalg` wraps.
+umbrella crate. Parameters are plain `tpt-math-linalg-dense` `DVector<f64>`s from the same
+faer-backed storage that `tpt-math-linalg` wraps.
 
 ## Features
 
@@ -22,9 +22,10 @@ here is always available. It is **std-only** — `argmin` and its `Executor`
 require `std`, so there is no `no_std` build.
 
 The dependency set is fixed rather than feature-gated: `argmin`, `argmin-math`
-with the `primitives` and `nalgebra_v0_33` backends (the `ArgminMath` impls
-needed for `DVector`/`DMatrix` parameters, pinned to the nalgebra version used
-by `tpt-math-linalg`), and `tpt-math-linalg` itself.
+with the `primitives` backend (the `ArgminMath` impls for
+`DVector`/`DMatrix` parameters live in `tpt-math-linalg-dense` behind its
+`argmin` feature, so they always match the faer storage `tpt-math-linalg`
+wraps), and `tpt-math-linalg` itself.
 
 ## Quick start
 
@@ -36,7 +37,8 @@ tpt-math-optimize-general = "0.1"
 Minimise `f(x, y) = (x - 3)² + (y - 2)²` by gradient descent:
 
 ```rust
-use tpt_math_optimize_general::{minimize_gradient_descent, nalgebra::DVector};
+use tpt_math_optimize_general::tpt_math_linalg_dense::DVector;
+use tpt_math_optimize_general::minimize_gradient_descent;
 
 let cost = |p: &DVector<f64>| (p[0] - 3.0).powi(2) + (p[1] - 2.0).powi(2);
 let grad = |p: &DVector<f64>| DVector::from_vec(vec![2.0 * (p[0] - 3.0), 2.0 * (p[1] - 2.0)]);
@@ -60,7 +62,8 @@ reporting the parameter vector, the cost re-evaluated there, the iteration
 count, whether the gradient tolerance was met, and argmin's termination reason:
 
 ```rust
-use tpt_math_optimize_general::{minimize_conjugate_gradient_with, Options, nalgebra::DVector};
+use tpt_math_optimize_general::tpt_math_linalg_dense::DVector;
+use tpt_math_optimize_general::{minimize_conjugate_gradient_with, Options};
 
 let cost = |p: &DVector<f64>| (p[0] - 3.0).powi(2) + (p[1] + 1.0).powi(2);
 let grad = |p: &DVector<f64>| DVector::from_vec(vec![2.0 * (p[0] - 3.0), 2.0 * (p[1] + 1.0)]);
@@ -75,7 +78,7 @@ assert!(solution.cost < 1e-12);
 ## Notes
 
 - Nothing is hidden: `argmin`, `argmin::core`, `argmin::solver`, `argmin_math`,
-  `tpt_math_linalg` and `nalgebra` are all re-exported, so you can drop down to
+  `tpt_math_linalg` and `tpt_math_linalg_dense` are all re-exported, so you can drop down to
   a hand-built `Executor` whenever the conveniences are too narrow.
 - Errors are flattened to `String` so callers need not depend on `argmin` to
   handle them; use the re-exported `argmin` directly if you need a typed
