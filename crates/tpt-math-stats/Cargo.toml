@@ -6,6 +6,12 @@ rust-version.workspace = true
 license.workspace = true
 authors.workspace = true
 description = "Hypothesis tests / regression (wrap statrs)."
+readme = "README.md"
+repository.workspace = true
+homepage.workspace = true
+documentation = "https://docs.rs/tpt-math-stats"
+keywords = ["statistics", "hypothesis-testing", "regression", "stats", "analysis"]
+categories = ["mathematics", "science", "algorithms"]
 
 [dependencies]
 statrs = "0.18.0"

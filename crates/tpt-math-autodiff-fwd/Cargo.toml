@@ -6,6 +6,12 @@ rust-version.workspace = true
 license.workspace = true
 authors.workspace = true
 description = "Forward-mode autodiff (dual numbers)."
+readme = "README.md"
+repository.workspace = true
+homepage.workspace = true
+documentation = "https://docs.rs/tpt-math-autodiff-fwd"
+keywords = ["autodiff", "dual-numbers", "forward-mode", "gradients", "no-std"]
+categories = ["mathematics", "science", "algorithms", "no-std"]
 
 [dependencies]
 tpt-math-numeric = { path = "../tpt-math-numeric", default-features = false }

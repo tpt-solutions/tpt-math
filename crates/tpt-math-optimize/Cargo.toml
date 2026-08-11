@@ -6,6 +6,12 @@ rust-version.workspace = true
 license.workspace = true
 authors.workspace = true
 description = "Umbrella: re-exports general+convex."
+readme = "README.md"
+repository.workspace = true
+homepage.workspace = true
+documentation = "https://docs.rs/tpt-math-optimize"
+keywords = ["optimization", "umbrella", "solvers", "convex", "numerical"]
+categories = ["mathematics", "science", "algorithms"]
 
 [dependencies]
 tpt-math-optimize-general = { workspace = true, optional = true }

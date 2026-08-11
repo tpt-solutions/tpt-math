@@ -6,6 +6,12 @@ rust-version.workspace = true
 license.workspace = true
 authors.workspace = true
 description = "Shared Distribution/Sampler traits."
+readme = "README.md"
+repository.workspace = true
+homepage.workspace = true
+documentation = "https://docs.rs/tpt-math-prob-core"
+keywords = ["probability", "statistics", "traits", "distribution", "sampling"]
+categories = ["mathematics", "science", "algorithms"]
 
 [dependencies]
 tpt-math-numeric = { path = "../tpt-math-numeric", default-features = false }

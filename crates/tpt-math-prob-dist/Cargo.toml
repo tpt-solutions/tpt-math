@@ -6,6 +6,12 @@ rust-version.workspace = true
 license.workspace = true
 authors.workspace = true
 description = "Standard distributions (wrap rand_distr)."
+readme = "README.md"
+repository.workspace = true
+homepage.workspace = true
+documentation = "https://docs.rs/tpt-math-prob-dist"
+keywords = ["probability", "distributions", "statistics", "random", "sampling"]
+categories = ["mathematics", "science", "algorithms"]
 
 [dependencies]
 # `rand` 0.9 is the `rand_core`/`RngCore` version that `rand_distr` 0.5 is built

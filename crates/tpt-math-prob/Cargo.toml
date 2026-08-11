@@ -6,6 +6,12 @@ rust-version.workspace = true
 license.workspace = true
 authors.workspace = true
 description = "Umbrella: re-exports tpt-math-prob-* behind features."
+readme = "README.md"
+repository.workspace = true
+homepage.workspace = true
+documentation = "https://docs.rs/tpt-math-prob"
+keywords = ["probability", "statistics", "umbrella", "distributions", "sampling"]
+categories = ["mathematics", "science", "algorithms"]
 
 [dependencies]
 tpt-math-prob-monte-carlo = { workspace = true, optional = true }

@@ -6,6 +6,12 @@ rust-version.workspace = true
 license.workspace = true
 authors.workspace = true
 description = "Permissive-license symbolic math (CAS)."
+readme = "README.md"
+repository.workspace = true
+homepage.workspace = true
+documentation = "https://docs.rs/tpt-math-symbolic"
+keywords = ["symbolic", "cas", "algebra", "expression", "symbolic-math"]
+categories = ["mathematics", "science", "algorithms"]
 
 [dependencies]
 num-traits = "0.2"

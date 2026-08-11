@@ -6,6 +6,12 @@ rust-version.workspace = true
 license.workspace = true
 authors.workspace = true
 description = "Sampling strategies."
+readme = "README.md"
+repository.workspace = true
+homepage.workspace = true
+documentation = "https://docs.rs/tpt-math-prob-sampler"
+keywords = ["sampling", "random", "rng", "distribution", "strategies"]
+categories = ["mathematics", "science", "algorithms"]
 
 [dependencies]
 tpt-math-prob-core = { path = "../tpt-math-prob-core", default-features = false }

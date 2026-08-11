@@ -6,6 +6,12 @@ rust-version.workspace = true
 license.workspace = true
 authors.workspace = true
 description = "Linear algebra paired with tpt-math-units for dimensional safety (wrap nalgebra)."
+readme = "README.md"
+repository.workspace = true
+homepage.workspace = true
+documentation = "https://docs.rs/tpt-math-linalg"
+keywords = ["linear-algebra", "matrix", "vector", "linalg", "no-std"]
+categories = ["mathematics", "science", "algorithms", "no-std"]
 
 [dependencies]
 nalgebra = { version = "0.33.3", default-features = false, features = ["libm", "macros"] }

@@ -6,6 +6,13 @@ rust-version.workspace = true
 license.workspace = true
 authors.workspace = true
 description = "Runtime dimension-checked units for dynamic/config payloads."
+readme = "README.md"
+repository.workspace = true
+homepage.workspace = true
+documentation = "https://docs.rs/tpt-math-units-dyn"
+keywords = ["units", "dimensional-analysis", "runtime", "type-safe", "physics"]
+categories = ["mathematics", "science", "data-structures"]
+
 
 [dependencies]
 tpt-math-units = { workspace = true }

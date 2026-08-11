@@ -6,6 +6,12 @@ rust-version.workspace = true
 license.workspace = true
 authors.workspace = true
 description = "General numerical optimization (wrap argmin)."
+readme = "README.md"
+repository.workspace = true
+homepage.workspace = true
+documentation = "https://docs.rs/tpt-math-optimize-general"
+keywords = ["optimization", "argmin", "solvers", "algorithms", "numerical"]
+categories = ["mathematics", "science", "algorithms"]
 
 [dependencies]
 argmin = "0.11.0"

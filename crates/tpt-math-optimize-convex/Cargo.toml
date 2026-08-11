@@ -6,6 +6,12 @@ rust-version.workspace = true
 license.workspace = true
 authors.workspace = true
 description = "Convex / QP optimization (wrap clarabel)."
+readme = "README.md"
+repository.workspace = true
+homepage.workspace = true
+documentation = "https://docs.rs/tpt-math-optimize-convex"
+keywords = ["convex-optimization", "qp", "solvers", "clarabel", "quadratic"]
+categories = ["mathematics", "science", "algorithms"]
 
 [dependencies]
 clarabel = "0.11.1"

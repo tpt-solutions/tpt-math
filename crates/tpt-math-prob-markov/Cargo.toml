@@ -6,6 +6,12 @@ rust-version.workspace = true
 license.workspace = true
 authors.workspace = true
 description = "Markov chains / HMM."
+readme = "README.md"
+repository.workspace = true
+homepage.workspace = true
+documentation = "https://docs.rs/tpt-math-prob-markov"
+keywords = ["markov", "hmm", "stochastic", "probability", "chains"]
+categories = ["mathematics", "science", "algorithms", "simulation"]
 
 [dependencies]
 tpt-math-prob-core = { workspace = true }

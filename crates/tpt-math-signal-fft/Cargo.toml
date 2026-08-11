@@ -6,6 +6,12 @@ rust-version.workspace = true
 license.workspace = true
 authors.workspace = true
 description = "FFT (wrap rustfft)."
+readme = "README.md"
+repository.workspace = true
+homepage.workspace = true
+documentation = "https://docs.rs/tpt-math-signal-fft"
+keywords = ["fft", "dft", "fourier", "signal-processing", "spectral"]
+categories = ["mathematics", "science", "algorithms"]
 
 [dependencies]
 rustfft = "6.4.1"

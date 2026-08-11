@@ -6,6 +6,12 @@ rust-version.workspace = true
 license.workspace = true
 authors.workspace = true
 description = "Compile-time typed units (wrap uom)."
+readme = "README.md"
+repository.workspace = true
+homepage.workspace = true
+documentation = "https://docs.rs/tpt-math-units"
+keywords = ["units", "dimensional-analysis", "types", "no-std", "physics"]
+categories = ["mathematics", "science", "no-std"]
 
 [dependencies]
 uom = { version = "0.38.0", default-features = false, features = ["si", "f32", "f64", "autoconvert"] }

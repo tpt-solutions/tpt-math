@@ -6,6 +6,12 @@ rust-version.workspace = true
 license.workspace = true
 authors.workspace = true
 description = "FIR/IIR filters, windowing."
+readme = "README.md"
+repository.workspace = true
+homepage.workspace = true
+documentation = "https://docs.rs/tpt-math-signal-filter"
+keywords = ["filters", "fir", "iir", "windowing", "signal-processing"]
+categories = ["mathematics", "science", "algorithms"]
 
 [dependencies]
 tpt-math-numeric = { workspace = true }

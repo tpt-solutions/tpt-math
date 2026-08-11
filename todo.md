@@ -408,3 +408,67 @@ Consolidates tpt-rust6's tpt-sym. Optionally depends on: tpt-math-exact.*
 - [x] Root `README.md` documents the full crate map, build order, and how `tpt-science`/`tpt-engineering`/`tpt-formal` are expected to consume `tpt-math`
 - [x] Confirm every `tpt-math-*` entry in `tpt-rust-map/registry.toml` reads `status = "git"`
 - [x] Update `tpt-rust-map/TODO.md`: mark the `tpt-math` repo-creation line done; note `tpt-science`/`tpt-engineering`/`tpt-formal` can now proceed in parallel
+
+## Post-Build Hardening — Packaging, Security, Tooling
+
+*Follow-up pass after a full review: the code itself had no stubs, but
+packaging metadata, CI, and adoption tooling did. Tracked here the same way
+as the build phases above.*
+
+### Packaging + CI bugs
+
+- [ ] Add `CHANGELOG.md` (Keep-a-Changelog template) to the 18 crates
+      missing it: autodiff-fwd, autodiff-rev, autodiff, exact, linalg,
+      optimize-general, optimize-convex, optimize, prob-monte-carlo,
+      prob-sampler, prob, signal-fft, signal-filter, signal, stats,
+      symbolic, units-dyn, units
+- [ ] Add `README.md` to the 4 crates missing it: exact, linalg, units-dyn, units
+- [ ] Fix `.github/workflows/ci.yml`'s `no_std` job — replace the
+      `echo "no crates yet"` placeholder with a real build of the 8
+      `no_std = true` crates
+
+### Security hardening
+
+- [ ] Add `unsafe_code = "forbid"` to `[workspace.lints.rust]` and
+      `[lints]\nworkspace = true` to all 22 crate `Cargo.toml`s (currently
+      zero crates opt into `[workspace.lints]` at all)
+- [ ] Tighten `deny.toml`: `advisories.yanked = "deny"`,
+      `sources.unknown-registry = "deny"`, `sources.unknown-git = "deny"`
+- [ ] Add `# Panics` docs to `tpt-math-linalg`'s `Index`/operator impls
+- [ ] Document `tpt-math-symbolic`'s unbounded-recursion hazard and the
+      `f64` round-trip that breaks exactness for transcendental functions;
+      comment the two invariant-guarded `unwrap()`s in `fold_add`/`fold_mul`
+- [ ] Add root `SECURITY.md` (no-`unsafe` policy, `deny.toml` posture,
+      panic/`try_*` convention, symbolic recursion caveat, disclosure contact)
+
+### Adoption tooling
+
+- [ ] Add `xtask` crate (`fmt`/`clippy`/`test`/`deny`/`no-std`/`check`
+      subcommands) + `.cargo/config.toml` alias; CI's `no_std` job calls it
+- [ ] Add root `justfile` with recipes shelling out to `cargo xtask *`
+- [ ] Add `examples/` workspace member (`tpt-math-examples`, unpublished)
+      with 4 runnable cross-crate programs (units+linalg, prob+stats,
+      autodiff+optimize, symbolic+exact)
+- [ ] Add `cargo-hack` feature-powerset CI job for the 4 umbrella crates;
+      swap `test` job to `cargo nextest run` + `cargo test --doc`
+- [ ] Add root README section: depending on `tpt-math` pre-publish (git-dep
+      snippet), pointers to `examples/`, `cargo xtask check`/`just check`,
+      `SECURITY.md`/`CONTRIBUTING.md`
+- [ ] Add root `CONTRIBUTING.md` — issues-only (no external PR workflow):
+      how to file an issue, the per-crate checklist, `deny.toml` license policy
+
+### Benchmarks
+
+- [ ] Add `criterion` benches (`benches/`, `harness = false`) to linalg,
+      signal-fft, optimize-convex, exact
+- [ ] Add `bench-smoke` CI job: `cargo bench --no-run` across those 4 crates
+      (compile-only, not run-for-pass/fail)
+
+### Verification
+
+- [ ] `cargo build`/`test --workspace --all-features`,
+      `cargo fmt --check`, `cargo clippy -D warnings`, `cargo deny check`
+- [ ] `cargo xtask no-std` and `cargo xtask check` / `just check`
+- [ ] Run all 4 new examples; `cargo bench --no-run` on all 4 new bench targets
+- [ ] `cargo package -p <each newly-fixed crate> --list` — confirms the
+      README/CHANGELOG packaging bug is actually fixed
