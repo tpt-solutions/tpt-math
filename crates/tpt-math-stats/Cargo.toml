@@ -14,7 +14,7 @@ keywords = ["statistics", "hypothesis-testing", "regression", "stats", "analysis
 categories = ["mathematics", "science", "algorithms"]
 
 [dependencies]
-tpt-math-prob-core = { workspace = true }
+tpt-math-prob-core = { workspace = true, features = ["std"] }
 
 [features]
 default = []

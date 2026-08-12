@@ -17,7 +17,7 @@ categories = ["mathematics", "algorithms", "science"]
 num-bigint = { version = "0.5.1", default-features = false }
 num-rational = { version = "0.4.2", default-features = false, features = ["num-bigint"] }
 num-traits = { version = "0.2.19", default-features = false, features = ["libm"] }
-tpt-math-numeric = { path = "../tpt-math-numeric", default-features = false }
+tpt-math-numeric = { workspace = true, default-features = false }
 
 [features]
 default = ["std"]

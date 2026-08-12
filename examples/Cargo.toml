@@ -23,7 +23,7 @@ name = "symbolic_exact"
 path = "src/bin/symbolic_exact.rs"
 
 [dependencies]
-tpt-math-units = { workspace = true }
+tpt-math-units = { workspace = true, features = ["std"] }
 tpt-math-linalg = { workspace = true }
 tpt-math-linalg-dense = { workspace = true }
 tpt-math-prob = { workspace = true }

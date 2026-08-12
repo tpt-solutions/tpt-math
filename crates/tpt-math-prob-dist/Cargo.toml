@@ -18,7 +18,7 @@ categories = ["mathematics", "science", "algorithms"]
 # against; the adapter in this crate must implement *that* `RngCore`.
 rand = { version = "0.9", default-features = false }
 rand_distr = { version = "0.5.1", default-features = false }
-tpt-math-prob-core = { path = "../tpt-math-prob-core", default-features = false }
+tpt-math-prob-core = { workspace = true, default-features = false }
 
 [features]
 default = ["std"]

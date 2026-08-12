@@ -14,7 +14,7 @@ keywords = ["bayesian", "inference", "statistics", "probability", "mcmc"]
 categories = ["mathematics", "science", "algorithms", "simulation"]
 
 [dependencies]
-tpt-math-prob-core = { workspace = true }
+tpt-math-prob-core = { workspace = true, features = ["std"] }
 
 [features]
 default = []

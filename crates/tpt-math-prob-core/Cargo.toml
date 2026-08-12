@@ -14,7 +14,7 @@ keywords = ["probability", "statistics", "traits", "distribution", "sampling"]
 categories = ["mathematics", "science", "algorithms"]
 
 [dependencies]
-tpt-math-numeric = { path = "../tpt-math-numeric", default-features = false }
+tpt-math-numeric = { workspace = true, default-features = false }
 
 [features]
 default = ["std"]

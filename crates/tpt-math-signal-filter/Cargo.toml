@@ -14,7 +14,7 @@ keywords = ["filters", "fir", "iir", "windowing", "signal-processing"]
 categories = ["mathematics", "science", "algorithms"]
 
 [dependencies]
-tpt-math-numeric = { workspace = true }
+tpt-math-numeric = { workspace = true, features = ["std"] }
 tpt-math-signal-fft = { workspace = true }
 
 [features]

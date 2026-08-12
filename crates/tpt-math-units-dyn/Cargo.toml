@@ -15,7 +15,7 @@ categories = ["mathematics", "science", "data-structures"]
 
 
 [dependencies]
-tpt-math-units = { workspace = true }
+tpt-math-units = { workspace = true, features = ["std"] }
 
 [features]
 default = []

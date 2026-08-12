@@ -42,15 +42,15 @@ homepage = "https://github.com/tpt-solutions/tpt-math"
 repository = "https://github.com/tpt-solutions/tpt-math"
 
 [workspace.dependencies]
-tpt-math-numeric = { version = "0.1.0", path = "crates/tpt-math-numeric" }
+tpt-math-numeric = { version = "0.1.0", path = "crates/tpt-math-numeric", default-features = false }
 tpt-math-linalg-dense = { version = "0.1.0", path = "crates/tpt-math-linalg-dense", default-features = false }
-tpt-math-units = { version = "0.1.0", path = "crates/tpt-math-units" }
+tpt-math-units = { version = "0.1.0", path = "crates/tpt-math-units", default-features = false }
 tpt-math-units-dyn = { version = "0.1.0", path = "crates/tpt-math-units-dyn" }
 tpt-math-exact = { version = "0.1.0", path = "crates/tpt-math-exact" }
 tpt-math-linalg = { version = "0.1.0", path = "crates/tpt-math-linalg" }
 tpt-math-linalg-fixed = { version = "0.1.0", path = "crates/tpt-math-linalg-fixed" }
 tpt-math-geometry = { version = "0.1.0", path = "crates/tpt-math-geometry" }
-tpt-math-prob-core = { version = "0.1.0", path = "crates/tpt-math-prob-core" }
+tpt-math-prob-core = { version = "0.1.0", path = "crates/tpt-math-prob-core", default-features = false }
 tpt-math-prob-dist = { version = "0.1.0", path = "crates/tpt-math-prob-dist" }
 tpt-math-prob-bayes = { version = "0.1.0", path = "crates/tpt-math-prob-bayes" }
 tpt-math-prob-markov = { version = "0.1.0", path = "crates/tpt-math-prob-markov" }
