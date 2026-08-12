@@ -4,14 +4,12 @@
 [advisories]
 version = 2
 yanked = "deny"
-# `paste` (RUSTSEC-2024-0436) is unmaintained, but it previously arrived
-# transitively through `argmin`, `faer`/`gemm`, and `statrs` → `nalgebra` →
-# `simba`. All three have been addressed: `statrs` was replaced with in-house
-# `special`/`dist` modules, and the archived `paste` itself is now swapped for
-# `pastey` (its maintained, drop-in successor) via the `[patch.crates-io]` entry
-# in the workspace root `Cargo.toml` (see `vendor/paste`). No crate named
-# `paste` remains in the graph, so the advisory no longer fires and the ignore
-# below is intentionally removed.
+# `paste` (RUSTSEC-2024-0436) previously arrived transitively via `argmin`,
+# `faer`/`gemm`, and `statrs` -> `nalgebra` -> `simba`. Those backends were
+# replaced with in-house implementations, so no crate named `paste` (and no
+# `nalgebra`) remains in the graph and the advisory no longer fires. The
+# `vendor/paste` patch shim and the RUSTSEC-2024-0436 ignore have both been
+# removed.
 
 [licenses]
 # All workspace crates are MIT OR Apache-2.0. The allow-list also permits the

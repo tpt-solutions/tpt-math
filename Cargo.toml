@@ -82,11 +82,3 @@ lto = "fat"
 codegen-units = 1
 strip = "symbols"
 overflow-checks = true
-
-# Replace the archived `paste` crate (RUSTSEC-2024-0436) with `pastey`, its
-# maintained, drop-in successor. `argmin` and `faer`/`gemm` require the crate
-# name `paste`, so we keep that name here and merely re-export `pastey`'s API
-# (see `vendor/paste`). This keeps the archived crate out of the dependency
-# graph, allowing `deny.toml`'s `RUSTSEC-2024-0436` ignore to be removed.
-[patch.crates-io]
-paste = { path = "vendor/paste" }

@@ -7,8 +7,16 @@ math ecosystem (and, where no dual-licensed option exists, consolidate prior
 TPT crates) behind a coherent, `no_std`-friendly API.
 
 It exists so that `tpt-science`, `tpt-engineering`, and `tpt-formal` can depend
-on one consistent set of math primitives instead of each re-wrapping
-`nalgebra` / `statrs` / `rand_distr` / etc. ad hoc.
+on one consistent set of math primitives instead of each re-wrapping the Rust
+math ecosystem ad hoc.
+
+**License posture.** Per ADR-0007 every external dependency must be
+dual-licensed (`MIT OR Apache-2.0`) or more permissive. The crates that were
+Apache-2.0-*only* — `nalgebra`, `clarabel`, `statrs`, `argmin`, and `faer` —
+have been replaced with in-house implementations (see the crate map), so the
+workspace carries **no Apache-2.0-only dependency**. The remaining wrapped
+ecosystem crates (`uom`, `rustfft`, `rand`/`rand_distr`, `num-*`) are all
+dual-licensed.
 
 ## Crate map
 
@@ -25,7 +33,10 @@ Crates are organised into layers; lower layers never depend on higher ones.
 | Crate | Wraps / consolidates | `no_std` | Notes |
 |-------|----------------------|----------|-------|
 | `tpt-math-exact` | `num-bigint`, `num-rational` | yes (alloc) | Exact rational + interval arithmetic. |
-| `tpt-math-linalg` | `nalgebra` | yes | Dimensionally-checked vectors/matrices. nalgebra-only (no faer facade). |
+| `tpt-math-linalg-dense` | — (in-house; was `faer`) | yes (alloc) | Dense `DVector`/`DMatrix`, column-major `Vec` storage; storage backend for `tpt-math-linalg` / `-optimize`. |
+| `tpt-math-linalg` | `tpt-math-linalg-dense` (in-house) | yes | Dimensionally-checked vectors/matrices over the in-house dense backend. |
+| `tpt-math-linalg-fixed` | — (in-house) | yes | Const-generic fixed-size vectors/matrices + closed-form det/inverse; no allocator. |
+| `tpt-math-geometry` | `tpt-math-linalg-fixed` (in-house) | yes | Points, rotations, quaternions, isometries, projections; no `nalgebra`. |
 
 ### Probability
 | Crate | Wraps / consolidates | `no_std` | Notes |
@@ -41,17 +52,17 @@ Crates are organised into layers; lower layers never depend on higher ones.
 ### Statistics, autodiff, symbolic
 | Crate | Wraps / consolidates | `no_std` | Notes |
 |-------|----------------------|----------|-------|
-| `tpt-math-stats` | in-house (`special`/`dist`) | no | Hypothesis tests / regression + in-house distributions & special functions. |
+| `tpt-math-stats` | in-house (`special`/`dist`); no `statrs` | no | Hypothesis tests / regression + in-house distributions & special functions. |
 | `tpt-math-autodiff-fwd` | — | yes | Dual-number forward-mode autodiff. |
-| `tpt-math-autodiff-rev` | `tpt-grad`/`tpt-grad-macro`/`tpt-zero-grad` | no | Reverse-mode / tape autodiff. |
+| `tpt-math-autodiff-rev` | — (in-house; was `tpt-grad`) | no | Reverse-mode / tape autodiff, built on `tpt-math-autodiff-fwd`. |
 | `tpt-math-autodiff` | (umbrella) | no | Re-exports fwd + rev. |
 | `tpt-math-symbolic` | `tpt-sym` | no | Permissive-license CAS; generic `Coefficient`, default `f64`, optional exact `BigRational`. |
 
 ### Optimisation & signal
 | Crate | Wraps / consolidates | `no_std` | Notes |
 |-------|----------------------|----------|-------|
-| `tpt-math-optimize-general` | `argmin` | no | General numerical optimisation. |
-| `tpt-math-optimize-convex` | `clarabel` | no | Convex / QP optimisation. |
+| `tpt-math-optimize-general` | — (in-house; was `argmin`) | no | Steepest descent, nonlinear conjugate gradient, Newton. |
+| `tpt-math-optimize-convex` | — (in-house; was `clarabel`) | no | Dense primal-dual interior-point (Mehrotra) QP solver. |
 | `tpt-math-optimize` | (umbrella) | no | Re-exports general + convex. |
 | `tpt-math-signal-fft` | `rustfft` | no | FFT. |
 | `tpt-math-signal-filter` | — | no | FIR/IIR filters, windowing. |
@@ -61,23 +72,27 @@ Crates are organised into layers; lower layers never depend on higher ones.
 
 ```
 tpt-math-numeric
+  -> tpt-math-linalg-dense          (in-house dense storage; was faer)
+  -> tpt-math-linalg-fixed          (in-house fixed-size)
+       -> tpt-math-geometry
   -> tpt-math-units
-       -> tpt-math-exact
-            -> tpt-math-linalg
-                 -> tpt-math-prob-core
-                      -> tpt-math-prob-dist / -bayes / -markov / -monte-carlo / -sampler
-                      -> tpt-math-prob            (umbrella)
-                 -> tpt-math-stats
+       -> tpt-math-linalg           (wraps linalg-dense)
        -> tpt-math-units-dyn
+       -> tpt-math-exact
+            -> tpt-math-prob-core
+                 -> tpt-math-prob-dist / -bayes / -markov / -monte-carlo / -sampler
+                 -> tpt-math-prob            (umbrella)
+            -> tpt-math-stats               (in-house; no statrs)
   -> tpt-math-autodiff-fwd
        -> tpt-math-autodiff-rev
-            -> tpt-math-autodiff (umbrella)
+            -> tpt-math-autodiff            (umbrella)
   -> tpt-math-symbolic
-  -> tpt-math-optimize-general / -convex
-       -> tpt-math-optimize      (umbrella)
+  -> tpt-math-optimize-general      (in-house; was argmin)
+       -> tpt-math-optimize-convex   (in-house QP; needs linalg-dense)
+            -> tpt-math-optimize      (umbrella)
   -> tpt-math-signal-fft
        -> tpt-math-signal-filter
-            -> tpt-math-signal    (umbrella)
+            -> tpt-math-signal        (umbrella)
 ```
 
 ## Consuming `tpt-math`
@@ -97,7 +112,7 @@ Downstream repos depend only on the leaf / umbrella crates they need:
 
 ## Repository layout
 
-- `crates/*` — the 23 library workspace members.
+- `crates/*` — the 26 library workspace members.
 - `xtask/` — the developer-tooling crate (`cargo xtask …`).
 - `examples/` — `tpt-math-examples`, four unpublished cross-crate demos.
 - `Cargo.toml` — workspace manifest (`resolver = "2"`, shared `[workspace.package]`).
