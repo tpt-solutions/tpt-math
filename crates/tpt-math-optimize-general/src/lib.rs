@@ -516,7 +516,13 @@ where
     G: Fn(&DVector<f64>) -> DVector<f64>,
     H: Fn(&DVector<f64>) -> DMatrix<f64>,
 {
-    fn new(cost: F, grad: G, hessian: H, init: DVector<f64>, options: &Options) -> Result<Self, String> {
+    fn new(
+        cost: F,
+        grad: G,
+        hessian: H,
+        init: DVector<f64>,
+        options: &Options,
+    ) -> Result<Self, String> {
         validate(&init, options)?;
         let grad_cache = grad(&init);
         if !grad_cache.iter().all(|x| x.is_finite()) {
@@ -611,7 +617,7 @@ where
         phi_lo = phi_a;
         dphi_lo = dphi_a;
         a_hi = a;
-        a = a * 2.0;
+        a *= 2.0;
     }
     a
 }

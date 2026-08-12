@@ -59,7 +59,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: EmbarkStudios/cargo-deny-action@v1
+      - uses: EmbarkStudios/cargo-deny-action@v2
         with:
           command: check
 
@@ -74,7 +74,7 @@ jobs:
         with:
           tool: cargo-hack
       - run: >
-          cargo hack test --feature-powerset --workspace --all-targets
+          cargo hack test --feature-powerset --all-targets
           -p tpt-math-prob -p tpt-math-autodiff -p tpt-math-optimize -p tpt-math-signal
 
   # Compile-only smoke test for the criterion benchmark targets. Benches are not
