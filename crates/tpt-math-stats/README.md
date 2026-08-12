@@ -1,25 +1,23 @@
 # tpt-math-stats
 
 Descriptive statistics, classical hypothesis tests, and least-squares
-regression. This crate wraps [`statrs`](https://crates.io/crates/statrs) —
-whose distributions, special functions, and `Statistics` traits are
-battle-tested — behind a small slice-oriented API that takes plain `&[f64]` and
-returns plain tuples, so callers never have to construct a distribution object
-just to get a p-value.
+regression. This crate implements its own distributions and special functions
+in-house — there is no Apache-2.0 `statrs` dependency — behind a small
+slice-oriented API that takes plain `&[f64]` and returns plain tuples, so
+callers never have to construct a distribution object just to get a p-value.
 
 ## Part of tpt-math
 
 This crate is a member of the [`tpt-math`](https://github.com/tpt-solutions/tpt-math)
 workspace and is its home for "classical" statistics, sitting alongside the
-`tpt-math-prob-*` probability layer. It depends on `statrs` and on
-`tpt-math-prob-core` for the workspace randomness traits, and re-exports both
-in full so downstream crates need no second dependency declaration.
+`tpt-math-prob-*` probability layer. It depends on `tpt-math-prob-core` for the
+workspace randomness traits, and re-exports it in full so downstream crates need
+no second dependency declaration.
 
 ## Features
 
 This crate has no optional features (`default = []`). It requires `std`:
-`statrs` is a `std` crate, and the panicking wrappers format their error
-messages.
+the panicking wrappers format their error messages.
 
 ## What's provided
 
@@ -28,6 +26,8 @@ messages.
 | Descriptive | `mean`, `variance`, `std_dev`, `min`, `max`, `median` |
 | Hypothesis tests | `one_sample_t_test`, `two_sample_t_test` (Welch), `chi_squared_goodness_of_fit` |
 | Regression | `pearson_correlation`, `linear_regression` |
+| Distributions | `ChiSquared`, `StudentsT`, `Normal` via `ContinuousCDF` |
+| Special functions | `erf`, `erfc`, `gamma`, `lgamma`, `beta`, `beta_reg`, `gamma_p`, `gamma_q` |
 
 Every function has a panicking short-named form and a checked `try_*` twin
 returning `StatsError`; the former is exactly the latter unwrapped.
@@ -67,14 +67,17 @@ let (x2, p) = chi_squared_goodness_of_fit(&[22u64, 27, 24, 27], &[25.0; 4]);
 assert!(x2 < 1.0 && p > 0.5);
 ```
 
-Anything not wrapped here is one path away, because `statrs` is re-exported
-verbatim:
+The special functions and distributions are also available directly:
 
 ```rust
-use tpt_math_stats::statrs::distribution::{ContinuousCDF, FisherSnedecor};
+use tpt_math_stats::{beta, beta_reg, ChiSquared, ContinuousCDF, gamma};
 
-let f = FisherSnedecor::new(3.0, 16.0).unwrap();
-assert!(f.sf(5.29) < 0.05);
+assert!((gamma(5.0) - 24.0).abs() < 1e-10);
+assert!((beta(2.0, 3.0) - 1.0 / 12.0).abs() < 1e-12);
+
+// Upper-tail probability of chi-squared(3) at 10.0: significant at 5%.
+let chi = ChiSquared::new(3.0).unwrap();
+assert!(chi.sf(10.0) < 0.05);
 ```
 
 ## Notes
@@ -83,8 +86,12 @@ assert!(f.sf(5.29) < 0.05);
   silently poisoning a result); sample variance is Bessel-corrected (`n - 1`);
   tests return `(statistic, p_value)`, two-sided for the t-tests and upper-tail
   for chi-squared.
-- P-values are evaluated with `statrs` survival functions rather than
-  `1 - cdf`, so tiny p-values keep their significant digits.
+- P-values are evaluated with survival functions rather than `1 - cdf`, so tiny
+  p-values keep their significant digits.
+- The regularized incomplete beta (Student's t) and gamma (chi-squared) are
+  computed by in-house Lentz continued fractions and series, cross-checked
+  against closed-form values (e.g. df=1 t-test vs. the Cauchy `atan` form, and
+  chi-squared df=1 vs. `erfc`).
 - Sums use compensated (Neumaier) accumulation and variances use the corrected
   two-pass formula, keeping results accurate for long or badly offset samples.
 - Documented non-error results: a degenerate (zero standard error) t-test
@@ -94,8 +101,7 @@ assert!(f.sf(5.29) < 0.05);
 - `tpt-math-prob-core` is re-exported as `prob_core`, with `Distribution`,
   `Rng`, `Sampler`, `SplitMix64` and `Standard` lifted to the crate root, which
   makes reproducible simulation studies against these tests a two-liner.
-- Not `no_std`. `statrs` is `MIT`-licensed, compatible with this workspace's
-  `MIT OR Apache-2.0` policy.
+- Not `no_std`.
 
 ## License
 

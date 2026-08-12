@@ -41,7 +41,7 @@ Crates are organised into layers; lower layers never depend on higher ones.
 ### Statistics, autodiff, symbolic
 | Crate | Wraps / consolidates | `no_std` | Notes |
 |-------|----------------------|----------|-------|
-| `tpt-math-stats` | `statrs` | no | Hypothesis tests / regression. |
+| `tpt-math-stats` | in-house (`special`/`dist`) | no | Hypothesis tests / regression + in-house distributions & special functions. |
 | `tpt-math-autodiff-fwd` | — | yes | Dual-number forward-mode autodiff. |
 | `tpt-math-autodiff-rev` | `tpt-grad`/`tpt-grad-macro`/`tpt-zero-grad` | no | Reverse-mode / tape autodiff. |
 | `tpt-math-autodiff` | (umbrella) | no | Re-exports fwd + rev. |

@@ -1,0 +1,9 @@
+[package]
+name = "paste"
+version = "1.0.15"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+description = "Internal shim re-exporting `pastey` (the maintained successor of the archived `paste` crate, RUSTSEC-2024-0436) so the archived crate stays out of the dependency graph."
+
+[dependencies]
+pastey = "0.2.3"

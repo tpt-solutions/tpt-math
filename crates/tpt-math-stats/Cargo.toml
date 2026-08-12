@@ -5,7 +5,7 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 authors.workspace = true
-description = "Hypothesis tests / regression (wrap statrs)."
+description = "Hypothesis tests / regression (in-house distributions & special functions, no statrs)"
 readme = "README.md"
 repository.workspace = true
 homepage.workspace = true
@@ -14,7 +14,6 @@ keywords = ["statistics", "hypothesis-testing", "regression", "stats", "analysis
 categories = ["mathematics", "science", "algorithms"]
 
 [dependencies]
-statrs = "0.18.0"
 tpt-math-prob-core = { workspace = true }
 
 [features]

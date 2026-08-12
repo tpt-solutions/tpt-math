@@ -5,29 +5,20 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 authors.workspace = true
-description = "General numerical optimization (wrap argmin)."
+description = "General numerical optimization (in-house steepest descent, nonlinear conjugate gradient, Newton)."
 readme = "README.md"
 repository.workspace = true
 homepage.workspace = true
 documentation = "https://docs.rs/tpt-math-optimize-general"
-keywords = ["optimization", "argmin", "solvers", "algorithms", "numerical"]
+keywords = ["optimization", "solvers", "algorithms", "numerical"]
 categories = ["mathematics", "science", "algorithms"]
 
 [dependencies]
-argmin = "0.11.0"
-# `argmin` itself only pulls in the `primitives` math backend; the
-# `ArgminMath` impls for `DVector<f64>`/`DMatrix<f64>` (needed for the closure
-# solvers' `DVector`/`DMatrix` parameters) live in `tpt-math-linalg-dense`
-# behind its `argmin` feature, so they always match the storage backend used by
-# `tpt-math-linalg`. A plain `argmin-math` dependency supplies the trait
-# surface (no backend feature) for the re-export.
-argmin-math = { version = "0.5.1", default-features = false, features = ["primitives"] }
 tpt-math-linalg = { workspace = true }
-tpt-math-linalg-dense = { workspace = true, features = ["argmin"] }
+tpt-math-linalg-dense = { workspace = true }
 
 [features]
 default = []
-
 
 [lints]
 workspace = true

@@ -247,12 +247,12 @@ tpt-zero-sampler and tpt-zero-rand.*
 
 ## Phase 9 — tpt-math-stats
 
-*Wrap statrs for hypothesis tests / regression. Consolidates
+*In-house hypothesis tests / regression (no `statrs` — see Phase D). Consolidates
 tpt-zero-formal's tpt-zero-stats and tpt-rust6's tpt-stat. Depends on:
 tpt-math-prob-core.*
 
 - [x] Scaffold `crates/tpt-math-stats/`
-- [x] Wire deps: `statrs`, `tpt-math-prob-core`
+- [x] Wire deps: `tpt-math-prob-core` (statrs replaced by in-house `special`/`dist`)
 - [x] Implement hypothesis tests / regression wrapper
 - [x] Port/consolidate logic from `tpt-zero-formal`'s `tpt-zero-stats` and `tpt-rust6`'s `tpt-stat`
 - [x] Unit tests + doctests
@@ -624,12 +624,59 @@ tpt-math-linalg-fixed.*
 - [x] `crates/tpt-math-optimize/README.md` (umbrella): update mentions
 - [x] `examples/src/bin/units_linalg.rs`, `examples/src/bin/autodiff_optimize.rs`:
       update construction calls
-- [ ] `deny.toml`: remove the `RUSTSEC-2024-0436` (`paste`/nalgebra→simba)
-      ignore entry once nalgebra is gone from the tree
-      > **BLOCKED:** `nalgebra` is *not* gone — `statrs` (which
-      > `tpt-math-stats` wraps) depends on `nalgebra` → `simba` → `paste`, so the
-      > advisory still fires. The ignore was kept (comment updated to note
-      > `statrs`). It can only be removed by dropping/replacing `statrs`.
+- [x] `deny.toml`: `RUSTSEC-2024-0436` (`paste`) ignore entry — `statrs` is now
+      gone and `nalgebra`/`simba` no longer appear in the graph (verified in
+      `Cargo.lock`). The archived `paste` itself is now swapped for `pastey`
+      (its maintained, drop-in successor) via a local `vendor/paste` shim wired
+      through `[patch.crates-io]` in the root `Cargo.toml`, so **no crate
+      named `paste` remains in the graph** and the advisory ignore has been
+      **removed** from `deny.toml`.
+
+### Phase D — tpt-math-stats: statrs → in-crate MIT implementations (new task)
+
+*statrs (Apache-2.0 only) was the last crate pulling `nalgebra` into tpt-math
+(via statrs → `simba` → `paste`/`nalgebra`), keeping the `RUSTSEC-2024-0436`
+ignore alive. Replace the statrs surface actually used — error function, gamma,
+beta, regularized incomplete gamma/beta, ChiSquared/StudentsT/Normal
+distributions — with in-crate `special`/`dist` modules (no external dep). Plan:
+`1786420651815-tpt-math-stats-statrs-replacement.md`.*
+
+- [x] Add `src/special.rs` (no external deps): `erf`/`erfc` (via `gamma_q(0.5,
+      x²)`), `lgamma` (Lanczos g=7, n=9), `gamma`, `beta`, `gamma_p`/`gamma_q`
+      (series + continued fraction), `beta_reg`/`beta_cf` (Lentz)
+- [x] Add `src/dist.rs`: `ContinuousCDF` trait, `ChiSquared` (`gamma_p`/`gamma_q`),
+      `StudentsT` (`beta_reg` cdf/sf), `Normal` (`erf`-based cdf/sf + pdf/mean/var)
+- [x] `src/lib.rs`: add `mod special; mod dist;`, public re-exports
+      (`ChiSquared`/`ContinuousCDF`/`Normal`/`StudentsT`, `beta`/`beta_reg`/`erf`/
+      `erfc`/`gamma`/`gamma_p`/`gamma_q`/`lgamma`); remove `pub use statrs;`
+- [x] `src/lib.rs`: rewrite "Reaching through to statrs" doc section + the
+      `statrs_reexport_is_usable` test → `distributions_and_special_functions_are_usable`
+- [x] `src/hypothesis.rs`: imports retargeted to `crate::dist`; doc comments
+      de-statrs'd; df=1 chi-squared test cross-checks against `crate::special::erfc`
+- [x] `src/descriptive.rs`: `agrees_with_statrs_statistics` test replaced with an
+      internal variance-identity check (no statrs)
+- [x] `Cargo.toml`: drop `statrs = "0.18.0"` dependency; update description
+- [x] `tests/stats.rs`: remove `statrs` import + `statrs_stays_reachable...` test;
+      cross-checks now use the public `StudentsT`/`ChiSquared` re-exports
+- [x] FIX `beta_reg`/`beta_cf` — root-caused to the Lentz continued fraction
+      seeding `c = 1.0` (not `1/TINY`) and corrected in `src/special.rs`; the
+      gamma path was already correct. Student's t p-values now match closed forms
+      (df=1 Cauchy `atan` to 1e-12; df=4 two-sided 5% critical 2.776445 to 1e-6).
+- [x] `cargo test -p tpt-math-stats` → all pass (incl. the df=1/2/4 t-test
+      closed-form and chi-squared df=1/2 closed forms)
+- [x] Update `crates/tpt-math-stats/README.md`: drop "wraps statrs" language
+- [x] Update root `README.md` table: `tpt-math-stats` dependency column `statrs` →
+      `in-house (special/dist)`
+- [x] `deny.toml`: `RUSTSEC-2024-0436` (`paste`) ignore **removed** — replaced
+      the archived `paste` crate with `pastey` (maintained successor) via a
+      `vendor/paste` shim + `[patch.crates-io]` (see root `Cargo.toml`), so no
+      `paste` crate remains in the graph; `cargo deny check` now passes with the
+      ignore gone.
+- [x] `spec.txt` + Phase 9 line 255 ("Wire deps: `statrs`") — de-statrs
+- [x] `cargo deny check licenses` — confirm `statrs` and `nalgebra` no longer
+      appear anywhere in the tpt-math dependency graph (verified: both absent
+      from `Cargo.lock`)
+- [x] `cargo test --workspace` (tpt-math) green
 
 ### Verification
 

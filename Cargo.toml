@@ -42,7 +42,6 @@ homepage = "https://github.com/tpt-solutions/tpt-math"
 repository = "https://github.com/tpt-solutions/tpt-math"
 
 [workspace.dependencies]
-faer = { version = "0.24.4", default-features = false }
 tpt-math-numeric = { version = "0.1.0", path = "crates/tpt-math-numeric" }
 tpt-math-linalg-dense = { version = "0.1.0", path = "crates/tpt-math-linalg-dense", default-features = false }
 tpt-math-units = { version = "0.1.0", path = "crates/tpt-math-units" }
@@ -83,3 +82,11 @@ lto = "fat"
 codegen-units = 1
 strip = "symbols"
 overflow-checks = true
+
+# Replace the archived `paste` crate (RUSTSEC-2024-0436) with `pastey`, its
+# maintained, drop-in successor. `argmin` and `faer`/`gemm` require the crate
+# name `paste`, so we keep that name here and merely re-export `pastey`'s API
+# (see `vendor/paste`). This keeps the archived crate out of the dependency
+# graph, allowing `deny.toml`'s `RUSTSEC-2024-0436` ignore to be removed.
+[patch.crates-io]
+paste = { path = "vendor/paste" }

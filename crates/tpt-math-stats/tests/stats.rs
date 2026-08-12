@@ -5,8 +5,8 @@
 
 use tpt_math_stats::{
     chi_squared_goodness_of_fit, linear_regression, max, mean, median, min, one_sample_t_test,
-    pearson_correlation, statrs, std_dev, try_chi_squared_goodness_of_fit, try_linear_regression,
-    try_mean, two_sample_t_test, variance, Distribution, Rng, SplitMix64, Standard, StatsError,
+    pearson_correlation, std_dev, try_chi_squared_goodness_of_fit, try_linear_regression, try_mean,
+    two_sample_t_test, variance, Distribution, Rng, SplitMix64, Standard, StatsError, StudentsT,
 };
 
 /// Anscombe's quartet, dataset I — the canonical regression sanity check.
@@ -64,8 +64,9 @@ fn welch_agrees_with_the_pooled_test_for_balanced_equal_variance_groups() {
     let expected_t = (mean(&a) - mean(&b)) / (2.0 * pooled / n).sqrt();
     assert!((t - expected_t).abs() < 1e-12, "t = {t}");
 
-    // Cross-check the p-value against `statrs` directly, on 2n - 2 = 8 df.
-    use statrs::distribution::{ContinuousCDF, StudentsT};
+    // Cross-check the p-value against the in-house Student's t distribution,
+    // on 2n - 2 = 8 df.
+    use tpt_math_stats::{ContinuousCDF, StudentsT};
     let reference = 2.0 * StudentsT::new(0.0, 1.0, 2.0 * n - 2.0).unwrap().sf(t.abs());
     assert!((p - reference).abs() < 1e-12, "p = {p}");
     assert!(p > 0.05, "a 3-unit shift is not detectable at n = 5");
@@ -178,17 +179,14 @@ fn errors_surface_with_useful_messages() {
 }
 
 #[test]
-fn statrs_stays_reachable_through_the_reexport() {
-    use statrs::distribution::{ChiSquared, ContinuousCDF, FisherSnedecor};
-    use statrs::statistics::Distribution as StatrsDistribution;
+fn distributions_are_reachable_from_the_public_api() {
+    use tpt_math_stats::{ChiSquared, ContinuousCDF};
 
-    // An F-test the crate does not wrap, built straight from the re-export.
-    let f = FisherSnedecor::new(4.0, 20.0).unwrap();
-    assert!(f.sf(2.87) < 0.05);
-
-    // Our chi-squared p-value is exactly `statrs`' survival function.
+    // Our chi-squared p-value equals the upper regularized incomplete gamma,
+    // which is exactly what `ChiSquared::sf` computes in-house.
     let (x2, p) = chi_squared_goodness_of_fit(&[18, 22, 30, 30], &[25.0; 4]);
     let reference = ChiSquared::new(3.0).unwrap().sf(x2);
     assert!((p - reference).abs() < 1e-15);
-    assert_eq!(ChiSquared::new(3.0).unwrap().mean(), Some(3.0));
+    assert!(ChiSquared::new(3.0).is_ok());
+    assert!(StudentsT::new(0.0, 1.0, 3.0).is_ok());
 }

@@ -289,7 +289,6 @@ pub fn median(samples: &[f64]) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use statrs::statistics::{Data, Median as _, Statistics};
 
     const DATA: [f64; 8] = [2.0, 4.0, 4.0, 4.0, 5.0, 5.0, 7.0, 9.0];
 
@@ -316,15 +315,14 @@ mod tests {
     }
 
     #[test]
-    fn agrees_with_statrs_statistics() {
+    fn variance_matches_population_identity() {
+        // Bessel-corrected variance: s² = (Σx² - n·x̄²) / (n - 1).
         let data = [1.5, -3.25, 8.0, 0.0, 4.75, 4.75, -1.0];
-
-        assert!((mean(&data) - Statistics::mean(data.iter().copied())).abs() < 1e-12);
-        assert!((variance(&data) - Statistics::variance(data.iter().copied())).abs() < 1e-12);
-        assert!((std_dev(&data) - Statistics::std_dev(data.iter().copied())).abs() < 1e-12);
-        assert_eq!(min(&data), Statistics::min(data.iter().copied()));
-        assert_eq!(max(&data), Statistics::max(data.iter().copied()));
-        assert_eq!(median(&data), Data::new(data.to_vec()).median());
+        let n = data.len() as f64;
+        let m = mean(&data);
+        let sum_sq = compensated_sum(data.iter().map(|&x| x * x));
+        let reference = (sum_sq - n * m * m) / (n - 1.0);
+        assert!((variance(&data) - reference).abs() < 1e-12);
     }
 
     #[test]

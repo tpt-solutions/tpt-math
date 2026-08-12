@@ -4,11 +4,12 @@
 
 //! Descriptive statistics, hypothesis tests, and least-squares regression.
 //!
-//! This crate is the workspace's home for "classical" statistics. It wraps
-//! [`statrs`] — whose distributions, special functions, and `Statistics`
-//! traits are battle-tested — behind a small, slice-oriented API that speaks
-//! plain `&[f64]` and returns plain tuples, so callers never have to build a
-//! distribution object just to get a p-value.
+//! This crate is the workspace's home for "classical" statistics. It implements
+//! its own distributions and special functions (see [`crate::dist`] and
+//! [`crate::special`]) behind a small, slice-oriented API that speaks plain
+//! `&[f64]` and returns plain tuples, so callers never have to build a
+//! distribution object just to get a p-value. No Apache-2.0 `statrs` dependency
+//! is pulled in.
 //!
 //! # What's here
 //!
@@ -26,7 +27,7 @@
 //!   silently poisoning a result.
 //! * Sample variance is Bessel-corrected (`n - 1`).
 //! * Tests return `(statistic, p_value)`. t-test p-values are two-sided;
-//!   chi-squared p-values are upper-tail. Both come from `statrs` survival
+//!   chi-squared p-values are upper-tail. Both are evaluated through survival
 //!   functions, so tiny p-values keep their precision.
 //! * Sums use compensated (Neumaier) accumulation and variances use the
 //!   corrected two-pass formula, which keeps results accurate for long or
@@ -75,17 +76,19 @@
 //! assert!(x2 < 1.0 && p > 0.5);
 //! ```
 //!
-//! # Reaching through to `statrs`
+//! # Special functions and distributions
 //!
-//! Anything this crate does not wrap is one path away: `statrs` is re-exported
-//! verbatim, so distributions, special functions, and its own `Statistics`
-//! traits stay available without a second dependency declaration.
+//! Anything outside the descriptive/hypothesis/regression surface is also
+//! available in-house (no Apache-2.0 `statrs` dependency): the special
+//! functions in [`special`] (error, gamma, beta and their regularized incomplete
+//! forms) and the distributions in [`dist`] (chi-squared, Student's t, normal).
 //!
 //! ```
-//! use tpt_math_stats::statrs::distribution::{ContinuousCDF, FisherSnedecor};
+//! use tpt_math_stats::{ChiSquared, ContinuousCDF};
 //!
-//! let f = FisherSnedecor::new(3.0, 16.0).unwrap();
-//! let p = f.sf(5.29);
+//! // Upper-tail probability of chi-squared(3) at 10.0: significant at 5%.
+//! let chi = ChiSquared::new(3.0).unwrap();
+//! let p = chi.sf(10.0);
 //! assert!(p < 0.05);
 //! ```
 //!
@@ -101,14 +104,17 @@
 //! ```
 
 mod descriptive;
+mod dist;
 mod error;
 mod hypothesis;
 mod regression;
+mod special;
 
 pub use descriptive::{
     max, mean, median, min, std_dev, try_max, try_mean, try_median, try_min, try_std_dev,
     try_variance, variance,
 };
+pub use dist::{ChiSquared, ContinuousCDF, Normal, StudentsT};
 pub use error::StatsError;
 pub use hypothesis::{
     chi_squared_goodness_of_fit, one_sample_t_test, try_chi_squared_goodness_of_fit,
@@ -117,12 +123,7 @@ pub use hypothesis::{
 pub use regression::{
     linear_regression, pearson_correlation, try_linear_regression, try_pearson_correlation,
 };
-
-/// The wrapped statistics library, re-exported in full.
-///
-/// Use it for anything outside this crate's surface — other distributions,
-/// `statrs::function::{beta, erf, gamma}`, or the `statrs::statistics` traits.
-pub use statrs;
+pub use special::{beta, beta_reg, erf, erfc, gamma, gamma_p, gamma_q, lgamma};
 
 /// The workspace's randomness traits, re-exported for convenience.
 pub use tpt_math_prob_core as prob_core;
@@ -134,20 +135,19 @@ mod tests {
     use super::*;
 
     #[test]
-    fn statrs_reexport_is_usable() {
-        use statrs::distribution::{Continuous, ContinuousCDF, Normal};
-        use statrs::statistics::Distribution as _;
+    fn distributions_and_special_functions_are_usable() {
+        use crate::dist::{ContinuousCDF, Normal};
 
         let normal = Normal::new(0.0, 1.0).unwrap();
         assert!((normal.cdf(0.0) - 0.5).abs() < 1e-15);
         assert!((normal.pdf(0.0) - 1.0 / (2.0 * std::f64::consts::PI).sqrt()).abs() < 1e-15);
-        assert_eq!(normal.mean(), Some(0.0));
-        assert_eq!(normal.variance(), Some(1.0));
+        assert!((normal.mean() - 0.0).abs() < 1e-15);
+        assert!((normal.variance() - 1.0).abs() < 1e-15);
 
-        // Special functions come along for the ride.
-        assert!((statrs::function::gamma::gamma(5.0) - 24.0).abs() < 1e-10);
-        assert!((statrs::function::erf::erf(0.0)).abs() < 1e-15);
-        assert!((statrs::function::beta::beta(2.0, 3.0) - 1.0 / 12.0).abs() < 1e-12);
+        // The in-house special functions.
+        assert!((gamma(5.0) - 24.0).abs() < 1e-10);
+        assert!(erf(0.0).abs() < 1e-15);
+        assert!((beta(2.0, 3.0) - 1.0 / 12.0).abs() < 1e-12);
     }
 
     #[test]

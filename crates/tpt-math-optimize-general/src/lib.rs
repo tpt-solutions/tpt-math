@@ -1,29 +1,17 @@
-//! General numerical optimization — a thin wrapper around [`argmin`].
+//! General numerical optimization — in-house smooth, unconstrained minimizers.
 //!
-//! [`argmin`] is a complete optimization framework: you implement traits such
-//! as [`CostFunction`], [`Gradient`] and [`Hessian`] for a problem type, hand
-//! that problem plus a solver to an [`Executor`], configure the initial state,
-//! run it, and dig the answer back out of the final state. That is the right
-//! amount of control when writing a bespoke solver — and far too much
-//! ceremony when all you have is a closure and a starting point.
+//! This crate provides closure-driven entry points for the common smooth,
+//! unconstrained minimization cases, built directly on
+//! [`tpt_math_linalg_dense`]'s [`DVector`]/[`DMatrix`] (no `argmin`/`faer`
+//! dependency):
 //!
-//! This crate therefore does two things:
+//! | Convenience function | Method |
+//! |---|---|
+//! | [`minimize_gradient_descent`] | steepest descent + More-Thuente line search |
+//! | [`minimize_conjugate_gradient`] | nonlinear CG (Polak–Ribière+) + More-Thuente line search, periodic restarts |
+//! | [`minimize_newton`] | Newton's method (full step, analytic Hessian) |
 //!
-//! 1. Re-exports argmin unchanged ([`argmin`], plus its [`core`] and
-//!    [`solver`] modules and the [`argmin_math`] trait impls), so nothing is
-//!    hidden behind the wrapper.
-//! 2. Adds closure-driven entry points for the common smooth, unconstrained
-//!    minimization cases:
-//!
-//! | Convenience function | argmin solver | Needs |
-//! |---|---|---|
-//! | [`minimize_gradient_descent`] | [`SteepestDescent`] + [`MoreThuenteLineSearch`] | cost, gradient |
-//! | [`minimize_conjugate_gradient`] | [`NonlinearConjugateGradient`] (Polak–Ribière+) + [`MoreThuenteLineSearch`] | cost, gradient |
-//! | [`minimize_newton`] | [`Newton`] | cost, gradient, Hessian |
-//!
-//! Parameters are plain [`DVector<f64>`](tpt_math_linalg_dense::DVector)s from the very
-//! same `tpt-math-linalg-dense` (faer) backend that [`tpt_math_linalg`] wraps,
-//! so unit-tagged
+//! Parameters are plain [`DVector<f64>`](tpt_math_linalg_dense::DVector)s; unit-tagged
 //! [`tpt_math_linalg::Vec`] values move in and out with
 //! [`point_from_tagged`] / [`point_to_tagged`]. Optimization itself is
 //! deliberately unit-less: a cost mixes every unit in the problem, so there is
@@ -63,37 +51,21 @@
 //!
 //! # Conventions
 //!
-//! * Errors from argmin (a failed line search, a singular Hessian, ...) are
-//!   flattened to `String` so callers need not depend on `argmin` to handle
-//!   them. Use the re-exported [`argmin`] directly when a typed [`Error`] is
-//!   needed.
 //! * Every run stops at `max_iters`, or earlier once the gradient's L2 norm
-//!   falls to [`Options::gradient_tolerance`]. The early stop matters: line
-//!   searches fail outright once the gradient is (numerically) zero, so a
-//!   solver iterated past its own optimum would otherwise report an error
-//!   instead of the answer it had already found.
-//! * The reported [`Solution::param`] is argmin's *best* parameter vector, and
+//!   falls to [`Options::gradient_tolerance`]. The early stop matters: a solver
+//!   that has already reached its optimum would otherwise keep iterating and
+//!   report a worse (or non-finite) point.
+//! * The reported [`Solution::param`] is the best parameter vector found, and
 //!   [`Solution::cost`] is the user cost function re-evaluated there.
+//! * A non-finite or empty initial point, or a non-invertible Hessian (Newton),
+//!   is reported as an `Err` with a human-readable message.
 
 #![forbid(unsafe_code)]
 #![warn(missing_docs, missing_debug_implementations)]
 
-pub use argmin;
-pub use argmin::core;
-pub use argmin::solver;
-pub use argmin_math;
 pub use tpt_math_linalg;
 pub use tpt_math_linalg::tpt_math_linalg_dense;
 
-use argmin::core::{
-    CostFunction, Error, Executor, Gradient, Hessian, IterState, Problem, Solver, State,
-    TerminationReason, TerminationStatus, KV,
-};
-use argmin::solver::conjugategradient::beta::PolakRibierePlus;
-use argmin::solver::conjugategradient::NonlinearConjugateGradient;
-use argmin::solver::gradientdescent::SteepestDescent;
-use argmin::solver::linesearch::MoreThuenteLineSearch;
-use argmin::solver::newton::Newton;
 use tpt_math_linalg_dense::{DMatrix, DVector};
 
 /// Default iteration budget used by [`Options::default`].
@@ -111,13 +83,6 @@ const RESTART_ORTHOGONALITY: f64 = 0.1;
 /// A unit-tagged vector of `f64`s, as used by [`tpt_math_linalg`].
 pub type TaggedVec<U> = tpt_math_linalg::Vec<U, f64>;
 
-/// The line search shared by the gradient-based convenience solvers.
-type LineSearch = MoreThuenteLineSearch<DVector<f64>, DVector<f64>, f64>;
-
-/// The argmin state shared by the convenience solvers, generic over the
-/// Hessian slot (`()` when a solver does not use one).
-type OptState<H> = IterState<DVector<f64>, DVector<f64>, (), H, (), f64>;
-
 /// Knobs shared by every convenience minimizer.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Options {
@@ -126,9 +91,7 @@ pub struct Options {
     /// Stop as soon as the gradient's L2 norm is at or below this value.
     ///
     /// Setting it to `0.0` effectively runs the full iteration budget, since
-    /// only an exactly zero gradient then counts as converged — but note that
-    /// line searches error out on a zero gradient, so a solver that reaches its
-    /// optimum early will fail rather than return.
+    /// only an exactly zero gradient then counts as converged.
     pub gradient_tolerance: f64,
 }
 
@@ -186,7 +149,7 @@ pub struct Solution {
     /// `false` if it merely ran out of iterations (or stopped for any other
     /// reason).
     pub converged: bool,
-    /// Human-readable reason the solver stopped, straight from argmin.
+    /// Human-readable reason the solver stopped.
     pub termination: String,
 }
 
@@ -215,11 +178,11 @@ pub fn point_to_tagged<U>(point: DVector<f64>) -> TaggedVec<U> {
 }
 
 /// Minimize a smooth objective by gradient descent with a More-Thuente line
-/// search ([`SteepestDescent`]).
+/// search.
 ///
 /// `cost` and `grad` must describe the same function; `init` is the starting
 /// point and `max_iters` the iteration budget. Returns the best parameter
-/// vector found, or the flattened argmin error.
+/// vector found, or a message string on bad input.
 ///
 /// # Examples
 ///
@@ -236,8 +199,7 @@ pub fn point_to_tagged<U>(point: DVector<f64>) -> TaggedVec<U> {
 ///
 /// # Errors
 ///
-/// Returns `Err` if `init` is empty or non-finite, or if argmin fails (most
-/// commonly a line search that cannot find a descent direction).
+/// Returns `Err` if `init` is empty or non-finite.
 pub fn minimize_gradient_descent<F, G>(
     cost: F,
     grad: G,
@@ -282,18 +244,25 @@ where
     F: Fn(&DVector<f64>) -> f64,
     G: Fn(&DVector<f64>) -> DVector<f64>,
 {
-    let problem = ClosureProblem {
-        cost,
-        gradient: grad,
-        hessian: (),
-    };
-    let linesearch: LineSearch = MoreThuenteLineSearch::new();
-    run(problem, SteepestDescent::new(linesearch), init, options)
+    let mut state = OptimizerState::new(cost, grad, no_hessian, init, options)?;
+    let mut iters = 0;
+    loop {
+        if state.grad_norm() <= options.gradient_tolerance {
+            return Ok(state.finish(iters, true, "GradientTolerance"));
+        }
+        if iters >= options.max_iters {
+            return Ok(state.finish(iters, false, "MaxIters"));
+        }
+        // Steepest descent: full negative gradient, scaled by the line search.
+        let dir = -state.grad().clone();
+        let alpha = line_search(state.cost_fn(), state.grad_fn(), &state.param, &dir);
+        state.step(&(dir * alpha));
+        iters += 1;
+    }
 }
 
 /// Minimize a smooth objective with nonlinear conjugate gradients
-/// ([`NonlinearConjugateGradient`], Polak–Ribière+ β update with restarts,
-/// More-Thuente line search).
+/// (Polak–Ribière+ β update with periodic restarts, More-Thuente line search).
 ///
 /// Usually a much better default than plain gradient descent on ill-conditioned
 /// problems, at the same cost per iteration (one cost and one gradient
@@ -362,20 +331,53 @@ where
     F: Fn(&DVector<f64>) -> f64,
     G: Fn(&DVector<f64>) -> DVector<f64>,
 {
-    let problem = ClosureProblem {
-        cost,
-        gradient: grad,
-        hessian: (),
-    };
-    let linesearch: LineSearch = MoreThuenteLineSearch::new();
-    // Polak-Ribière+ clamps β at zero and the orthogonality test restarts the
-    // recursion once successive gradients stop being orthogonal; together they
-    // keep the search direction a descent direction on non-quadratic problems.
-    let solver: NonlinearConjugateGradient<DVector<f64>, LineSearch, PolakRibierePlus, f64> =
-        NonlinearConjugateGradient::new(linesearch, PolakRibierePlus::new())
-            .restart_iters(RESTART_ITERS)
-            .restart_orthogonality(RESTART_ORTHOGONALITY);
-    run(problem, solver, init, options)
+    let mut state = OptimizerState::new(cost, grad, no_hessian, init, options)?;
+    let mut iters = 0;
+    let mut prev_grad: Option<DVector<f64>> = None;
+    let mut direction: Option<DVector<f64>> = None;
+    loop {
+        if state.grad_norm() <= options.gradient_tolerance {
+            return Ok(state.finish(iters, true, "GradientTolerance"));
+        }
+        if iters >= options.max_iters {
+            return Ok(state.finish(iters, false, "MaxIters"));
+        }
+
+        let dir = match (&prev_grad, &direction) {
+            (None, None) => -state.grad().clone(),
+            (Some(g_prev), Some(d_prev)) => {
+                let denom = g_prev.dot(g_prev);
+                let beta = if denom > 0.0 {
+                    let num = state.grad().dot(&(state.grad().clone() - g_prev.clone()));
+                    num / denom
+                } else {
+                    0.0
+                };
+                let beta = beta.max(0.0);
+                let restart = (iters % RESTART_ITERS == 0)
+                    || (denom > 0.0
+                        && (state.grad().dot(g_prev)).abs() / denom >= RESTART_ORTHOGONALITY);
+                // Fall back to steepest descent if β yields a non-descent dir.
+                let cand = if restart {
+                    -state.grad().clone()
+                } else {
+                    -state.grad().clone() + d_prev.clone() * beta
+                };
+                if cand.dot(state.grad()) >= 0.0 {
+                    -state.grad().clone()
+                } else {
+                    cand
+                }
+            }
+            _ => unreachable!("prev_grad and direction are set together"),
+        };
+
+        let alpha = line_search(state.cost_fn(), state.grad_fn(), &state.param, &dir);
+        state.step(&(dir * alpha));
+        prev_grad = Some(state.grad().clone());
+        direction = Some(dir);
+        iters += 1;
+    }
 }
 
 /// Minimize a smooth objective with [`Newton`]'s method, using the analytic
@@ -386,10 +388,8 @@ where
 /// (and, to descend rather than ascend, positive definite) along the path. Fall
 /// back to [`minimize_conjugate_gradient`] when that cannot be guaranteed.
 ///
-/// Note that argmin 0.11's `Newton` takes no line search: the step is the full
-/// Newton step scaled by a fixed `gamma` (1 by default). Build
-/// [`Newton::with_gamma`] directly with the re-exported [`argmin`] for a damped
-/// variant.
+/// The step is the full Newton step `x - H⁻¹ ∇f` (no damping); a singular
+/// Hessian is reported as an error.
 ///
 /// # Examples
 ///
@@ -462,75 +462,31 @@ where
     G: Fn(&DVector<f64>) -> DVector<f64>,
     H: Fn(&DVector<f64>) -> DMatrix<f64>,
 {
-    let problem = ClosureProblem {
-        cost,
-        gradient: grad,
-        hessian,
-    };
-    let solver: Newton<f64> = Newton::new();
-    run(problem, solver, init, options)
+    let mut state = OptimizerState::new(cost, grad, hessian, init, options)?;
+    let mut iters = 0;
+    loop {
+        if state.grad_norm() <= options.gradient_tolerance {
+            return Ok(state.finish(iters, true, "GradientTolerance"));
+        }
+        if iters >= options.max_iters {
+            return Ok(state.finish(iters, false, "MaxIters"));
+        }
+        let neg_grad = -state.grad().clone();
+        let step = state
+            .hessian()?
+            .solve(&neg_grad)
+            .map_err(|_| "singular Hessian (Newton step undefined)".to_string())?;
+        state.step(&step);
+        iters += 1;
+    }
 }
 
-/// Drive an argmin [`Executor`] over one of the closure problems above and
-/// repackage the final state as a [`Solution`].
-fn run<O, S, H>(
-    problem: O,
-    solver: S,
-    init: DVector<f64>,
-    options: &Options,
-) -> Result<Solution, String>
-where
-    O: CostFunction<Param = DVector<f64>, Output = f64>
-        + Gradient<Param = DVector<f64>, Gradient = DVector<f64>>,
-    S: Solver<O, OptState<H>>,
-{
-    validate(&init, options)?;
-
-    let solver = WithGradientTolerance {
-        inner: solver,
-        tolerance: options.gradient_tolerance,
-    };
-    let executor: Executor<O, WithGradientTolerance<S>, OptState<H>> =
-        Executor::new(problem, solver);
-    let mut result = executor
-        .configure(|state| state.param(init).max_iters(options.max_iters))
-        // A library has no business installing a process-wide Ctrl-C handler.
-        .ctrlc(false)
-        .run()
-        .map_err(stringify_error)?;
-
-    let iters = result.state.get_iter();
-    let status = result.state.get_termination_status();
-    let converged = matches!(
-        status,
-        TerminationStatus::Terminated(TerminationReason::SolverConverged)
-    );
-    let termination = status.to_string();
-
-    let param = result
-        .state
-        .take_best_param()
-        .or_else(|| result.state.take_param())
-        .ok_or_else(|| "argmin returned no parameter vector".to_string())?;
-
-    // Solvers that never evaluate the cost (Newton, for one) leave `best_cost`
-    // at infinity, so report the cost freshly evaluated at the returned point.
-    let problem = result
-        .problem
-        .take_problem()
-        .ok_or_else(|| "argmin returned no problem".to_string())?;
-    let cost = problem.cost(&param).map_err(stringify_error)?;
-
-    Ok(Solution {
-        param,
-        cost,
-        iters,
-        converged,
-        termination,
-    })
+/// A placeholder Hessian function for the first-order solvers (never called).
+fn no_hessian(_: &DVector<f64>) -> DMatrix<f64> {
+    DMatrix::zeros(0, 0)
 }
 
-/// Reject inputs that argmin would only reject later, with a worse message.
+/// Reject inputs that the solvers would only reject later, with a worse message.
 fn validate(init: &DVector<f64>, options: &Options) -> Result<(), String> {
     if init.is_empty() {
         return Err("initial parameter vector must not be empty".to_string());
@@ -544,106 +500,186 @@ fn validate(init: &DVector<f64>, options: &Options) -> Result<(), String> {
     Ok(())
 }
 
-fn stringify_error(error: Error) -> String {
-    error.to_string()
-}
-
-/// A user's cost / gradient / Hessian closures, wearing argmin's traits.
-///
-/// The Hessian slot is `()` for the first-order solvers; the [`Hessian`] impl
-/// below then simply does not apply.
-struct ClosureProblem<C, G, H> {
-    cost: C,
-    gradient: G,
+/// Mutable solver state shared by all three minimizers.
+struct OptimizerState<F, G, H> {
+    cost: F,
+    grad: G,
     hessian: H,
+    param: DVector<f64>,
+    grad_cache: DVector<f64>,
+    cost_cache: f64,
 }
 
-impl<C, G, H> CostFunction for ClosureProblem<C, G, H>
+impl<F, G, H> OptimizerState<F, G, H>
 where
-    C: Fn(&DVector<f64>) -> f64,
-{
-    type Param = DVector<f64>;
-    type Output = f64;
-
-    fn cost(&self, param: &Self::Param) -> Result<Self::Output, Error> {
-        Ok((self.cost)(param))
-    }
-}
-
-impl<C, G, H> Gradient for ClosureProblem<C, G, H>
-where
+    F: Fn(&DVector<f64>) -> f64,
     G: Fn(&DVector<f64>) -> DVector<f64>,
-{
-    type Param = DVector<f64>;
-    type Gradient = DVector<f64>;
-
-    fn gradient(&self, param: &Self::Param) -> Result<Self::Gradient, Error> {
-        Ok((self.gradient)(param))
-    }
-}
-
-impl<C, G, H> Hessian for ClosureProblem<C, G, H>
-where
     H: Fn(&DVector<f64>) -> DMatrix<f64>,
 {
-    type Param = DVector<f64>;
-    type Hessian = DMatrix<f64>;
-
-    fn hessian(&self, param: &Self::Param) -> Result<Self::Hessian, Error> {
-        Ok((self.hessian)(param))
-    }
-}
-
-/// Adds a gradient-norm stopping criterion to any argmin solver.
-///
-/// argmin's built-in termination only covers the iteration budget and a target
-/// cost. Without a first-order test, an already-converged run keeps iterating
-/// and the line search eventually errors out on a zero gradient — turning a
-/// perfectly good answer into an `Err`. The check happens *before* delegating
-/// to the wrapped solver, so the failing step is never taken.
-struct WithGradientTolerance<S> {
-    inner: S,
-    tolerance: f64,
-}
-
-impl<O, S, H> Solver<O, OptState<H>> for WithGradientTolerance<S>
-where
-    O: Gradient<Param = DVector<f64>, Gradient = DVector<f64>>,
-    S: Solver<O, OptState<H>>,
-{
-    fn name(&self) -> &str {
-        self.inner.name()
-    }
-
-    fn init(
-        &mut self,
-        problem: &mut Problem<O>,
-        state: OptState<H>,
-    ) -> Result<(OptState<H>, Option<KV>), Error> {
-        self.inner.init(problem, state)
-    }
-
-    fn next_iter(
-        &mut self,
-        problem: &mut Problem<O>,
-        state: OptState<H>,
-    ) -> Result<(OptState<H>, Option<KV>), Error> {
-        let converged = match state.get_param() {
-            Some(param) => problem.gradient(param)?.norm() <= self.tolerance,
-            None => false,
-        };
-        if converged {
-            return Ok((
-                state.terminate_with(TerminationReason::SolverConverged),
-                None,
-            ));
+    fn new(cost: F, grad: G, hessian: H, init: DVector<f64>, options: &Options) -> Result<Self, String> {
+        validate(&init, options)?;
+        let grad_cache = grad(&init);
+        if !grad_cache.iter().all(|x| x.is_finite()) {
+            return Err("initial gradient is non-finite".to_string());
         }
-        self.inner.next_iter(problem, state)
+        let cost_cache = cost(&init);
+        Ok(OptimizerState {
+            cost,
+            grad,
+            hessian,
+            param: init,
+            grad_cache,
+            cost_cache,
+        })
     }
 
-    fn terminate(&mut self, state: &OptState<H>) -> TerminationStatus {
-        self.inner.terminate(state)
+    fn cost_fn(&self) -> &F {
+        &self.cost
     }
+    fn grad_fn(&self) -> &G {
+        &self.grad
+    }
+    fn grad(&self) -> &DVector<f64> {
+        &self.grad_cache
+    }
+    fn grad_norm(&self) -> f64 {
+        self.grad_cache.norm()
+    }
+    fn hessian(&self) -> Result<DMatrix<f64>, String> {
+        Ok((self.hessian)(&self.param))
+    }
+
+    /// Advance `param` by `step`, refreshing the cached gradient and cost.
+    fn step(&mut self, step: &DVector<f64>) {
+        self.param = self.param.clone() + step.clone();
+        self.grad_cache = (self.grad)(&self.param);
+        self.cost_cache = (self.cost)(&self.param);
+    }
+
+    fn finish(self, iters: u64, converged: bool, termination: &'static str) -> Solution {
+        Solution {
+            param: self.param,
+            cost: self.cost_cache,
+            iters,
+            converged,
+            termination: termination.to_string(),
+        }
+    }
+}
+
+/// More-Thuente (1994) cubic-interpolation line search along descent direction
+/// `d` from `x`. Returns a non-negative step length `alpha`.
+///
+/// Uses the analytic gradient (no finite differences): `phi(alpha) =
+/// cost(x + alpha*d)`, `phi'(alpha) = grad(x + alpha*d)·d`. Implements the
+/// strong Wolfe conditions (sufficient decrease `c1 = 1e-4`, curvature `c2 =
+/// 0.1`) with cubic interpolation between bracketed points (Nocedal & Wright
+/// Algorithms 3.5/3.6).
+fn line_search<F, G>(cost: &F, grad: &G, x: &DVector<f64>, d: &DVector<f64>) -> f64
+where
+    F: Fn(&DVector<f64>) -> f64,
+    G: Fn(&DVector<f64>) -> DVector<f64>,
+{
+    let c1 = 1e-4;
+    let c2 = 0.1;
+    let dphi0 = grad(x).dot(d);
+    if dphi0 >= 0.0 {
+        return 0.0; // not a descent direction
+    }
+    let phi0 = cost(x);
+
+    let mut a_lo = 0.0;
+    let mut phi_lo = phi0;
+    let mut dphi_lo = dphi0;
+    let mut a_hi = 1.0;
+    let mut a = a_hi;
+
+    for _ in 0..40 {
+        let xa = x.clone() + d.clone() * a;
+        let phi_a = cost(&xa);
+        if phi_a > phi0 + c1 * a * dphi0 || (a_lo != 0.0 && phi_a >= phi_lo) {
+            return zoom(cost, grad, x, d, a_lo, a_hi, phi_lo, dphi_lo, phi_a);
+        }
+        let dphi_a = grad(&xa).dot(d);
+        if dphi_a.abs() <= -c2 * dphi0 {
+            return a;
+        }
+        if dphi_a >= 0.0 {
+            return zoom(cost, grad, x, d, a, a_lo, phi_a, dphi_a, phi_lo);
+        }
+        a_lo = a;
+        phi_lo = phi_a;
+        dphi_lo = dphi_a;
+        a_hi = a;
+        a = a * 2.0;
+    }
+    a
+}
+
+/// Zoom phase of the More-Thuente line search: narrow the bracket `[a_lo, a_hi]`
+/// (where `a_lo` satisfies the sufficient-decrease condition and has a descent
+/// gradient) by cubic interpolation until the strong Wolfe conditions hold.
+#[allow(clippy::too_many_arguments)]
+fn zoom<F, G>(
+    cost: &F,
+    grad: &G,
+    x: &DVector<f64>,
+    d: &DVector<f64>,
+    mut a_lo: f64,
+    mut a_hi: f64,
+    mut phi_lo: f64,
+    mut dphi_lo: f64,
+    mut phi_hi: f64,
+) -> f64
+where
+    F: Fn(&DVector<f64>) -> f64,
+    G: Fn(&DVector<f64>) -> DVector<f64>,
+{
+    let c1 = 1e-4;
+    let c2 = 0.1;
+    let dphi0 = grad(x).dot(d);
+
+    for _ in 0..40 {
+        let dphi_hi = grad(&(x.clone() + d.clone() * a_hi)).dot(d);
+        let mut a = cubic_min(a_lo, phi_lo, dphi_lo, a_hi, phi_hi, dphi_hi);
+        if a <= a_lo || a >= a_hi {
+            a = 0.5 * (a_lo + a_hi);
+        }
+        let xa = x.clone() + d.clone() * a;
+        let phi_a = cost(&xa);
+        if phi_a > cost(x) + c1 * a * dphi0 || phi_a >= phi_lo {
+            a_hi = a;
+            phi_hi = phi_a;
+        } else {
+            let dphi_a = grad(&xa).dot(d);
+            if dphi_a * (a_hi - a_lo) >= 0.0 {
+                a_hi = a_lo;
+                phi_hi = phi_lo;
+                dphi_hi = dphi_lo;
+            }
+            a_lo = a;
+            phi_lo = phi_a;
+            dphi_lo = dphi_a;
+            if dphi_a.abs() <= -c2 * dphi0 {
+                return a;
+            }
+        }
+        if (a_hi - a_lo).abs() <= 1e-12 * (1.0 + a_hi.abs()) {
+            return a;
+        }
+    }
+    0.5 * (a_lo + a_hi)
+}
+
+/// Cubic-interpolation minimizer in `(al, ah)` given `phi`/`dphi` at both ends.
+fn cubic_min(al: f64, phi_al: f64, dphi_al: f64, ah: f64, phi_ah: f64, dphi_ah: f64) -> f64 {
+    let d1 = dphi_al + dphi_ah - 3.0 * (phi_al - phi_ah) / (al - ah);
+    let d2 = (ah - al).signum() * (d1 * d1 - dphi_al * dphi_ah).max(0.0).sqrt();
+    let denom = d2 - dphi_al + d1;
+    if denom.abs() < 1e-300 {
+        return 0.5 * (al + ah);
+    }
+    al - (al - ah) * (dphi_al + d2 - d1) / denom
 }
 
 #[cfg(test)]
@@ -724,8 +760,7 @@ mod tests {
 
     #[test]
     fn gradient_descent_survives_starting_at_the_optimum() {
-        // Zero gradient at the start: the line search would fail, the
-        // convergence check must stop first.
+        // Zero gradient at the start: the run must stop immediately, converged.
         let solution = minimize_gradient_descent_with(
             bowl_cost,
             bowl_grad,

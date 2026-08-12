@@ -1,4 +1,4 @@
-//! Classical hypothesis tests built on `statrs` distributions.
+//! Classical hypothesis tests built on the in-house [`crate::dist`] distributions.
 //!
 //! Every test returns the pair `(statistic, p_value)`. The p-values are
 //! *two-sided* for the t-tests and *upper-tail* for the chi-squared test, and
@@ -17,7 +17,7 @@
 //! * means differ: `(±∞, 0.0)` — the difference is infinitely many standard
 //!   errors wide.
 
-use statrs::distribution::{ChiSquared, ContinuousCDF, StudentsT};
+use crate::dist::{ChiSquared, ContinuousCDF, StudentsT};
 
 use crate::descriptive::{compensated_sum, mean_unchecked, variance_unchecked};
 use crate::error::{
@@ -131,8 +131,8 @@ pub fn one_sample_t_test(samples: &[f64], mu0: f64) -> (f64, f64) {
 /// p  = 2 · P(T_df > |t|)
 /// ```
 ///
-/// The Welch–Satterthwaite `df` is generally fractional, which `statrs`
-/// handles natively.
+/// The Welch–Satterthwaite `df` is generally fractional, which the in-house
+/// [`StudentsT`](crate::dist::StudentsT) distribution handles natively.
 ///
 /// # Errors
 ///
@@ -206,7 +206,7 @@ pub fn two_sample_t_test(a: &[f64], b: &[f64]) -> (f64, f64) {
 /// The `k - 1` degrees of freedom assume `expected` was specified up front. If
 /// the expected counts were themselves fitted from the data, subtract one
 /// further degree of freedom per estimated parameter by evaluating the tail
-/// yourself, e.g. `statrs::distribution::ChiSquared::new(df)?.sf(statistic)`.
+/// yourself, e.g. `tpt_math_stats::dist::ChiSquared::new(df).unwrap().sf(statistic)`.
 ///
 /// The caller owns the (conventional) requirement that `expected` sums to the
 /// same total as `observed`; it is not enforced.
@@ -425,10 +425,9 @@ mod tests {
         // With df = 1 the survival function is erfc(√(x / 2)).
         let (x2, p) = chi_squared_goodness_of_fit(&[30, 20], &[25.0, 25.0]);
         assert_eq!(x2, 2.0);
-        // `statrs`' own `erfc` is a rational approximation good to ~1e-11,
-        // so it is the looser of the two references here.
-        let expected = statrs::function::erf::erfc((x2 / 2.0).sqrt());
-        assert!((p - expected).abs() < 1e-10, "p = {p}, erfc = {expected}");
+        // The in-house `erfc` is exact to double precision here.
+        let expected = crate::special::erfc((x2 / 2.0).sqrt());
+        assert!((p - expected).abs() < 1e-14, "p = {p}, erfc = {expected}");
         // erfc(1) to full double precision.
         assert!((p - 0.15729920705028513).abs() < 1e-14, "p = {p}");
     }

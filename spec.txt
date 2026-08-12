@@ -29,10 +29,11 @@ in the Rust ecosystem (2026) — this repo wraps those instead of rebuilding
 them:
 - faer (dense-matrix performance) — MIT-only, mature, years of numerical
   hardening. Used directly (unwrapped) for dense-linalg kernels.
-- statrs (hypothesis tests/regression), rand/rand_distr (sampling), argmin
-  (general optimization), rustfft (FFT), uom (compile-time units),
-  num-bigint/num-rational (exact arithmetic) — all mature,
-  dual/permissively licensed.
+- rand/rand_distr (sampling), argmin (general optimization), rustfft (FFT),
+  uom (compile-time units), num-bigint/num-rational (exact arithmetic) — all
+  mature, dual/permissively licensed. (Hypothesis tests / regression and their
+  distributions & special functions are implemented in-house in tpt-math-stats,
+  replacing the originally-planned `statrs` wrap — see Phase 9 rationale.)
 - NOTE: `nalgebra` and `clarabel` are Apache-2.0-ONLY, NOT dual MIT/Apache, and
   are disqualified as wrap targets by the workspace license policy (ADR-0007).
   Their roles were replaced in-tree: `nalgebra` by `tpt-math-linalg-dense`
@@ -160,7 +161,10 @@ CRATE INVENTORY
     dependency line without forcing the five to release together.
 
   tpt-math-stats
-    Wrap statrs for hypothesis tests / regression. Consolidates
+    Hypothesis tests / regression, with in-house distributions & special
+    functions (replacing the originally-planned `statrs` wrap, which is
+    Apache-2.0-ONLY and pulled `nalgebra` transitively, keeping the
+    RUSTSEC-2024-0436 `paste` advisory alive). Consolidates
     tpt-zero-formal's tpt-zero-stats and tpt-rust6's tpt-stat. Depends on:
     tpt-math-prob-core.
 
