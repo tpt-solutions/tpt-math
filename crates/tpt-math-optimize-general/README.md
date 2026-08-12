@@ -1,10 +1,10 @@
 # tpt-math-optimize-general
 
-General numerical optimisation: a thin wrapper around
-[`argmin`](https://docs.rs/argmin). It re-exports argmin unchanged and adds
-closure-driven entry points for the common smooth, unconstrained minimisation
-cases, so a cost function and a starting point are enough to get an answer
-without hand-rolling argmin's problem traits, executor and state plumbing.
+General numerical optimisation: in-house closure-driven minimisers for the
+common smooth, unconstrained cases (steepest descent, nonlinear conjugate
+gradient, Newton), built directly on `tpt-math-linalg-dense`'s
+`DVector`/`DMatrix`. A cost function and a starting point are enough to get
+an answer, with no external optimisation framework in the dependency graph.
 
 ## Part of tpt-math
 
@@ -18,14 +18,12 @@ faer-backed storage that `tpt-math-linalg` wraps.
 ## Features
 
 This crate has no optional features: `default = []` and everything described
-here is always available. It is **std-only** — `argmin` and its `Executor`
-require `std`, so there is no `no_std` build.
+here is always available. It is **std-only** — `tpt-math-linalg-dense`'s
+default (allocator-backed, `faer`) storage requires `std`, so there is no
+`no_std` build.
 
-The dependency set is fixed rather than feature-gated: `argmin`, `argmin-math`
-with the `primitives` backend (the `ArgminMath` impls for
-`DVector`/`DMatrix` parameters live in `tpt-math-linalg-dense` behind its
-`argmin` feature, so they always match the faer storage `tpt-math-linalg`
-wraps), and `tpt-math-linalg` itself.
+The dependency set is fixed rather than feature-gated: `tpt-math-linalg` and
+`tpt-math-linalg-dense`.
 
 ## Quick start
 
@@ -51,15 +49,16 @@ assert!((best[1] - 2.0).abs() < 1e-6);
 
 The three convenience solvers:
 
-| Function | argmin solver | Needs |
+| Function | Method | Needs |
 |---|---|---|
-| `minimize_gradient_descent` | `SteepestDescent` + `MoreThuenteLineSearch` | cost, gradient |
-| `minimize_conjugate_gradient` | `NonlinearConjugateGradient` (Polak–Ribière+, with restarts) + `MoreThuenteLineSearch` | cost, gradient |
-| `minimize_newton` | `Newton` | cost, gradient, Hessian |
+| `minimize_gradient_descent` | steepest descent + More-Thuente line search | cost, gradient |
+| `minimize_conjugate_gradient` | nonlinear CG (Polak–Ribière+, with periodic restarts) + More-Thuente line search | cost, gradient |
+| `minimize_newton` | Newton's method (full step, analytic Hessian) | cost, gradient, Hessian |
 
 Each has a `*_with` variant that takes `Options` and returns a `Solution`
 reporting the parameter vector, the cost re-evaluated there, the iteration
-count, whether the gradient tolerance was met, and argmin's termination reason:
+count, whether the gradient tolerance was met, and a human-readable
+termination reason:
 
 ```rust
 use tpt_math_optimize_general::tpt_math_linalg_dense::DVector;
@@ -77,12 +76,10 @@ assert!(solution.cost < 1e-12);
 
 ## Notes
 
-- Nothing is hidden: `argmin`, `argmin::core`, `argmin::solver`, `argmin_math`,
-  `tpt_math_linalg` and `tpt_math_linalg_dense` are all re-exported, so you can drop down to
-  a hand-built `Executor` whenever the conveniences are too narrow.
-- Errors are flattened to `String` so callers need not depend on `argmin` to
-  handle them; use the re-exported `argmin` directly if you need a typed
-  `argmin::core::Error`.
+- Nothing is hidden: `tpt_math_linalg` and `tpt_math_linalg_dense` are both
+  re-exported, so you can build on the same parameter types without a second,
+  possibly version-skewed, dependency on them.
+- Errors are flattened to a `String` message rather than a typed error type.
 - Every run stops at `max_iters` or earlier once the gradient's L2 norm falls to
   `Options::gradient_tolerance` (default `1e-9`). That early stop matters: line
   searches fail outright on a numerically zero gradient, so without it an
@@ -90,15 +87,13 @@ assert!(solution.cost < 1e-12);
 - Optimisation is deliberately unit-less — a cost mixes every unit in the
   problem — but unit-tagged `tpt_math_linalg::Vec` values can be moved in and
   out with `point_from_tagged` / `point_to_tagged` (`TaggedVec<U>`).
-- argmin 0.11's `Newton` takes no line search; the step is the full Newton step
-  scaled by a fixed `gamma`. Build `Newton::with_gamma` via the re-exported
-  `argmin` for a damped variant.
+- `minimize_newton` takes no line search; the step is the full Newton step.
 - Empty, non-finite initial points and negative gradient tolerances are rejected
   up front with a clear message.
 - `#![forbid(unsafe_code)]`.
 - This crate is dual-licensed `MIT OR Apache-2.0`, matching the rest of the
-  workspace; upstream `argmin` and `argmin-math` are also `MIT OR Apache-2.0`.
-  Review the upstream licences when redistributing.
+  workspace, and depends only on `tpt-math-linalg`/`tpt-math-linalg-dense`
+  (both also part of this workspace) — no third-party optimisation framework.
 
 ## License
 

@@ -373,7 +373,7 @@ where
         };
 
         let alpha = line_search(state.cost_fn(), state.grad_fn(), &state.param, &dir);
-        state.step(&(dir * alpha));
+        state.step(&(dir.clone() * alpha));
         prev_grad = Some(state.grad().clone());
         direction = Some(dir);
         iters += 1;
@@ -640,7 +640,7 @@ where
     let dphi0 = grad(x).dot(d);
 
     for _ in 0..40 {
-        let dphi_hi = grad(&(x.clone() + d.clone() * a_hi)).dot(d);
+        let mut dphi_hi = grad(&(x.clone() + d.clone() * a_hi)).dot(d);
         let mut a = cubic_min(a_lo, phi_lo, dphi_lo, a_hi, phi_hi, dphi_hi);
         if a <= a_lo || a >= a_hi {
             a = 0.5 * (a_lo + a_hi);
@@ -671,15 +671,20 @@ where
     0.5 * (a_lo + a_hi)
 }
 
-/// Cubic-interpolation minimizer in `(al, ah)` given `phi`/`dphi` at both ends.
+/// Cubic-interpolation minimizer in `(al, ah)` given `phi`/`dphi` at both ends
+/// (Nocedal & Wright, eq. 3.59).
 fn cubic_min(al: f64, phi_al: f64, dphi_al: f64, ah: f64, phi_ah: f64, dphi_ah: f64) -> f64 {
     let d1 = dphi_al + dphi_ah - 3.0 * (phi_al - phi_ah) / (al - ah);
-    let d2 = (ah - al).signum() * (d1 * d1 - dphi_al * dphi_ah).max(0.0).sqrt();
-    let denom = d2 - dphi_al + d1;
+    let d2_sq = d1 * d1 - dphi_al * dphi_ah;
+    if d2_sq < 0.0 {
+        return 0.5 * (al + ah);
+    }
+    let d2 = (ah - al).signum() * d2_sq.sqrt();
+    let denom = dphi_ah - dphi_al + 2.0 * d2;
     if denom.abs() < 1e-300 {
         return 0.5 * (al + ah);
     }
-    al - (al - ah) * (dphi_al + d2 - d1) / denom
+    ah - (ah - al) * (dphi_ah + d2 - d1) / denom
 }
 
 #[cfg(test)]
@@ -799,8 +804,11 @@ mod tests {
             ])
         };
 
-        let best = minimize_conjugate_gradient(cost, grad, DVector::from_vec(vec![-1.2, 1.0]), 500)
-            .unwrap();
+        // Nonlinear CG on Rosenbrock converges slowly without preconditioning;
+        // give it a generous iteration budget.
+        let best =
+            minimize_conjugate_gradient(cost, grad, DVector::from_vec(vec![-1.2, 1.0]), 5000)
+                .unwrap();
 
         assert_close(&best, &[1.0, 1.0], 1e-3);
     }

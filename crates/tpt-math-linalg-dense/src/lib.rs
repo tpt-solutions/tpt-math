@@ -131,20 +131,20 @@ impl<T> DMatrix<T> {
             nrows,
             ncols,
             data: (0..ncols)
-                .flat_map(|j| (0..nrows).map(|i| data[i * ncols + j].clone()))
+                .flat_map(|j| (0..nrows).map(move |i| data[i * ncols + j].clone()))
                 .collect(),
         }
     }
 
     /// Build element-by-element with `f(i, j)`.
-    pub fn from_fn(nrows: usize, ncols: usize, f: impl FnMut(usize, usize) -> T) -> Self {
-        DMatrix {
-            nrows,
-            ncols,
-            data: (0..ncols)
-                .flat_map(|j| (0..nrows).map(|i| f(i, j)))
-                .collect(),
+    pub fn from_fn(nrows: usize, ncols: usize, mut f: impl FnMut(usize, usize) -> T) -> Self {
+        let mut data = Vec::with_capacity(nrows * ncols);
+        for j in 0..ncols {
+            for i in 0..nrows {
+                data.push(f(i, j));
+            }
         }
+        DMatrix { nrows, ncols, data }
     }
 
     /// A square matrix with `v`'s elements on the diagonal, zeros elsewhere.

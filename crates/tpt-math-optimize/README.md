@@ -1,12 +1,11 @@
 # tpt-math-optimize
 
 Umbrella crate for the `tpt-math` optimisation layer: it re-exports
-`tpt-math-optimize-general` (closure-driven wrappers over the
-[`argmin`](https://crates.io/crates/argmin) framework) and
-`tpt-math-optimize-convex` (a convex QP interface over an in-house dense
-primal-dual interior-point solver) behind Cargo features. Depend on this crate
-when you want both smooth unconstrained minimisation and constrained convex
-programming from a single dependency line.
+`tpt-math-optimize-general` (in-house closure-driven smooth, unconstrained
+minimisers) and `tpt-math-optimize-convex` (a convex QP interface over an
+in-house dense primal-dual interior-point solver) behind Cargo features.
+Depend on this crate when you want both smooth unconstrained minimisation and
+constrained convex programming from a single dependency line.
 
 ## Part of tpt-math
 
@@ -17,7 +16,7 @@ of its own; it is purely a re-export facade over the two leaf crates below it:
 
 | Feature | Re-exported as | Source crate |
 |---|---|---|
-| `tpt-math-optimize-general` | `general` | [`tpt-math-optimize-general`](https://docs.rs/tpt-math-optimize-general) — closure-driven wrappers over `argmin` |
+| `tpt-math-optimize-general` | `general` | [`tpt-math-optimize-general`](https://docs.rs/tpt-math-optimize-general) — in-house closure-driven smooth, unconstrained minimisers |
 | `tpt-math-optimize-convex` | `convex` | [`tpt-math-optimize-convex`](https://docs.rs/tpt-math-optimize-convex) — convex QPs via an in-house dense interior-point solver |
 
 Both leaf crates take their parameter vectors as `tpt-math-linalg-dense`
@@ -32,18 +31,19 @@ wraps `faer` (via `tpt-math-linalg-dense`) rather than `nalgebra`.
 - `tpt-math-optimize-general` *(default)* — pulls in `tpt-math-optimize-general`
   and exposes it as the `general` module: `minimize_gradient_descent`,
   `minimize_conjugate_gradient`, `minimize_newton`, their `*_with` variants
-  taking `Options` and returning a `Solution`, plus the unchanged `argmin` and
-  `argmin_math` re-exports.
+  taking `Options` and returning a `Solution`, plus the unchanged
+  `tpt_math_linalg`/`tpt_math_linalg_dense` re-exports.
 - `tpt-math-optimize-convex` *(default)* — pulls in `tpt-math-optimize-convex`
   and exposes it as the `convex` module: `solve_qp`, the `QuadraticProgram`
   builder, `QpSolution`, `ConvexError`, plus the unchanged
   `tpt_math_linalg_dense` re-export.
 - Default: both features are on. Disable default features to take only the half
-  you need — that also drops the corresponding upstream solver from the
+  you need — that also drops the corresponding leaf crate from the
   dependency graph.
 
-This crate requires `std`; both `argmin` and the in-house QP solver are
-`std`-only, so there is no `no_std` configuration of this umbrella.
+This crate requires `std`; both leaf crates depend on `tpt-math-linalg-dense`'s
+default (allocator-backed, `faer`) storage, which is `std`-only, so there is no
+`no_std` configuration of this umbrella.
 
 ## Quick start
 
@@ -98,17 +98,17 @@ tpt-math-optimize = { version = "0.1", default-features = false, features = ["tp
 - The feature names deliberately match the crate names, so
   `--features tpt-math-optimize-convex` enables exactly the
   `tpt-math-optimize-convex` dependency and nothing else.
-- Nothing is hidden: `general` re-exports `argmin` (and `argmin::core`,
-  `argmin::solver`, `argmin_math`) and `convex` re-exports
-  `tpt_math_linalg_dense`, so you can drop to the upstream APIs without adding a
-  second, possibly version-skewed, dependency on them.
-- `general` flattens `argmin` errors to `String`; `convex` returns a typed
-  `ConvexError`. The two leaf crates are independent and do not share an error
-  type.
-- Upstream licences differ from this crate's: `argmin` is `MIT OR Apache-2.0`
-  and `tpt-math-linalg-dense` is `MIT`-only (faer). The old `clarabel`
-  (Apache-2.0-only) backend was removed; review the remaining upstream licences
-  when redistributing.
+- Nothing is hidden: both `general` and `convex` re-export
+  `tpt_math_linalg`/`tpt_math_linalg_dense`, so you can build on the same
+  parameter types without adding a second, possibly version-skewed,
+  dependency on them.
+- `general` flattens its errors to a `String` message; `convex` returns a
+  typed `ConvexError`. The two leaf crates are independent and do not share an
+  error type.
+- `tpt-math-linalg-dense` (and therefore both leaf crates) is `MIT`-only
+  (faer). The old `argmin`/`clarabel`/`nalgebra` dependencies (mixed or
+  Apache-2.0-only licensing) were removed to satisfy the workspace's
+  no-exceptions license policy (ADR-0007).
 
 ## License
 
