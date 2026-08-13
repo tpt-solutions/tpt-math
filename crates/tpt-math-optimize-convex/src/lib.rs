@@ -17,7 +17,7 @@
 //!
 //! with a self-contained dense primal-dual interior-point method
 //! (Mehrotra predictor-corrector). The KKT linear systems are inverted with
-//! [`tpt_math_linalg_dense`]'s faer-backed dense solver, so there is no
+//! [`tpt_math_linalg_dense`]'s in-house dense solver, so there is no
 //! Apache-2.0-only dependency anywhere in the tree (the old `clarabel` backend
 //! was removed for that reason — see `spec.txt` / ADR-0007).
 //!
@@ -58,7 +58,7 @@
 
 use tpt_math_linalg_dense::{DMatrix, DVector};
 
-/// Re-export of [`tpt_math_linalg_dense`] (faer-backed dense storage) for
+/// Re-export of [`tpt_math_linalg_dense`] (in-house dense storage) for
 /// constructing dense inputs such as [`DMatrix`] and [`DVector`].
 pub use tpt_math_linalg_dense;
 
@@ -210,7 +210,7 @@ pub fn solve_qp_internal(
     let (a, b) = build_inequality_system(a_ineq, b_ineq, bounds, n);
 
     // Work in plain `Vec`/`Vec<Vec>` form for the iteration; the KKT solve is
-    // delegated to `tpt-math-linalg-dense`'s faer-backed `DMatrix::solve`.
+    // delegated to `tpt-math-linalg-dense`'s in-house `DMatrix::solve`.
     let p_sym = symmetrize(p);
     let qv = q.iter().copied().collect::<Vec<f64>>();
     let a_eqv = matrix_to_vec(a_eq);
@@ -428,7 +428,7 @@ fn step_length(v: &[f64], dv: &[f64], cap: f64) -> f64 {
 ///     [ A_eq            0    ]
 /// ```
 ///
-/// with `Σ = diag(z / s)`. The solve uses `tpt-math-linalg-dense`'s faer-backed
+/// with `Σ = diag(z / s)`. The solve uses `tpt-math-linalg-dense`'s in-house
 /// dense LU.
 ///
 /// `a` is the nonnegative-cone constraint matrix (`m_c × n`), `a_eq` the

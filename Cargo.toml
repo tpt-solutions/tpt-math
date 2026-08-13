@@ -3,6 +3,7 @@ resolver = "2"
 members = [
     "crates/tpt-math-numeric",
     "crates/tpt-math-linalg-dense",
+    "crates/tpt-math-linalg-sparse",
     "crates/tpt-math-units",
     "crates/tpt-math-units-dyn",
     "crates/tpt-math-exact",
@@ -44,6 +45,7 @@ repository = "https://github.com/tpt-solutions/tpt-math"
 [workspace.dependencies]
 tpt-math-numeric = { version = "0.1.0", path = "crates/tpt-math-numeric", default-features = false }
 tpt-math-linalg-dense = { version = "0.1.0", path = "crates/tpt-math-linalg-dense", default-features = false }
+tpt-math-linalg-sparse = { version = "0.1.0", path = "crates/tpt-math-linalg-sparse", default-features = false }
 tpt-math-units = { version = "0.1.0", path = "crates/tpt-math-units", default-features = false }
 tpt-math-units-dyn = { version = "0.1.0", path = "crates/tpt-math-units-dyn" }
 tpt-math-exact = { version = "0.1.0", path = "crates/tpt-math-exact" }

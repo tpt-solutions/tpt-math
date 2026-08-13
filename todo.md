@@ -690,3 +690,89 @@ distributions — with in-crate `special`/`dist` modules (no external dep). Plan
 - [x] `cargo deny check licenses` — confirm nalgebra/clarabel no longer appear
       in the dependency tree
 
+## Phase E — tpt-math-linalg-sparse (new crate) + dense-crate cleanup
+
+*User asked whether tpt-math has anything for sparse matrices — it doesn't.
+The only "sparse" entry in `tpt-rust-map/registry.toml` is `tpt-fem-sparse`
+(separate `tpt-fem` repo, FEM-assembly-specific: element scatter +
+duplicate-summing triplet accumulation). `tpt-math-linalg-sparse` is
+additive: general-purpose sparse matrix types + iterative solvers, hand-rolled
+with no external backend (matches the user's no-`faer` license preference and
+`tpt-math-linalg-dense`'s actual current design). Plan:
+`we-dont-have-anything-atomic-hare.md`.*
+
+### Prerequisite — fix pre-existing issues found in `tpt-math-linalg-dense`
+
+- [x] Fix unresolved merge conflict in
+      `crates/tpt-math-linalg-dense/src/lib.rs` (`git status` shows `UU`,
+      leftover from an unresolved `git stash pop` — literal `<<<<<<< Updated
+      upstream` / `>>>>>>> Stashed changes` markers at `from_row_slice` and
+      `from_fn`). Keep the "Updated upstream" branch in both cases — the
+      "Stashed changes" branch iterates `0..ncols` instead of
+      `0..nrows*ncols`, silently truncating/misindexing non-square (and even
+      square) matrices.
+- [x] `cargo build --workspace` / `cargo test -p tpt-math-linalg-dense` pass
+      after the fix
+- [x] Correct stale "faer-backed" documentation left over from before the
+      hand-rolled swap (no crate actually depends on `faer` — confirmed
+      absent from `Cargo.lock` and every `Cargo.toml`):
+      `crates/tpt-math-linalg-dense/{README.md,CHANGELOG.md}`,
+      `crates/tpt-math-linalg/{Cargo.toml,src/lib.rs,README.md,CHANGELOG.md}`,
+      `crates/tpt-math-optimize-general/src/lib.rs`,
+      `crates/tpt-math-optimize-convex/{src/lib.rs,README.md,CHANGELOG.md}`,
+      `crates/tpt-math-optimize/README.md`, root `README.md`/`todo.md`/
+      `spec.txt`, and `deny.toml`'s `faer`/`gemm` comment
+- [x] `grep -ri faer` across the repo — confirm no remaining reference
+      describes it as a live dependency
+
+### tpt-math-linalg-sparse (new crate)
+
+- [x] Scaffold `crates/tpt-math-linalg-sparse/` (Cargo.toml mirroring
+      `tpt-math-linalg-dense`'s skeleton, `src/lib.rs`, `benches/`)
+- [x] Wire deps: `tpt-math-numeric`, `tpt-math-linalg-dense` (reuse `DVector`
+      as the dense RHS/solution type); `default = ["std"]` + `alloc` features;
+      `[lints] workspace = true`
+- [x] Implement `CooMatrix<T>` (triplet list, `push`/`from_triplets`,
+      duplicate-summing conversion matching `tpt-fem-sparse`'s semantics),
+      `CsrMatrix<T>` (`row_ptr`/`col_idx`/`values`), `CscMatrix<T>`
+      (`col_ptr`/`row_idx`/`values`); conversions `Coo::to_csr`/`to_csc`,
+      `Csr::transpose`/`Csc::transpose`
+- [x] Implement ops: sparse `matvec` (`CsrMatrix<T> * &DVector<T> ->
+      DVector<T>`), `nnz()`/`nrows()`/`ncols()`, iteration over stored entries
+- [x] Implement iterative solvers only (no hand-rolled direct sparse
+      LU/Cholesky — out of scope): `conjugate_gradient` (SPD systems) and
+      `bicgstab` (general systems), tolerance + max-iter, `Result<DVector<T>,
+      SparseError>`; `SparseError` enum (`DimensionMismatch`,
+      `NotConverged { iterations }`)
+- [x] Unit tests: COO→CSR/CSC round-trip with duplicate summing, SpMV against
+      a known small matrix, CG against a hand-verified SPD system (e.g. 2D
+      Laplacian stencil) with known solution, BiCGSTAB against a small
+      non-symmetric system, a deliberately non-converging case
+      (`SparseError::NotConverged`)
+- [x] Rustdoc (crate-level + public API)
+- [x] README.md + CHANGELOG.md (rationale: no external sparse backend,
+      hand-rolled to avoid license exposure; complements but does not
+      duplicate `tpt-fem-sparse`'s FEM-assembly-specific adapter)
+- [x] `cargo fmt` / `cargo clippy --all-targets --all-features -- -D
+      warnings` clean
+- [x] `cargo deny check` clean
+- [x] no_std+alloc verify (`cargo build --no-default-features --features
+      alloc`)
+- [x] Add to root `Cargo.toml` `[workspace] members` +
+      `[workspace.dependencies]` (same pattern as the other
+      `tpt-math-linalg-*` entries)
+- [x] Add `tpt-rust-map/registry.toml` entry: `tpt-math-linalg-sparse`,
+      `domain = "math.linalg"`, `no_std = true`, `wraps = []`, description
+      drawing the boundary vs. `tpt-fem-sparse`; `status = "planned"` →
+      `"git"` once this checklist is done
+
+### Verification
+
+- [x] `cargo build --workspace` / `cargo test --workspace --all-features`
+- [x] `cargo fmt --check` / `cargo clippy --workspace --all-targets
+      --all-features -- -D warnings` / `cargo deny check` — workspace-wide
+- [x] `cargo build -p tpt-math-linalg-sparse --no-default-features --features
+      alloc`
+- [x] `cargo doc --workspace --no-deps`
+- [x] `git status` clean (no leftover conflict markers anywhere)
+

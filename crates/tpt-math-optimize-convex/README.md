@@ -12,7 +12,7 @@ the numeric substrate for `tpt-science`, `tpt-engineering`, and `tpt-formal`.
 It is the convex half of the optimisation layer (the general nonlinear half is
 `tpt-math-optimize-general`), and is re-exported by the `tpt-math-optimize`
 umbrella crate. Dense inputs are `tpt-math-linalg-dense` `DMatrix<f64>` /
-`DVector<f64>` (faer-backed), taken from the same storage that
+`DVector<f64>` (in-house), taken from the same storage that
 `tpt-math-linalg` wraps.
 
 ## Features
@@ -21,7 +21,7 @@ This crate has no optional features: `default = []` and the whole API is always
 available. It is **std-only** — the `std::error::Error` impl on `ConvexError`
 requires `std`, so there is no `no_std` build.
 
-The `tpt-math-linalg-dense` (faer) types are re-exported via
+The `tpt-math-linalg-dense` (in-house) types are re-exported via
 `tpt_math_optimize_convex::tpt_math_linalg_dense` for building the dense inputs.
 
 ## Quick start
@@ -78,7 +78,7 @@ and `linear_cost(q)`.
   equalities use the zero cone (no slack), inequalities and bounds the
   nonnegative cone (each bound contributes one row, `x - l ≥ 0` and/or
   `u - x ≥ 0`). The KKT linear systems are inverted with
-  `tpt-math-linalg-dense`'s faer-backed dense `DMatrix::solve`.
+  `tpt-math-linalg-dense`'s in-house dense `DMatrix::solve`.
 - `P` is symmetrised as `(P + Pᵀ) / 2` internally.
 - Bounds may be one-sided: a non-finite bound (`f64::INFINITY` /
   `f64::NEG_INFINITY`) means "unbounded on that side" and simply contributes no
@@ -89,8 +89,9 @@ and `linear_cost(q)`.
   else is reported as a `Solver` error. The solver also reports infeasible or
   unbounded problems as `Solver` errors.
 - This crate is dual-licensed `MIT OR Apache-2.0`, and depends only on
-  `tpt-math-linalg-dense` (faer, MIT-only) — the old `clarabel` (Apache-2.0-only)
-  backend was removed to satisfy the workspace license policy (ADR-0007).
+  `tpt-math-linalg-dense` (in-house, no external backend) — the old `clarabel`
+  (Apache-2.0-only) backend was removed to satisfy the workspace license policy
+  (ADR-0007).
 - `#![forbid(unsafe_code)]`.
 
 ## License

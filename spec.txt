@@ -27,8 +27,10 @@ ECOSYSTEM GAP JUSTIFICATION
 Most of this substrate already has a mature, permissively-licensed answer
 in the Rust ecosystem (2026) — this repo wraps those instead of rebuilding
 them:
-- faer (dense-matrix performance) — MIT-only, mature, years of numerical
-  hardening. Used directly (unwrapped) for dense-linalg kernels.
+- `tpt-math-linalg-dense` (dense-matrix performance, in-house) — a hand-rolled,
+  dependency-free dense-linalg backend (column-major `Vec<T>` storage) with no
+  license exposure. Originally prototyped over `faer` (MIT-only) but shipped
+  in-house to avoid any external backend dependency.
 - rand/rand_distr (sampling), argmin (general optimization), rustfft (FFT),
   uom (compile-time units), num-bigint/num-rational (exact arithmetic) — all
   mature, dual/permissively licensed. (Hypothesis tests / regression and their
@@ -37,7 +39,8 @@ them:
 - NOTE: `nalgebra` and `clarabel` are Apache-2.0-ONLY, NOT dual MIT/Apache, and
   are disqualified as wrap targets by the workspace license policy (ADR-0007).
   Their roles were replaced in-tree: `nalgebra` by `tpt-math-linalg-dense`
-  (faer-backed) and `tpt-math-linalg-fixed` (hand-rolled fixed-size), and
+  (in-house dense backend) and by `tpt-math-linalg-fixed` (hand-rolled
+  fixed-size), and
   `clarabel` by an in-house dense primal-dual interior-point QP solver in
   `tpt-math-optimize-convex`. Do not reintroduce `nalgebra`/`clarabel`.
 - SciRS2 (github.com/cool-japan/scirs) already covers broad SciPy-
@@ -100,22 +103,23 @@ CRATE INVENTORY
     tpt-rust2's tpt-units-runtime. Depends on: tpt-math-units.
 
   tpt-math-linalg
-    Pair tpt-math-linalg-dense (faer-backed DVector/DMatrix) with
+    Pair tpt-math-linalg-dense (in-house DVector/DMatrix) with
     tpt-math-units for dimensionally-checked vectors/matrices — the real
     differentiator, not the matrix math itself. Consolidates tpt-zero-formal's
     tpt-zero-linalg and tpt-zero-text's tpt-zero-matrix. no_std. Depends on:
     tpt-math-linalg-dense, tpt-math-units.
-    Backend decision: tpt-math-linalg-dense (faer, MIT-only) only, never
-    nalgebra (Apache-2.0-only, disqualified by ADR-0007). A dual faer+nalgebra
-    facade was never considered; faer is used directly.
+    Backend decision: tpt-math-linalg-dense (in-house, no external backend) only,
+    never nalgebra (Apache-2.0-only, disqualified by ADR-0007). A dual
+    facade was never considered; the dense storage is hand-rolled.
 
   tpt-math-linalg-dense
-    Dense (dynamically-sized, heap-allocated) linear algebra over faer
-    (MIT-only): DVector/DMatrix with the common arithmetic, solve/inverse,
-    norm/dot, and the ArgminMath-family trait impls (behind its `argmin`
-    feature) that tpt-math-optimize needs. Owns the ArgminMath orphan-rule
-    impls so tpt-math-linalg and tpt-math-optimize share one storage backend.
-    no_std + alloc. Depends on: tpt-math-numeric.
+    Dense (dynamically-sized, heap-allocated) linear algebra, implemented
+    entirely in-house (column-major `Vec<T>` storage, no external backend) with
+    no license exposure: DVector/DMatrix with the common arithmetic,
+    solve/inverse, norm/dot, and the ArgminMath-family trait impls (behind its
+    `argmin` feature) that tpt-math-optimize needs. Owns the ArgminMath
+    orphan-rule impls so tpt-math-linalg and tpt-math-optimize share one storage
+    backend. no_std + alloc. Depends on: tpt-math-numeric.
 
   tpt-math-linalg-fixed
     Const-generic, fixed-size (stack-allocated, allocator-free) linear algebra

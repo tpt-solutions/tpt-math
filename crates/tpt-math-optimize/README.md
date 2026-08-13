@@ -20,11 +20,11 @@ of its own; it is purely a re-export facade over the two leaf crates below it:
 | `tpt-math-optimize-convex` | `convex` | [`tpt-math-optimize-convex`](https://docs.rs/tpt-math-optimize-convex) — convex QPs via an in-house dense interior-point solver |
 
 Both leaf crates take their parameter vectors as `tpt-math-linalg-dense`
-`DVector<f64>` / `DMatrix<f64>` (faer-backed, MIT-only), so values move
+`DVector<f64>` / `DMatrix<f64>` (in-house, no external backend), so values move
 between the two solver families (and the rest of the workspace) without
 conversion. The old `clarabel` (Apache-2.0-only) and `nalgebra` backends were
 removed to satisfy the workspace license policy (ADR-0007); `tpt-math-linalg`
-wraps `faer` (via `tpt-math-linalg-dense`) rather than `nalgebra`.
+wraps `tpt-math-linalg-dense` (in-house) rather than `nalgebra`.
 
 ## Features
 
@@ -42,7 +42,7 @@ wraps `faer` (via `tpt-math-linalg-dense`) rather than `nalgebra`.
   dependency graph.
 
 This crate requires `std`; both leaf crates depend on `tpt-math-linalg-dense`'s
-default (allocator-backed, `faer`) storage, which is `std`-only, so there is no
+default (allocator-backed) storage, which is `std`-only, so there is no
 `no_std` configuration of this umbrella.
 
 ## Quick start
@@ -105,10 +105,11 @@ tpt-math-optimize = { version = "0.1", default-features = false, features = ["tp
 - `general` flattens its errors to a `String` message; `convex` returns a
   typed `ConvexError`. The two leaf crates are independent and do not share an
   error type.
-- `tpt-math-linalg-dense` (and therefore both leaf crates) is `MIT`-only
-  (faer). The old `argmin`/`clarabel`/`nalgebra` dependencies (mixed or
-  Apache-2.0-only licensing) were removed to satisfy the workspace's
-  no-exceptions license policy (ADR-0007).
+- `tpt-math-linalg-dense` (and therefore both leaf crates) is implemented
+  in-house with no external backend, so there is no license exposure. The old
+  `argmin`/`clarabel`/`nalgebra` dependencies (mixed or Apache-2.0-only
+  licensing) were removed to satisfy the workspace's no-exceptions license
+  policy (ADR-0007).
 
 ## License
 

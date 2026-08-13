@@ -1,21 +1,23 @@
 # tpt-math-linalg-dense
 
-Dense linear algebra over [`faer`](https://crates.io/crates/faer) (MIT-only), the
+Dense linear algebra implemented **entirely in-house** (no external backend), the
 storage backend for [`tpt-math-linalg`](../tpt-math-linalg) and
 [`tpt-math-optimize`](../tpt-math-optimize).
 
-`faer` is chosen deliberately: `nalgebra` and `clarabel` are Apache-2.0-only and
-are disqualified as wrap targets under this workspace's no-exceptions license
-policy (ADR-0007). `faer` is MIT-only, so it is the dense-linalg backend.
+The `DVector`/`DMatrix` types are stored column-major in a plain `Vec<T>`, so
+there is no `faer`/`nalgebra`/`clarabel` dependency and therefore no license
+exposure. The arithmetic, norms, and the partial-pivot-LU `solve`/`inverse` are
+all hand-rolled. (The crate was originally prototyped over `faer`, but the final
+implementation dropped that dependency for a zero-license-risk, in-repo design.)
 
 ## Types
 
-* `DVector<T>` — a dynamically-sized column vector (wraps `faer::Col`).
-* `DMatrix<T>` — a dynamically-sized, column-major matrix (wraps `faer::Mat`).
+* `DVector<T>` — a dynamically-sized column vector.
+* `DMatrix<T>` — a dynamically-sized, column-major matrix.
 
 ## Features
 
-* `std` (default) — faer's `std` support plus the allocator.
+* `std` (default) — the allocator plus `std` support of deps.
 * `alloc` — signal allocator availability (dynamic vectors need it).
 * `argmin` — `ArgminMath`-family trait impls for `DVector<f64>` / `DMatrix<f64>`,
   so they can drive `argmin` solvers without the `nalgebra` backend.

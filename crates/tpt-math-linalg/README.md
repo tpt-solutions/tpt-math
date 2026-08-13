@@ -1,12 +1,14 @@
 # tpt-math-linalg
 
 Dimensionally-checked vectors and matrices. It wraps
-[`faer`](https://crates.io/crates/faer) (via
-[`tpt-math-linalg-dense`](https://crates.io/crates/tpt-math-linalg-dense))
+[`tpt-math-linalg-dense`](https://crates.io/crates/tpt-math-linalg-dense)
 storage and tags it with a phantom unit type (typically a `uom` quantity from
 `tpt-math-units`), so that adding a length-vector to a time-vector is a compile
 error and matrix multiplication propagates units:
 `Mat<U, V> * Mat<V, W> = Mat<U, W>`.
+
+`tpt-math-linalg-dense` is implemented in-house (column-major `Vec<T>` storage)
+with no external backend, so there is no `faer`/`nalgebra` license exposure.
 
 ## Part of tpt-math
 
@@ -79,11 +81,12 @@ one call away.
   `alloc::vec::Vec`.
 - `Mat` uses an inherent `negate()` method rather than a `Neg` impl, and scalar
   `Mul`/`Div` are implemented for `Vec` only.
-- **Backend decision:** this crate wraps `tpt-math-linalg-dense` (faer) only,
-  never `nalgebra`. `nalgebra` is Apache-2.0-only and is disqualified as a wrap
-  target by the workspace license policy (ADR-0007); `faer` is MIT-only. The
-  dense storage lives in `tpt-math-linalg-dense`, which also owns the
-  `ArgminMath` orphan-rule impls that `tpt-math-optimize` needs.
+- **Backend decision:** this crate wraps `tpt-math-linalg-dense` only, never
+  `nalgebra`. `nalgebra` is Apache-2.0-only and is disqualified as a wrap target
+  by the workspace license policy (ADR-0007); `tpt-math-linalg-dense` is
+  implemented in-house without any such dependency, so there is no license
+  exposure. The dense storage lives in `tpt-math-linalg-dense`, which also owns
+  the `ArgminMath` orphan-rule impls that `tpt-math-optimize` needs.
 
 ## License
 

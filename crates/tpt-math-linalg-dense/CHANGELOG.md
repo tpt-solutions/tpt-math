@@ -9,7 +9,8 @@ and this project adheres to SemVer.
 
 ### Added
 
-- `DVector<T>` / `DMatrix<T>` dense linear-algebra types wrapping `faer`.
+- `DVector<T>` / `DMatrix<T>` dense linear-algebra types, implemented in-house
+  (column-major `Vec<T>` storage, no external backend).
 - Construction (`zeros`, `from_vec`, `from_row_slice`, `from_fn`, `from_diagonal`),
   indexing, elementwise + scalar arithmetic, matrix×matrix and matrix×vector
   multiply, transpose, `dot`, `norm`.

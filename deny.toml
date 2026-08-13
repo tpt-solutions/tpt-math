@@ -5,9 +5,10 @@
 version = 2
 yanked = "deny"
 # `paste` (RUSTSEC-2024-0436) previously arrived transitively via `argmin`,
-# `faer`/`gemm`, and `statrs` -> `nalgebra` -> `simba`. Those backends were
-# replaced with in-house implementations, so no crate named `paste` (and no
-# `nalgebra`) remains in the graph and the advisory no longer fires. The
+# `faer`/`gemm`, and `statrs` -> `nalgebra` -> `simba`. `argmin` and `nalgebra`
+# were replaced with in-house implementations (`faer` was only ever a prototype
+# backend and never shipped), so no crate named `paste` (and no `nalgebra`) remains
+# in the graph and the advisory no longer fires. The
 # `vendor/paste` patch shim and the RUSTSEC-2024-0436 ignore have both been
 # removed.
 

@@ -2,14 +2,14 @@
 #![allow(clippy::wrong_self_convention)]
 //! Linear algebra with compile-time dimensional safety.
 //!
-//! [`faer`](faer) (via [`tpt_math_linalg_dense`]) is a powerful, `MIT`-only
-//! dense linear-algebra library, but it is *dimensionless*: a `DVector<f64>` is
-//! just numbers. [`uom`] (via [`tpt_math_units`]) gives compile-time unit
-//! checking, but has no vector or matrix types. This crate is the bridge: it
-//! wraps the dense storage and tags it with a phantom unit type `U`
-//! (typically a `uom` quantity), so that adding a length-vector to a
-//! mass-vector is a compile error, and matrix multiplication propagates units
-//! correctly:
+//! [`tpt_math_linalg_dense`] (a hand-rolled, in-house dense linear-algebra
+//! crate with no external backend) provides the storage, but it is
+//! *dimensionless*: a `DVector<f64>` is just numbers. [`uom`] (via
+//! [`tpt_math_units`]) gives compile-time unit checking, but has no vector or
+//! matrix types. This crate is the bridge: it wraps the dense storage and tags
+//! it with a phantom unit type `U` (typically a `uom` quantity), so that adding
+//! a length-vector to a mass-vector is a compile error, and matrix
+//! multiplication propagates units correctly:
 //!
 //! ```text
 //! Mat<U, V> * Mat<V, W> = Mat<U, W>
@@ -32,15 +32,15 @@
 //!
 //! ## Backend decision
 //!
-//! This crate wraps **`faer`** (through [`tpt_math_linalg_dense`]) only — never
-//! `nalgebra`, which is Apache-2.0-only and disqualified as a wrap target by
-//! the workspace license policy (ADR-0007). The dense storage lives in
-//! `tpt-math-linalg-dense` so the `ArgminMath` orphan-rule problem is solved
-//! there once, and this crate only adds the unit-tagging layer on top. A dual
-//! `faer`+`nalgebra` facade was never considered, since the two do not share a
-//! trait surface.
+//! This crate wraps **`tpt-math-linalg-dense`** only — never `nalgebra`, which
+//! is Apache-2.0-only and disqualified as a wrap target by the workspace
+//! license policy (ADR-0007). `tpt-math-linalg-dense` is implemented in-house
+//! (no `faer`/`nalgebra` dependency), so there is no license exposure. The
+//! dense storage lives in `tpt-math-linalg-dense` so the `ArgminMath`
+//! orphan-rule problem is solved there once, and this crate only adds the
+//! unit-tagging layer on top. A dual facade was never considered, since
+//! `tpt-math-linalg-dense` is the single storage backend.
 //!
-//! [`faer`]: tpt_math_linalg_dense
 //! [`uom`]: tpt_math_units
 //! [`tpt_math_linalg_dense`]: tpt_math_linalg_dense
 //! [`tpt_math_units`]: tpt_math_units

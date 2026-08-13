@@ -13,13 +13,13 @@ the numeric substrate for `tpt-science`, `tpt-engineering`, and `tpt-formal`.
 It is the general-purpose half of the optimisation layer (the convex/QP half is
 `tpt-math-optimize-convex`), and is re-exported by the `tpt-math-optimize`
 umbrella crate. Parameters are plain `tpt-math-linalg-dense` `DVector<f64>`s from the same
-faer-backed storage that `tpt-math-linalg` wraps.
+in-house storage that `tpt-math-linalg` wraps.
 
 ## Features
 
 This crate has no optional features: `default = []` and everything described
 here is always available. It is **std-only** — `tpt-math-linalg-dense`'s
-default (allocator-backed, `faer`) storage requires `std`, so there is no
+default (allocator-backed) storage requires `std`, so there is no
 `no_std` build.
 
 The dependency set is fixed rather than feature-gated: `tpt-math-linalg` and

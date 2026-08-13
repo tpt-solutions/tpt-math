@@ -9,8 +9,8 @@ It deliberately carries **no `nalgebra` dependency** and **no allocator** —
 everything is stack-allocated fixed-size storage — so it can drop into any
 `no_std` target. It exists because `nalgebra` (the usual home of this module)
 is Apache-2.0-only and disqualified as a wrap target by the workspace license
-policy (ADR-0007); `faer` is MIT-only but has no geometry layer, so this crate
-fills the gap from scratch.
+policy (ADR-0007); it is built entirely in-house on `tpt-math-linalg-fixed`,
+so it fills the gap with no external geometry/linear-algebra dependency.
 
 ## Part of tpt-math
 
