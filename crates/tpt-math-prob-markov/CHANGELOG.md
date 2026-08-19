@@ -6,10 +6,13 @@ All notable changes to this crate are documented here. Format based on
 
 ## [Unreleased]
 
-## [0.1.0]
+## [0.1.1] - 2026-08-19
 
-- Initial workspace release.
 - Added `try_set_initial`/`try_set_transition`/`try_set_emission` on the HMM,
   returning `Result<(), MarkovError>` instead of panicking on an invalid
   state, observation, or probability; the existing panicking setters now
   delegate to these.
+
+## [0.1.0]
+
+- Initial workspace release.

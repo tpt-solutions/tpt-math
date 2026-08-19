@@ -1,10 +1,12 @@
 # tpt-math — Build Todo
 
 > Tracks bootstrap + full 23-crate build-out for the tpt-math foundation repo,
-> per `spec.txt` and `tpt-rust-map/registry.toml`. Crates.io publishing is
-> intentionally **out of scope** for this pass — crates stop at
-> `status = "git"` in the registry, not `"published"`. License for every
-> crate: `MIT OR Apache-2.0`. Author: TPT Solutions.
+> per `spec.txt` and `tpt-rust-map/registry.toml`. Crates.io publishing was
+> intentionally **out of scope** for this pass — crates stopped at
+> `status = "git"` in the registry, not `"published"` — but the workspace has
+> since been published to crates.io in full (see `spec2.txt` / per-crate
+> `CHANGELOG.md`). License for every crate: `MIT OR Apache-2.0`. Author: TPT
+> Solutions.
 
 ## Phase 0 — Repo Bootstrap
 
@@ -399,7 +401,8 @@ Consolidates tpt-rust6's tpt-sym. Optionally depends on: tpt-math-exact.*
 
 ## Final Phase — Workspace Closeout
 
-*No crates.io publishing in this pass — crates stop at `status = "git"`.*
+*No crates.io publishing in this pass — crates stop at `status = "git"`. (Since
+superseded: the full workspace has been published to crates.io.)*
 
 - [x] `cargo test --workspace --all-features` passes
 - [x] `cargo clippy --workspace --all-targets --all-features -- -D warnings` clean

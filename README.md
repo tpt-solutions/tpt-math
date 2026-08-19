@@ -136,7 +136,7 @@ Downstream repos depend only on the leaf / umbrella crates they need:
 
 ## Repository layout
 
-- `crates/*` — the 26 library workspace members.
+- `crates/*` — the 31 library workspace members.
 - `xtask/` — the developer-tooling crate (`cargo xtask …`).
 - `examples/` — `tpt-math-examples`, four unpublished cross-crate demos.
 - `Cargo.toml` — workspace manifest (`resolver = "2"`, shared `[workspace.package]`).
@@ -144,11 +144,18 @@ Downstream repos depend only on the leaf / umbrella crates they need:
 - `spec.txt` — the original build spec.
 - `todo.md` — the per-phase build checklist.
 
-## Depending on `tpt-math` before crates.io publication
+## Depending on `tpt-math`
 
-This repository is **not published to crates.io** in this build pass — every
-crate stops at `status = "git"` in `../tpt-rust-map/registry.toml`. Until the
-crates are published you can depend on them directly from git:
+Every crate in `crates/*` is published to crates.io — depend on them the
+usual way:
+
+```toml
+[dependencies]
+tpt-math-linalg = "0.1"
+tpt-math-prob    = "0.1"
+```
+
+To track `main` ahead of a release instead, depend on them directly from git:
 
 ```toml
 [dependencies]

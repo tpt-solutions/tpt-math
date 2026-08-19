@@ -1,11 +1,19 @@
 # Changelog
 
 All notable changes to `tpt-math-geometry` are documented here. This crate
-follows [Keep a Changelog](https://keepachangelog.com/) and the workspace's
-`0.1.0` pre-publish versioning (crates are `git`-status in the registry, not
-yet published to crates.io).
+follows [Keep a Changelog](https://keepachangelog.com/) and adheres to
+Semantic Versioning.
 
-## [0.1.0] - Unreleased
+## [Unreleased]
+
+## [0.1.1] - 2026-08-19
+
+### Added
+
+- `Quaternion<T>` scalar `Mul`, `Add`, `Sub`, and `Neg` impls, added to
+  support `DualQuaternion` arithmetic in `tpt-math-spatial`.
+
+## [0.1.0]
 
 ### Added
 
