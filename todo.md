@@ -930,3 +930,38 @@ no_std+alloc. Depends on: `tpt-math-linalg-dense`, `tpt-math-numeric`.*
       `tpt-fem`/`tpt-physics` downstream-consumption notes for the 4 new
       crates
 
+## Phase G — Platform review follow-ups (2026-08-19)
+
+*Findings from a workspace-wide review for bugs/todos/missing features.
+`todo.md` itself was fully checked off with no stub markers anywhere in the
+code; these are the concrete hardening items the review surfaced, plus
+committing the in-progress no_std-hygiene fix already sitting in the working
+tree.*
+
+- [ ] Commit the pending working-tree changes (no_std hygiene +
+      `default-features = false` cleanup): root `Cargo.toml`,
+      `crates/tpt-math-spatial/{Cargo.toml,src/lib.rs}`,
+      `crates/tpt-math-geometry/src/lib.rs`,
+      `crates/tpt-math-linalg-complex/src/lib.rs`, and this `todo.md`'s
+      Phase F checkboxes
+- [ ] `tpt-math-spatial::Screw::log`: clamp `cos_t = (tr - 1) / 2` to
+      `[-1, 1]` before calling `.acos()` — floating-point rounding near
+      identity or 180° rotations can otherwise push `cos_t` out of domain
+      and silently propagate `NaN`
+- [ ] `tpt-math-spatial::Screw::log`: document (or guard) the second
+      singularity in axis extraction near `theta ≈ π` (division by
+      `2*sin(theta)` — only the `theta ≈ 0` branch is currently guarded)
+- [ ] Add `tpt-math-spatial` test coverage for the `theta ≈ 0` and
+      `theta ≈ π` edge cases of `Screw::log`
+- [ ] Confirm `tpt-math-prob-markov`'s panic-on-out-of-range-state-index
+      API (`chain.rs`, `hmm.rs`) is the intended contract vs. a `Result`-
+      returning `try_*` variant, consistent with the `try_X`/`X` pattern
+      used elsewhere in the workspace (stats, prob-bayes, units-dyn,
+      linalg-sparse)
+- [ ] Audit `tpt-math-prob-sampler`'s `as usize`/`as i32` float-to-int
+      casts (highest concentration in the workspace) for unvalidated
+      truncation on out-of-range input
+- [ ] Review thin test coverage in `tpt-math-symbolic` (6 tests),
+      `tpt-math-exact` (5 tests), and `tpt-math-linalg` (4 tests) relative
+      to their surface area; add tests where gaps are found
+
