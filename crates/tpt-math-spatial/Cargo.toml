@@ -14,9 +14,9 @@ keywords = ["spatial", "featherstone", "screw", "dual-quaternion", "kinematics"]
 categories = ["mathematics", "science", "no-std"]
 
 [dependencies]
-tpt-math-geometry = { workspace = true }
-tpt-math-linalg-fixed = { workspace = true }
-tpt-math-numeric = { workspace = true }
+tpt-math-geometry = { workspace = true, default-features = false }
+tpt-math-linalg-fixed = { workspace = true, default-features = false }
+tpt-math-numeric = { workspace = true, default-features = false }
 
 [features]
 default = ["std"]

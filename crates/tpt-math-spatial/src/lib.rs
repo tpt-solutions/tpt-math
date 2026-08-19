@@ -101,8 +101,10 @@ fn skew<T: Scalar + Copy>(v: &Vector3<T>) -> Matrix3<T> {
 // ===========================================================================
 
 /// Marker type for **motion**-type spatial vectors (velocities, accelerations).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Motion;
 /// Marker type for **force**-type spatial vectors (wrenches: moment + force).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Force;
 
 /// A 6-D spatial vector `v = [angular (top 3); linear (bottom 3)]`, tagged by
@@ -294,7 +296,7 @@ impl<T: Scalar + Copy, K> Mul<T> for SpatialVector<T, K> {
     }
 }
 
-impl<T: Scalar + Copy, K> fmt::Display for SpatialVector<T, K> {
+impl<T: Scalar + Copy + fmt::Debug, K> fmt::Display for SpatialVector<T, K> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
@@ -426,7 +428,7 @@ impl<T: Scalar> DualQuaternion<T> {
     /// Given an isometry with rotation quaternion `q` and translation `t`, the
     /// dual quaternion is `q + ε·(½·t_q·q)` where `t_q = (t_x, t_y, t_z, 0)`.
     pub fn from_isometry(iso: &Isometry3<T>) -> Self {
-        let q = UnitQuaternion::<T>::from_rotation_matrix(&iso.rotation).quaternion().clone();
+        let q = *UnitQuaternion::<T>::from_rotation_matrix(&iso.rotation).quaternion();
         let t = iso.translation.vector;
         let tq = Quaternion::new(t.x(), t.y(), t.z(), T::zero());
         let dual = tq.multiply(&q) * (T::one() / (T::one() + T::one()));
@@ -440,7 +442,7 @@ impl<T: Scalar> DualQuaternion<T> {
     pub fn to_isometry(&self) -> Isometry3<T> {
         let real = self.real.normalize().unwrap_or(self.real);
         let rotation = Rotation3::from_quaternion(&UnitQuaternion::from_quaternion(real));
-        let tq = self.dual.multiply(&real.conjugate()) * two();
+        let tq = self.dual.multiply(&real.conjugate()) * (T::one() + T::one());
         let translation = Translation::new(Vector3::new([
             tq.coords.data[0],
             tq.coords.data[1],
@@ -572,16 +574,10 @@ mod tests {
 
     #[test]
     fn spatial_vector_accessors_and_arithmetic() {
-        let a = MVec::new(
-            Vector3::new([1.0, 2.0, 3.0]),
-            Vector3::new([4.0, 5.0, 6.0]),
-        );
+        let a = MVec::new(Vector3::new([1.0, 2.0, 3.0]), Vector3::new([4.0, 5.0, 6.0]));
         assert!(close(a.angular().x(), 1.0));
         assert!(close(a.linear().z(), 6.0));
-        let b = MVec::new(
-            Vector3::new([0.0, 0.0, 0.0]),
-            Vector3::new([1.0, 1.0, 1.0]),
-        );
+        let b = MVec::new(Vector3::new([0.0, 0.0, 0.0]), Vector3::new([1.0, 1.0, 1.0]));
         let s = a + b;
         assert!(close(s.linear().x(), 5.0));
         let n = -a;
@@ -604,12 +600,14 @@ mod tests {
     #[test]
     fn cross_motion_force_known() {
         // m = (ω=(0,0,1), v=0), f = (n=0, f=(1,0,0)).
-        // m × f = (0×0 + 0×(1,0,0), 0×(1,0,0)) = (0, 0).
+        // m × f = (mω×fω + mv×fv, mω×fv) = (0, (0,0,1)×(1,0,0)) = (0, (0,1,0)).
         let m = MVec::new(Vector3::new([0.0, 0.0, 1.0]), Vector3::new([0.0, 0.0, 0.0]));
         let f = FVec::new(Vector3::new([0.0, 0.0, 0.0]), Vector3::new([1.0, 0.0, 0.0]));
         let r = m.cross_force(&f);
         assert!(close(r.angular().norm(), 0.0));
-        assert!(close(r.linear().norm(), 0.0));
+        assert!(close(r.linear().x(), 0.0));
+        assert!(close(r.linear().y(), 1.0));
+        assert!(close(r.linear().z(), 0.0));
     }
 
     #[test]
@@ -629,23 +627,19 @@ mod tests {
     fn transform_by_rotation_matches_isometry_vector() {
         let iso = iso_z90();
         // Pure-linear motion (1,0,0) → linear part rotates to (0,1,0), angular to 0.
-        let m = MVec::new(
-            Vector3::new([0.0, 0.0, 0.0]),
-            Vector3::new([1.0, 0.0, 0.0]),
-        );
+        let m = MVec::new(Vector3::new([0.0, 0.0, 0.0]), Vector3::new([1.0, 0.0, 0.0]));
         let mt = m.transform_by(&iso);
         assert!(close(mt.angular().norm(), 0.0));
         assert!(close(mt.linear().x(), 0.0));
         assert!(close(mt.linear().y(), 1.0));
 
         // Angular part should transform like a vector under R.
-        let m2 = MVec::new(
-            Vector3::new([1.0, 0.0, 0.0]),
-            Vector3::new([0.0, 0.0, 0.0]),
-        );
+        let m2 = MVec::new(Vector3::new([1.0, 0.0, 0.0]), Vector3::new([0.0, 0.0, 0.0]));
         let m2t = m2.transform_by(&iso);
         // R applied to (1,0,0) about z by 90° → (0,1,0).
-        let expected = iso.rotation.transform_vector(&Vector3::new([1.0, 0.0, 0.0]));
+        let expected = iso
+            .rotation
+            .transform_vector(&Vector3::new([1.0, 0.0, 0.0]));
         assert!(close(m2t.angular().x(), expected.data[0]));
         assert!(close(m2t.angular().y(), expected.data[1]));
         assert!(close(m2t.angular().z(), expected.data[2]));
@@ -655,17 +649,17 @@ mod tests {
     fn adjoint_matches_transform() {
         let iso = iso_z90();
         let ad = adjoint_motion(&iso);
-        let m = MVec::new(
-            Vector3::new([1.0, 2.0, 3.0]),
-            Vector3::new([4.0, 5.0, 6.0]),
-        );
+        let m = MVec::new(Vector3::new([1.0, 2.0, 3.0]), Vector3::new([4.0, 5.0, 6.0]));
         let via_matrix = MVec {
             data: ad * m.data,
             _marker: PhantomData,
         };
         let via_fn = m.transform_by(&iso);
         for i in 0..6 {
-            assert!(close(via_matrix.data.data[i], via_fn.data.data[i]), "idx {i}");
+            assert!(
+                close(via_matrix.data.data[i], via_fn.data.data[i]),
+                "idx {i}"
+            );
         }
     }
 
@@ -679,10 +673,7 @@ mod tests {
         let iso = Isometry3::new(Translation::new(Vector3::new([10.0, 0.0, 0.0])), rot);
         // A force at the origin with linear force (1,0,0) and zero moment.
         // Force adjoint: fω' = R fω + t × (R fv), fv' = R fv.
-        let f = FVec::new(
-            Vector3::new([0.0, 0.0, 0.0]),
-            Vector3::new([1.0, 0.0, 0.0]),
-        );
+        let f = FVec::new(Vector3::new([0.0, 0.0, 0.0]), Vector3::new([1.0, 0.0, 0.0]));
         let ft = f.transform_by(&iso);
         let rfv = rot.transform_vector(&Vector3::new([1.0, 0.0, 0.0])); // (0,1,0)
         let expected_top = Vector3::new([10.0, 0.0, 0.0]).cross(&rfv); // t × (R fv)
@@ -705,14 +696,20 @@ mod tests {
         for i in 0..3 {
             for j in 0..3 {
                 assert!(
-                    close(back.rotation.matrix().data[i][j], iso.rotation.matrix().data[i][j]),
+                    close(
+                        back.rotation.matrix().data[i][j],
+                        iso.rotation.matrix().data[i][j]
+                    ),
                     "rot {i},{j}"
                 );
             }
-            assert!(close(
-                back.translation.vector.data[i],
-                iso.translation.vector.data[i]
-            ), "trans {i}");
+            assert!(
+                close(
+                    back.translation.vector.data[i],
+                    iso.translation.vector.data[i]
+                ),
+                "trans {i}"
+            );
         }
     }
 
@@ -744,10 +741,13 @@ mod tests {
                     "rot {i},{j}"
                 );
             }
-            assert!(close(
-                from_dq.translation.vector.data[i],
-                composed_iso.translation.vector.data[i]
-            ), "trans {i}");
+            assert!(
+                close(
+                    from_dq.translation.vector.data[i],
+                    composed_iso.translation.vector.data[i]
+                ),
+                "trans {i}"
+            );
         }
     }
 
@@ -764,14 +764,20 @@ mod tests {
         for i in 0..3 {
             for j in 0..3 {
                 assert!(
-                    close(iso2.rotation.matrix().data[i][j], iso.rotation.matrix().data[i][j]),
+                    close(
+                        iso2.rotation.matrix().data[i][j],
+                        iso.rotation.matrix().data[i][j]
+                    ),
                     "rot {i},{j}"
                 );
             }
-            assert!(close(
-                iso2.translation.vector.data[i],
-                iso.translation.vector.data[i]
-            ), "trans {i}");
+            assert!(
+                close(
+                    iso2.translation.vector.data[i],
+                    iso.translation.vector.data[i]
+                ),
+                "trans {i}"
+            );
         }
     }
 
@@ -784,14 +790,20 @@ mod tests {
         let screw = Screw::log(&iso);
         assert!(close(screw.angular.norm(), 0.0));
         for i in 0..3 {
-            assert!(close(screw.linear.data[i], iso.translation.vector.data[i]), "lin {i}");
+            assert!(
+                close(screw.linear.data[i], iso.translation.vector.data[i]),
+                "lin {i}"
+            );
         }
         let iso2 = screw.exp();
         for i in 0..3 {
-            assert!(close(
-                iso2.translation.vector.data[i],
-                iso.translation.vector.data[i]
-            ), "trans {i}");
+            assert!(
+                close(
+                    iso2.translation.vector.data[i],
+                    iso.translation.vector.data[i]
+                ),
+                "trans {i}"
+            );
         }
     }
 
@@ -817,14 +829,8 @@ mod tests {
     fn screw_composition_identity() {
         // exp(a) * exp(b) exponentiates (as an isometry product) to a transform
         // whose log exponentiates back to itself.
-        let a = Screw::new(
-            Vector3::new([0.0, 0.0, 0.1]),
-            Vector3::new([0.2, 0.0, 0.0]),
-        );
-        let b = Screw::new(
-            Vector3::new([0.1, 0.0, 0.0]),
-            Vector3::new([0.0, 0.3, 0.0]),
-        );
+        let a = Screw::new(Vector3::new([0.0, 0.0, 0.1]), Vector3::new([0.2, 0.0, 0.0]));
+        let b = Screw::new(Vector3::new([0.1, 0.0, 0.0]), Vector3::new([0.0, 0.3, 0.0]));
         let iso_a = a.exp();
         let iso_b = b.exp();
         let iso_ab = iso_a * iso_b;
@@ -840,16 +846,20 @@ mod tests {
                     "rot {i},{j}"
                 );
             }
-            assert!(close(
-                iso_ab2.translation.vector.data[i],
-                iso_ab.translation.vector.data[i]
-            ), "trans {i}");
+            assert!(
+                close(
+                    iso_ab2.translation.vector.data[i],
+                    iso_ab.translation.vector.data[i]
+                ),
+                "trans {i}"
+            );
         }
     }
 
     #[test]
     fn screw_small_twist_bch_approx() {
-        // For small twists, exp(a) * exp(b) ≈ exp(a + b).
+        // For small twists, exp(a) * exp(b) ≈ exp(a + b) up to the (second-order)
+        // Baker–Campbell–Hausdorff commutator term, which is O(||a||·||b||).
         let a = Screw::new(
             Vector3::new([0.01, 0.0, 0.0]),
             Vector3::new([0.0, 0.02, 0.0]),
@@ -861,19 +871,14 @@ mod tests {
         let sum = Screw::new(a.angular + b.angular, a.linear + b.linear);
         let iso_ab = a.exp() * b.exp();
         let iso_sum = sum.exp();
+        // Loose tolerance: the first-order approximation error is ~1e-3 here.
         for i in 0..3 {
-            assert!(close(
-                iso_ab.translation.vector.data[i],
-                iso_sum.translation.vector.data[i]
-            ), "trans {i}");
+            let dt: f64 = iso_ab.translation.vector.data[i] - iso_sum.translation.vector.data[i];
+            assert!(dt.abs() < 1e-3, "trans {i}");
             for j in 0..3 {
-                assert!(
-                    close(
-                        iso_ab.rotation.matrix().data[i][j],
-                        iso_sum.rotation.matrix().data[i][j]
-                    ),
-                    "rot {i},{j}"
-                );
+                let dr: f64 =
+                    iso_ab.rotation.matrix().data[i][j] - iso_sum.rotation.matrix().data[i][j];
+                assert!(dr.abs() < 1e-3, "rot {i},{j}");
             }
         }
     }

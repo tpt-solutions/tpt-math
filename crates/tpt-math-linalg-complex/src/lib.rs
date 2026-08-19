@@ -51,7 +51,7 @@ use core::fmt;
 use core::ops::{Add, Div, Index, Mul, Neg, Sub};
 
 use tpt_math_linalg_dense::DMatrix;
-use tpt_math_numeric::Scalar;
+use tpt_math_numeric::{Float, Scalar};
 
 #[cfg(feature = "alloc")]
 use alloc::vec;
@@ -925,13 +925,13 @@ fn householder_qr(a: &[Vec<Complex<f64>>]) -> (Vec<Vec<Complex<f64>>>, Vec<Vec<C
     for k in 0..m.min(n) {
         // Column vector x = r[k..][k].
         let mut x: Vec<Complex<f64>> = (k..n).map(|i| r[i][k]).collect();
-        let norm_x = x.iter().fold(0.0_f64, |acc, z| acc + z.norm_sqr()).sqrt();
+        let norm_x = Float::sqrt(x.iter().fold(0.0_f64, |acc, z| acc + z.norm_sqr()));
         if norm_x < 1e-14 {
             continue;
         }
         let sign = if x[0].re < 0.0 { -1.0 } else { 1.0 };
         x[0] = x[0] + Complex::from_real(sign * norm_x);
-        let norm_u = x.iter().fold(0.0_f64, |acc, z| acc + z.norm_sqr()).sqrt();
+        let norm_u = Float::sqrt(x.iter().fold(0.0_f64, |acc, z| acc + z.norm_sqr()));
         if norm_u < 1e-14 {
             continue;
         }

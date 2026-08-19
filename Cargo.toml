@@ -56,8 +56,8 @@ tpt-math-units = { version = "0.1.0", path = "crates/tpt-math-units", default-fe
 tpt-math-units-dyn = { version = "0.1.0", path = "crates/tpt-math-units-dyn" }
 tpt-math-exact = { version = "0.1.0", path = "crates/tpt-math-exact" }
 tpt-math-linalg = { version = "0.1.0", path = "crates/tpt-math-linalg" }
-tpt-math-linalg-fixed = { version = "0.1.0", path = "crates/tpt-math-linalg-fixed" }
-tpt-math-geometry = { version = "0.1.0", path = "crates/tpt-math-geometry" }
+tpt-math-linalg-fixed = { version = "0.1.0", path = "crates/tpt-math-linalg-fixed", default-features = false }
+tpt-math-geometry = { version = "0.1.0", path = "crates/tpt-math-geometry", default-features = false }
 tpt-math-spatial = { version = "0.1.0", path = "crates/tpt-math-spatial" }
 tpt-math-prob-core = { version = "0.1.0", path = "crates/tpt-math-prob-core", default-features = false }
 tpt-math-prob-dist = { version = "0.1.0", path = "crates/tpt-math-prob-dist" }

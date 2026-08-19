@@ -39,7 +39,7 @@
 //!   then `B`": `(B * A)(p) = B.rotation * (A.rotation * p + A.translation)
 //!   + B.translation`.
 
-use core::ops::{Add, Mul, Sub};
+use core::ops::{Add, Mul, Neg, Sub};
 
 use tpt_math_linalg_fixed::{Matrix, Matrix2, Matrix3, Matrix4, Vector, Vector3, Vector4};
 use tpt_math_numeric::Scalar;

@@ -793,16 +793,16 @@ build max-flow in-house on top (same "thin-wrap + build the gap" shape as
 
 ### Prerequisite — spec2.txt corrections
 
-- [ ] `tpt-math-graph` row: change "Wraps / consolidates" from
+- [x] `tpt-math-graph` row: change "Wraps / consolidates" from
       "— (in-house)" to `petgraph` (thin wrap for adjacency/toposort/
       Dijkstra/A*; max-flow stays in-house on top); note the license
       verification in the Notes column
-- [ ] Add missing `tpt-math-linalg-sparse` row back into spec2.txt's
+- [x] Add missing `tpt-math-linalg-sparse` row back into spec2.txt's
       "Exact & Linear Algebra" table (it already exists in the workspace
       but is entirely absent from spec2.txt)
-- [ ] Add `tpt-math-linalg-sparse` to spec2.txt's Section 4 build order
+- [x] Add `tpt-math-linalg-sparse` to spec2.txt's Section 4 build order
       (alongside `tpt-math-linalg-dense`)
-- [ ] Add `tpt-math-linalg-sparse` to spec2.txt's Section 5 downstream
+- [x] Add `tpt-math-linalg-sparse` to spec2.txt's Section 5 downstream
       consumption (at minimum `tpt-fem`)
 
 ### Phase F1 — tpt-math-linalg-complex
@@ -811,23 +811,23 @@ build max-flow in-house on top (same "thin-wrap + build the gap" shape as
 EM/Quantum. In-house, extends `tpt-math-linalg-dense`. no_std+alloc.
 Depends on: `tpt-math-linalg-dense`, `tpt-math-numeric`.*
 
-- [ ] Scaffold `crates/tpt-math-linalg-complex/`
-- [ ] Wire deps: `tpt-math-linalg-dense`, `tpt-math-numeric`;
+- [x] Scaffold `crates/tpt-math-linalg-complex/`
+- [x] Wire deps: `tpt-math-linalg-dense`, `tpt-math-numeric`;
       `default = ["std"]` + `alloc` features; `[lints] workspace = true`
-- [ ] Implement complex-valued `DVector`/`DMatrix` (reuse
+- [x] Implement complex-valued `DVector`/`DMatrix` (reuse
       `tpt-math-linalg-dense`'s storage pattern for a `Complex<T>` scalar)
-- [ ] Implement complex LU decomposition + solve/inverse
-- [ ] Implement complex Cholesky decomposition (Hermitian positive-definite)
-- [ ] Implement QR-algorithm eigenvalue solver for complex matrices
-- [ ] Unit tests: construction, arithmetic, LU/Cholesky against known
+- [x] Implement complex LU decomposition + solve/inverse
+- [x] Implement complex Cholesky decomposition (Hermitian positive-definite)
+- [x] Implement QR-algorithm eigenvalue solver for complex matrices
+- [x] Unit tests: construction, arithmetic, LU/Cholesky against known
       matrices, QR eigenvalues against known spectra (incl. a Hermitian case)
-- [ ] Rustdoc (crate-level + public API)
-- [ ] README.md + CHANGELOG.md
-- [ ] `cargo fmt` / `cargo clippy --all-targets --all-features -- -D warnings` clean
-- [ ] `cargo deny check` clean
-- [ ] no_std+alloc verify (`cargo build --no-default-features --features alloc`)
-- [ ] Add to root `Cargo.toml` `[workspace] members` + `[workspace.dependencies]`
-- [ ] Add `tpt-rust-map/registry.toml` entry: `domain = "math.linalg"`,
+- [x] Rustdoc (crate-level + public API)
+- [x] README.md + CHANGELOG.md
+- [x] `cargo fmt` / `cargo clippy --all-targets --all-features -- -D warnings` clean
+- [x] `cargo deny check` clean
+- [x] no_std+alloc verify (`cargo build --no-default-features --features alloc`)
+- [x] Add to root `Cargo.toml` `[workspace] members` + `[workspace.dependencies]`
+- [x] Add `tpt-rust-map/registry.toml` entry: `domain = "math.linalg"`,
       `no_std = true`, `wraps = []`; `status = "planned"` → `"git"` once done
 
 ### Phase F2 — tpt-math-graph
@@ -838,25 +838,25 @@ toposort/Dijkstra/A*; max-flow built in-house on top (petgraph has no
 built-in max-flow — confirmed, upstream feature request open since 2021).
 no_std (alloc). Depends on: `tpt-math-numeric`.*
 
-- [ ] Scaffold `crates/tpt-math-graph/`
-- [ ] Wire deps: `petgraph` (`default-features = false`, `no_std`-compatible
+- [x] Scaffold `crates/tpt-math-graph/`
+- [x] Wire deps: `petgraph` (`default-features = false`, `no_std`-compatible
       feature set), `tpt-math-numeric`; `default = ["std"]` + `alloc`
       features; `[lints] workspace = true`
-- [ ] Thin-wrap `petgraph`'s `Graph`/`StableGraph`/`GraphMap` adjacency
+- [x] Thin-wrap `petgraph`'s `Graph`/`StableGraph`/`GraphMap` adjacency
       types, `toposort`, `dijkstra`, `astar` behind `tpt-math-graph`'s API
-- [ ] Implement max-flow in-house (Edmonds-Karp or a Dinic's-algorithm
+- [x] Implement max-flow in-house (Edmonds-Karp or a Dinic's-algorithm
       variant) on top of the wrapped graph types
-- [ ] Unit tests: toposort on a known DAG, Dijkstra/A* against hand-verified
+- [x] Unit tests: toposort on a known DAG, Dijkstra/A* against hand-verified
       shortest paths, max-flow against a known small flow network
-- [ ] Rustdoc (crate-level + public API; document the wrap-vs-in-house
+- [x] Rustdoc (crate-level + public API; document the wrap-vs-in-house
       split explicitly)
-- [ ] README.md + CHANGELOG.md
-- [ ] `cargo fmt` / `cargo clippy --all-targets --all-features -- -D warnings` clean
-- [ ] `cargo deny check` clean
-- [ ] no_std+alloc verify (`cargo build --no-default-features --features alloc`)
-- [ ] Add to root `Cargo.toml` `[workspace] members` + `[workspace.dependencies]`;
+- [x] README.md + CHANGELOG.md
+- [x] `cargo fmt` / `cargo clippy --all-targets --all-features -- -D warnings` clean
+- [x] `cargo deny check` clean
+- [x] no_std+alloc verify (`cargo build --no-default-features --features alloc`)
+- [x] Add to root `Cargo.toml` `[workspace] members` + `[workspace.dependencies]`;
       add `petgraph` to `[workspace.dependencies]`
-- [ ] Add `tpt-rust-map/registry.toml` entry: `domain = "math.graph"`,
+- [x] Add `tpt-rust-map/registry.toml` entry: `domain = "math.graph"`,
       `no_std = true`, `wraps = ["petgraph"]`; `status = "planned"` →
       `"git"` once done
 
@@ -868,24 +868,24 @@ In-house — no compliant-license crate covers the combined scope
 cover dual quaternions/screw theory anyway). no_std. Depends on:
 `tpt-math-geometry`, `tpt-math-linalg-fixed`, `tpt-math-numeric`.*
 
-- [ ] Scaffold `crates/tpt-math-spatial/`
-- [ ] Wire deps: `tpt-math-geometry`, `tpt-math-linalg-fixed`,
+- [x] Scaffold `crates/tpt-math-spatial/`
+- [x] Wire deps: `tpt-math-geometry`, `tpt-math-linalg-fixed`,
       `tpt-math-numeric`; `[lints] workspace = true`
-- [ ] Implement 6D spatial vector types (motion/force vectors), Plücker
+- [x] Implement 6D spatial vector types (motion/force vectors), Plücker
       coordinate transforms, spatial cross products
-- [ ] Implement dual quaternions (construction, multiplication, conjugate,
+- [x] Implement dual quaternions (construction, multiplication, conjugate,
       normalize, rigid-transform conversion)
-- [ ] Implement screw theory primitives (screw axis, twist, wrench,
+- [x] Implement screw theory primitives (screw axis, twist, wrench,
       exponential/logarithmic maps to/from `Isometry`)
-- [ ] Unit tests: known-value spatial transforms, dual-quaternion round-trip
+- [x] Unit tests: known-value spatial transforms, dual-quaternion round-trip
       vs. `tpt-math-geometry::Isometry`, screw motion identities
-- [ ] Rustdoc, with conventions (frame, handedness) stated explicitly
-- [ ] README.md + CHANGELOG.md
-- [ ] `cargo fmt` / `cargo clippy --all-targets --all-features -- -D warnings` clean
-- [ ] `cargo deny check` clean
-- [ ] no_std verify (`thumbv6m-none-eabi`)
-- [ ] Add to root `Cargo.toml` `[workspace] members` + `[workspace.dependencies]`
-- [ ] Add `tpt-rust-map/registry.toml` entry: `domain = "math.spatial"`,
+- [x] Rustdoc, with conventions (frame, handedness) stated explicitly
+- [x] README.md + CHANGELOG.md
+- [x] `cargo fmt` / `cargo clippy --all-targets --all-features -- -D warnings` clean
+- [x] `cargo deny check` clean
+- [x] no_std verify (`thumbv6m-none-eabi`)
+- [x] Add to root `Cargo.toml` `[workspace] members` + `[workspace.dependencies]`
+- [x] Add `tpt-rust-map/registry.toml` entry: `domain = "math.spatial"`,
       `no_std = true`, `wraps = []`; `status = "planned"` → `"git"` once done
 
 ### Phase F4 — tpt-math-interpolate
@@ -897,36 +897,36 @@ Apache-2.0-only; piecing together `rbf-interp`/`kriging-rs`/a hand-rolled
 PCHIP would fragment the crate behind inconsistent upstream APIs).
 no_std+alloc. Depends on: `tpt-math-linalg-dense`, `tpt-math-numeric`.*
 
-- [ ] Scaffold `crates/tpt-math-interpolate/`
-- [ ] Wire deps: `tpt-math-linalg-dense`, `tpt-math-numeric`;
+- [x] Scaffold `crates/tpt-math-interpolate/`
+- [x] Wire deps: `tpt-math-linalg-dense`, `tpt-math-numeric`;
       `default = ["std"]` + `alloc` features; `[lints] workspace = true`
-- [ ] Implement RBF interpolation (thin-plate, Gaussian, multiquadric
+- [x] Implement RBF interpolation (thin-plate, Gaussian, multiquadric
       kernels)
-- [ ] Implement ordinary Kriging (variogram fitting + prediction)
-- [ ] Implement PCHIP (shape-preserving piecewise cubic Hermite)
-- [ ] Implement B-spline basis evaluation (Cox-de Boor)
-- [ ] Unit tests: known-function interpolation accuracy per method,
+- [x] Implement ordinary Kriging (variogram fitting + prediction)
+- [x] Implement PCHIP (shape-preserving piecewise cubic Hermite)
+- [x] Implement B-spline basis evaluation (Cox-de Boor)
+- [x] Unit tests: known-function interpolation accuracy per method,
       PCHIP monotonicity preservation, B-spline partition-of-unity check
-- [ ] Rustdoc (crate-level + public API)
-- [ ] README.md + CHANGELOG.md
-- [ ] `cargo fmt` / `cargo clippy --all-targets --all-features -- -D warnings` clean
-- [ ] `cargo deny check` clean
-- [ ] no_std+alloc verify (`cargo build --no-default-features --features alloc`)
-- [ ] Add to root `Cargo.toml` `[workspace] members` + `[workspace.dependencies]`
-- [ ] Add `tpt-rust-map/registry.toml` entry: `domain = "math.interpolate"`,
+- [x] Rustdoc (crate-level + public API)
+- [x] README.md + CHANGELOG.md
+- [x] `cargo fmt` / `cargo clippy --all-targets --all-features -- -D warnings` clean
+- [x] `cargo deny check` clean
+- [x] no_std+alloc verify (`cargo build --no-default-features --features alloc`)
+- [x] Add to root `Cargo.toml` `[workspace] members` + `[workspace.dependencies]`
+- [x] Add `tpt-rust-map/registry.toml` entry: `domain = "math.interpolate"`,
       `no_std = true`, `wraps = []`; `status = "planned"` → `"git"` once done
 
 ### Verification
 
-- [ ] `cargo build --workspace` / `cargo test --workspace --all-features`
-- [ ] `cargo fmt --check` / `cargo clippy --workspace --all-targets
+- [x] `cargo build --workspace` / `cargo test --workspace --all-features`
+- [x] `cargo fmt --check` / `cargo clippy --workspace --all-targets
       --all-features -- -D warnings` / `cargo deny check` — workspace-wide
-- [ ] no_std matrix passes for the newly `no_std = true` crates
+- [x] no_std matrix passes for the newly `no_std = true` crates
       (linalg-complex, graph, spatial, interpolate)
-- [ ] `cargo doc --workspace --no-deps`
-- [ ] `cargo deny check licenses` — confirm `petgraph` resolves as
+- [x] `cargo doc --workspace --no-deps`
+- [x] `cargo deny check licenses` — confirm `petgraph` resolves as
       `Apache-2.0 OR MIT` in the dependency graph
-- [ ] Update root `README.md`'s crate map + `tpt-science`/`tpt-engineering`/
+- [x] Update root `README.md`'s crate map + `tpt-science`/`tpt-engineering`/
       `tpt-fem`/`tpt-physics` downstream-consumption notes for the 4 new
       crates
 
