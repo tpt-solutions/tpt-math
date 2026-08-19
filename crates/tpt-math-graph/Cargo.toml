@@ -1,0 +1,26 @@
+[package]
+name = "tpt-math-graph"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "Graph mathematics for the tpt-math substrate. Thin wrap over petgraph (dual Apache-2.0 OR MIT, no_std + alloc) for adjacency / topological sort / shortest paths, plus an in-house max-flow solver."
+readme = "README.md"
+repository.workspace = true
+homepage.workspace = true
+documentation = "https://docs.rs/tpt-math-graph"
+keywords = ["graph", "toposort", "dijkstra", "astar", "max-flow"]
+categories = ["mathematics", "algorithms", "data-structures", "no-std"]
+
+[dependencies]
+petgraph = { workspace = true, features = ["graphmap", "stable_graph"] }
+tpt-math-numeric = { workspace = true, default-features = false }
+
+[features]
+default = ["std"]
+std = ["petgraph/std", "tpt-math-numeric/std", "alloc"]
+alloc = ["tpt-math-numeric/alloc"]
+
+[lints]
+workspace = true

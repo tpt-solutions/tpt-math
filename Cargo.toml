@@ -4,12 +4,15 @@ members = [
     "crates/tpt-math-numeric",
     "crates/tpt-math-linalg-dense",
     "crates/tpt-math-linalg-sparse",
+    "crates/tpt-math-linalg-complex",
+    "crates/tpt-math-graph",
     "crates/tpt-math-units",
     "crates/tpt-math-units-dyn",
     "crates/tpt-math-exact",
     "crates/tpt-math-linalg",
     "crates/tpt-math-linalg-fixed",
     "crates/tpt-math-geometry",
+    "crates/tpt-math-spatial",
     "crates/tpt-math-prob-core",
     "crates/tpt-math-prob-dist",
     "crates/tpt-math-prob-bayes",
@@ -28,6 +31,7 @@ members = [
     "crates/tpt-math-signal-fft",
     "crates/tpt-math-signal-filter",
     "crates/tpt-math-signal",
+    "crates/tpt-math-interpolate",
     "xtask",
     "examples",
 ]
@@ -46,12 +50,15 @@ repository = "https://github.com/tpt-solutions/tpt-math"
 tpt-math-numeric = { version = "0.1.0", path = "crates/tpt-math-numeric", default-features = false }
 tpt-math-linalg-dense = { version = "0.1.0", path = "crates/tpt-math-linalg-dense", default-features = false }
 tpt-math-linalg-sparse = { version = "0.1.0", path = "crates/tpt-math-linalg-sparse", default-features = false }
+tpt-math-linalg-complex = { version = "0.1.0", path = "crates/tpt-math-linalg-complex", default-features = false }
+petgraph = { version = "0.8", default-features = false }
 tpt-math-units = { version = "0.1.0", path = "crates/tpt-math-units", default-features = false }
 tpt-math-units-dyn = { version = "0.1.0", path = "crates/tpt-math-units-dyn" }
 tpt-math-exact = { version = "0.1.0", path = "crates/tpt-math-exact" }
 tpt-math-linalg = { version = "0.1.0", path = "crates/tpt-math-linalg" }
 tpt-math-linalg-fixed = { version = "0.1.0", path = "crates/tpt-math-linalg-fixed" }
 tpt-math-geometry = { version = "0.1.0", path = "crates/tpt-math-geometry" }
+tpt-math-spatial = { version = "0.1.0", path = "crates/tpt-math-spatial" }
 tpt-math-prob-core = { version = "0.1.0", path = "crates/tpt-math-prob-core", default-features = false }
 tpt-math-prob-dist = { version = "0.1.0", path = "crates/tpt-math-prob-dist" }
 tpt-math-prob-bayes = { version = "0.1.0", path = "crates/tpt-math-prob-bayes" }
@@ -70,6 +77,7 @@ tpt-math-optimize = { version = "0.1.0", path = "crates/tpt-math-optimize" }
 tpt-math-signal-fft = { version = "0.1.0", path = "crates/tpt-math-signal-fft" }
 tpt-math-signal-filter = { version = "0.1.0", path = "crates/tpt-math-signal-filter" }
 tpt-math-signal = { version = "0.1.0", path = "crates/tpt-math-signal" }
+tpt-math-interpolate = { version = "0.1.0", path = "crates/tpt-math-interpolate" }
 
 [workspace.lints.rust]
 unsafe_op_in_unsafe_fn = "warn"

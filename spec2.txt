@@ -25,6 +25,7 @@ The numeric substrate for the TPT Solutions science / engineering / formal verif
 | `tpt-math-linalg` | `tpt-math-linalg-dense` | yes | Dimensionally-checked vectors/matrices. |
 | `tpt-math-linalg-fixed` | — (in-house) | yes | Const-generic fixed-size vectors/matrices. |
 | `tpt-math-linalg-complex` | — (in-house) | yes (alloc) | Complex-valued matrices, LU/Cholesky, QR eigenvalue solvers for EM/Quantum. |
+| `tpt-math-linalg-sparse` | — (in-house) | yes (alloc) | General-purpose sparse matrices (COO/CSR/CSC) + iterative solvers (CG/BiCGSTAB). Hand-rolled, no external backend; complements `tpt-fem-sparse` (FEM-assembly-specific) without duplicating it. |
 
 ### Geometry & Spatial
 | Crate | Wraps / consolidates | `no_std` | Notes |
@@ -35,7 +36,7 @@ The numeric substrate for the TPT Solutions science / engineering / formal verif
 ### Graph & Network Mathematics
 | Crate | Wraps / consolidates | `no_std` | Notes |
 |---|---|---|---|
-| `tpt-math-graph` | — (in-house) | yes (alloc) | Adjacency structures, topological sort, shortest-path (Dijkstra/A*), max-flow. |
+| `tpt-math-graph` | `petgraph` | yes (alloc) | Adjacency structures, topological sort, shortest-path (Dijkstra/A*) via a thin `petgraph` wrap (dual `Apache-2.0 OR MIT`, `no_std`-compatible); max-flow built in-house on top (petgraph has no built-in max-flow — upstream feature request open since 2021). |
 
 ### Probability
 | Crate | Wraps / consolidates | `no_std` | Notes |
@@ -74,7 +75,7 @@ The numeric substrate for the TPT Solutions science / engineering / formal verif
 
 ## 4. Build Order
 1. `tpt-math-numeric` -> `tpt-math-linalg-dense` -> `tpt-math-linalg-fixed` -> `tpt-math-geometry` -> `tpt-math-spatial`
-2. `tpt-math-units` -> `tpt-math-linalg` -> `tpt-math-linalg-complex`
+2. `tpt-math-units` -> `tpt-math-linalg` -> `tpt-math-linalg-dense`/`tpt-math-linalg-sparse` -> `tpt-math-linalg-complex`
 3. `tpt-math-exact` -> `tpt-math-prob-*` -> `tpt-math-stats`
 4. `tpt-math-graph`, `tpt-math-interpolate`
 5. `tpt-math-autodiff-*`, `tpt-math-symbolic`, `tpt-math-optimize-*`, `tpt-math-signal-*`
@@ -82,5 +83,5 @@ The numeric substrate for the TPT Solutions science / engineering / formal verif
 ## 5. Downstream Consumption
 - `tpt-science`: `prob`, `stats`, `autodiff`, `optimize`, `signal`, `graph`.
 - `tpt-engineering`: `linalg`, `units`, `optimize-convex`, `prob`, `spatial`.
-- `tpt-fem`: `linalg`, `linalg-complex`, `optimize`.
+- `tpt-fem`: `linalg`, `linalg-dense`, `linalg-sparse`, `linalg-complex`, `optimize`.
 - `tpt-physics`: `linalg`, `graph`, `spatial`, `interpolate`.

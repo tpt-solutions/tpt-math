@@ -630,6 +630,55 @@ impl<T: Scalar> Mul<Quaternion<T>> for Quaternion<T> {
     }
 }
 
+impl<T: Scalar> Mul<T> for Quaternion<T> {
+    type Output = Quaternion<T>;
+    /// Component-wise scaling by a scalar.
+    fn mul(self, rhs: T) -> Quaternion<T> {
+        Quaternion::new(
+            self.coords.data[0] * rhs,
+            self.coords.data[1] * rhs,
+            self.coords.data[2] * rhs,
+            self.coords.data[3] * rhs,
+        )
+    }
+}
+
+impl<T: Scalar> Add for Quaternion<T> {
+    type Output = Quaternion<T>;
+    fn add(self, rhs: Quaternion<T>) -> Quaternion<T> {
+        Quaternion::new(
+            self.coords.data[0] + rhs.coords.data[0],
+            self.coords.data[1] + rhs.coords.data[1],
+            self.coords.data[2] + rhs.coords.data[2],
+            self.coords.data[3] + rhs.coords.data[3],
+        )
+    }
+}
+
+impl<T: Scalar> Sub for Quaternion<T> {
+    type Output = Quaternion<T>;
+    fn sub(self, rhs: Quaternion<T>) -> Quaternion<T> {
+        Quaternion::new(
+            self.coords.data[0] - rhs.coords.data[0],
+            self.coords.data[1] - rhs.coords.data[1],
+            self.coords.data[2] - rhs.coords.data[2],
+            self.coords.data[3] - rhs.coords.data[3],
+        )
+    }
+}
+
+impl<T: Scalar> Neg for Quaternion<T> {
+    type Output = Quaternion<T>;
+    fn neg(self) -> Quaternion<T> {
+        Quaternion::new(
+            -self.coords.data[0],
+            -self.coords.data[1],
+            -self.coords.data[2],
+            -self.coords.data[3],
+        )
+    }
+}
+
 /// A unit (normalised) quaternion, representing a 3-D rotation.
 ///
 /// The unit-norm invariant is enforced on construction, so composition and

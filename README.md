@@ -36,7 +36,21 @@ Crates are organised into layers; lower layers never depend on higher ones.
 | `tpt-math-linalg-dense` | — (in-house; was `faer`) | yes (alloc) | Dense `DVector`/`DMatrix`, column-major `Vec` storage; storage backend for `tpt-math-linalg` / `-optimize`. |
 | `tpt-math-linalg` | `tpt-math-linalg-dense` (in-house) | yes | Dimensionally-checked vectors/matrices over the in-house dense backend. |
 | `tpt-math-linalg-fixed` | — (in-house) | yes | Const-generic fixed-size vectors/matrices + closed-form det/inverse; no allocator. |
+| `tpt-math-linalg-complex` | — (in-house) | yes (alloc) | Complex-valued matrices, complex LU/Cholesky, QR eigenvalue solver for EM/quantum. |
+| `tpt-math-linalg-sparse` | — (in-house) | yes (alloc) | Sparse COO/CSR/CSC + iterative CG/BiCGSTAB solvers; hand-rolled, complements `tpt-fem-sparse`. |
 | `tpt-math-geometry` | `tpt-math-linalg-fixed` (in-house) | yes | Points, rotations, quaternions, isometries, projections; no `nalgebra`. |
+
+### Geometry & spatial
+| Crate | Wraps / consolidates | `no_std` | Notes |
+|-------|----------------------|----------|-------|
+| `tpt-math-geometry` | `tpt-math-linalg-fixed` (in-house) | yes | Points, rotations, quaternions, isometries, projections; no `nalgebra`. |
+| `tpt-math-spatial` | — (in-house) | yes | Featherstone 6-D spatial vectors, dual quaternions, screw theory; built on `tpt-math-geometry` / `-linalg-fixed`. |
+
+### Graph & interpolation
+| Crate | Wraps / consolidates | `no_std` | Notes |
+|-------|----------------------|----------|-------|
+| `tpt-math-graph` | `petgraph` (dual `Apache-2.0 OR MIT`) | yes (alloc) | Thin wrap for adjacency / toposort / Dijkstra / A*; in-house max-flow on top. |
+| `tpt-math-interpolate` | — (in-house) | yes (alloc) | RBF, ordinary Kriging, PCHIP, B-spline basis for scattered data / surrogates. |
 
 ### Probability
 | Crate | Wraps / consolidates | `no_std` | Notes |
@@ -83,6 +97,10 @@ tpt-math-numeric
                  -> tpt-math-prob-dist / -bayes / -markov / -monte-carlo / -sampler
                  -> tpt-math-prob            (umbrella)
             -> tpt-math-stats               (in-house; no statrs)
+       -> tpt-math-linalg-sparse    (in-house; needs linalg-dense)
+       -> tpt-math-linalg-complex   (in-house; needs linalg-dense)
+  -> tpt-math-graph                 (wraps petgraph; needs numeric)
+  -> tpt-math-interpolate           (in-house; needs linalg-dense)
   -> tpt-math-autodiff-fwd
        -> tpt-math-autodiff-rev
             -> tpt-math-autodiff            (umbrella)
@@ -105,10 +123,16 @@ Downstream repos depend only on the leaf / umbrella crates they need:
   `tpt-math-signal` (time-series / spectral analysis).
 - **`tpt-engineering`** — reach for `tpt-math-linalg` + `tpt-math-units`
   (physically-dimensioned models), `tpt-math-optimize-convex` (QP/control
-  problems), `tpt-math-prob` (uncertainty propagation).
+  problems), `tpt-math-prob` (uncertainty propagation), `tpt-math-spatial`
+  (rigid-body / kinematics), `tpt-math-linalg-sparse` (FEM / large systems).
 - **`tpt-formal`** — reach for `tpt-math-exact` (provably-exact arithmetic
   under verification), `tpt-math-numeric` / `tpt-math-units` (trusted
   scalar/unit primitives).
+- **`tpt-fem`** — reach for `tpt-math-linalg` / `-linalg-dense` /
+  `-linalg-sparse` / `-linalg-complex` and `tpt-math-optimize` for assembly
+  and sparse solves.
+- **`tpt-physics`** — reach for `tpt-math-linalg`, `tpt-math-graph`,
+  `tpt-math-spatial`, and `tpt-math-interpolate` (surrogate modelling).
 
 ## Repository layout
 
