@@ -24,3 +24,17 @@ and this project adheres to SemVer.
   quaternions / screw theory.
 - `#![no_std]` and allocator-free (stack-allocated fixed-size storage), mirroring
   the workspace lints (`unsafe_code = "forbid"`).
+
+### Fixed
+
+- `cross_motion_force` (`crf`) dropped the `mω×fv` term, giving the wrong sign
+  and axis for the linear component of the spatial force cross product;
+  corrected.
+- Workspace deps (`tpt-math-geometry`, `tpt-math-linalg-fixed`,
+  `tpt-math-numeric`) now use `default-features = false` so the crate actually
+  builds `no_std`; added the missing `Neg` derive for the `Motion`/`Force`
+  markers.
+- `Screw::log` clamps its `acos` input to `[-1, 1]` to avoid `NaN` from
+  floating-point drift, and now guards the `theta ≈ pi` axis-extraction
+  singularity via `(R + I) = 2ww^T` with the sign taken from the skew part,
+  with round-trip tests at `theta ≈ 0` and `theta ≈ pi`.
