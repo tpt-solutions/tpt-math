@@ -517,10 +517,33 @@ impl<T: Scalar + Copy> Screw<T> {
     ///
     /// Recovers the screw `(ω, v)` whose exponential equals `iso`. For a pure
     /// translation this is `(0, translation)`.
+    ///
+    /// # Numerical singularities
+    ///
+    /// `log` has two well-known singularities, both guarded here:
+    ///
+    /// * **`theta ≈ 0` (identity rotation).** Handled by the early-return
+    ///   branch — the off-diagonal axis formula divides by `sin(theta)`, which
+    ///   vanishes at `theta = 0`.
+    /// * **`theta ≈ π` (180° rotation).** The same off-diagonal formula divides
+    ///   by `sin(theta)`, which also vanishes at `theta = π`. The trace formula
+    ///   `cos(theta) = (tr − 1) / 2` is clamped to `[-1, 1]` (float rounding
+    ///   near these limits can otherwise push `acos`'s argument out of domain
+    ///   and silently yield `NaN`), and the axis is extracted from `(R + I) =
+    ///   2·(w wᵀ)` instead of the off-diagonal differences in the `theta ≈ π`
+    ///   regime.
     pub fn log(iso: &Isometry3<T>) -> Screw<T> {
         let m = iso.rotation.matrix().data;
         let tr = m[0][0] + m[1][1] + m[2][2];
-        let cos_t = (tr - T::one()) / two();
+        // cos(theta) = (trace - 1) / 2. Clamp to [-1, 1]: float rounding near
+        // theta = 0 or theta = pi can push this fraction microscopically past
+        // acos()'s domain, silently yielding NaN.
+        let mut cos_t = (tr - T::one()) / two();
+        if cos_t > T::one() {
+            cos_t = T::one();
+        } else if cos_t < -T::one() {
+            cos_t = -T::one();
+        }
         let theta = cos_t.acos();
         let eps = c::<T>(1e-12);
         if theta < eps {
@@ -530,17 +553,61 @@ impl<T: Scalar + Copy> Screw<T> {
             );
         }
         let two_ = two::<T>();
-        let (s, cth) = theta.sin_cos();
-        let axis = Vector3::new([
-            (m[2][1] - m[1][2]) / (two_ * s),
-            (m[0][2] - m[2][0]) / (two_ * s),
-            (m[1][0] - m[0][1]) / (two_ * s),
-        ]);
+        let pi = c::<T>(core::f64::consts::PI);
+        // Angular axis.
+        //
+        // * For general theta the standard off-diagonal formula
+        //   `w = (R - R^T) / (2 sin theta)` is exact and well-conditioned.
+        // * Near theta ~= pi that formula divides by sin(theta) -> 0 (the
+        //   *second* log singularity) and is catastrophically ill-conditioned.
+        //   There we instead take the *direction* from (R + I) = 2 w w^T (exact
+        //   at theta = pi, well-conditioned provided no axis component is tiny)
+        //   and recover the *sign* from the skew part (R - R^T) = 2 sin(theta)
+        //   [w]x, whose sign is unambiguous (sin theta > 0 for theta in (0, pi)).
+        let axis = if theta > pi - c::<T>(1e-3) {
+            let rpi = [
+                [m[0][0] + T::one(), m[0][1], m[0][2]],
+                [m[1][0], m[1][1] + T::one(), m[1][2]],
+                [m[2][0], m[2][1], m[2][2] + T::one()],
+            ];
+            let n0 = rpi[0][0] * rpi[0][0] + rpi[1][0] * rpi[1][0] + rpi[2][0] * rpi[2][0];
+            let n1 = rpi[0][1] * rpi[0][1] + rpi[1][1] * rpi[1][1] + rpi[2][1] * rpi[2][1];
+            let n2 = rpi[0][2] * rpi[0][2] + rpi[1][2] * rpi[1][2] + rpi[2][2] * rpi[2][2];
+            let (col, norm) = if n0 >= n1 && n0 >= n2 {
+                ([rpi[0][0], rpi[1][0], rpi[2][0]], n0)
+            } else if n1 >= n2 {
+                ([rpi[0][1], rpi[1][1], rpi[2][1]], n1)
+            } else {
+                ([rpi[0][2], rpi[1][2], rpi[2][2]], n2)
+            };
+            let norm = norm.sqrt();
+            let norm = if norm == T::zero() { T::one() } else { norm };
+            let ax = Vector3::new([col[0] / norm, col[1] / norm, col[2] / norm]);
+            let skew = Vector3::new([m[2][1] - m[1][2], m[0][2] - m[2][0], m[1][0] - m[0][1]]);
+            if ax.dot(&skew) < T::zero() {
+                -ax
+            } else {
+                ax
+            }
+        } else {
+            let s = theta.sin();
+            Vector3::new([
+                (m[2][1] - m[1][2]) / (two_ * s),
+                (m[0][2] - m[2][0]) / (two_ * s),
+                (m[1][0] - m[0][1]) / (two_ * s),
+            ])
+        };
         let p = iso.translation.vector;
         let ap = axis.cross(&p); // A·p
         let aap = axis.cross(&ap); // A²·p
-        let coef = (T::one() / theta) - (T::one() + cth) / (two_ * s);
-        let vl = (p / theta) - (ap * (T::one() / (T::one() + T::one()))) + (aap * coef);
+                                   // coef = 1/theta - (1 + cos theta) / (2 sin theta)
+                                   //      = 1/theta - (1/2) cot(theta/2).  The half-angle form avoids the
+                                   // sin(theta) division (stable across the whole (0, pi) range, including
+                                   // the theta ~= pi limit where (1 + cos theta)/(2 sin theta) -> 0).
+        let half = theta / two_;
+        let cot_half = half.cos() / half.sin();
+        let coef = (T::one() / theta) - (cot_half / two_);
+        let vl = (p / theta) - (ap * (T::one() / two_)) + (aap * coef);
         let angular = axis * theta;
         let linear = vl * theta;
         Screw::new(angular, linear)
@@ -854,6 +921,79 @@ mod tests {
                 "trans {i}"
             );
         }
+    }
+
+    #[test]
+    fn screw_log_180_rotation() {
+        // theta = pi is the *second* log singularity: the standard off-diagonal
+        // axis formula divides by sin(pi) = 0. log must fall back to the
+        // (R + I) = 2 w w^T extraction and recover a clean 180° twist.
+        let rot = Rotation3::from_axis_angle(&Vector3::new([0.0, 0.0, 1.0]), core::f64::consts::PI);
+        let iso = Isometry3::new(Translation::new(Vector3::new([0.0, 0.0, 0.0])), rot);
+        let screw = Screw::log(&iso);
+        assert!(close(screw.angular.x(), 0.0));
+        assert!(close(screw.angular.y(), 0.0));
+        assert!(close(screw.angular.z(), core::f64::consts::PI));
+        assert!(close(screw.linear.norm(), 0.0));
+        // Round-trips back to the same isometry.
+        let iso2 = screw.exp();
+        for i in 0..3 {
+            for j in 0..3 {
+                assert!(
+                    close(
+                        iso2.rotation.matrix().data[i][j],
+                        iso.rotation.matrix().data[i][j]
+                    ),
+                    "rot {i},{j}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn screw_log_180_rotation_with_translation() {
+        // Same singularity, now with a non-trivial translation so the linear
+        // part of the screw is also exercised.
+        let rot = Rotation3::from_axis_angle(
+            &Vector3::new([1.0, 1.0, 1.0]).normalize(),
+            core::f64::consts::PI,
+        );
+        let iso = Isometry3::new(Translation::new(Vector3::new([1.0, -2.0, 0.5])), rot);
+        let screw = Screw::log(&iso);
+        // Angular magnitude must be pi (to within the rounding inherited from
+        // the irrational-axis rotation matrix — its trace is only ~-1, so the
+        // recovered angle is ~pi - O(1e-8)). The stricter correctness check is
+        // the point-round-trip below.
+        assert!((screw.angular.norm() - core::f64::consts::PI).abs() < 1e-7);
+        // exp(log(iso)) must reproduce iso's action on a point. At theta ~= pi
+        // the log is ill-conditioned (the recovered axis carries an
+        // O(pi - theta) error inherited from the rotation matrix), so allow the
+        // relaxed ~1e-7 tolerance that the singularity implies rather than 1e-10.
+        let iso2 = screw.exp();
+        let p = Point3::new(Vector3::new([2.0, -1.0, 3.0]));
+        let q1 = iso.transform_point(&p);
+        let q2 = iso2.transform_point(&p);
+        for i in 0..3 {
+            let d = (q1.coords.data[i] - q2.coords.data[i]).abs();
+            assert!(d < 1e-7, "pt {i}: diff {d}");
+        }
+    }
+
+    #[test]
+    fn screw_log_small_rotation() {
+        // theta ~= 0 is the *first* log singularity. The early-return branch
+        // must give a clean small-rotation twist (angular = angle * axis).
+        let angle = 1e-6;
+        let axis = Vector3::new([1.0, 2.0, 3.0]).normalize();
+        let rot = Rotation3::from_axis_angle(&axis, angle);
+        let iso = Isometry3::new(Translation::new(Vector3::new([0.0, 0.0, 0.0])), rot);
+        let screw = Screw::log(&iso);
+        assert!(close(screw.angular.norm(), angle));
+        // Axis direction recovered up to the tiny angle's precision.
+        let recovered = screw.angular / angle;
+        assert!(close(recovered.x(), axis.x()));
+        assert!(close(recovered.y(), axis.y()));
+        assert!(close(recovered.z(), axis.z()));
     }
 
     #[test]

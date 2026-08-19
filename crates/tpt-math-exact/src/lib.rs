@@ -223,4 +223,26 @@ mod tests {
         let m = a.midpoint();
         assert_eq!(m, rat(3));
     }
+
+    #[test]
+    fn sub_encloses() {
+        // [1, 4] - [-2, 3] = [1 - 3, 4 - (-2)] = [-2, 6].
+        let c = iv(1, 4) - iv(-2, 3);
+        assert_eq!(c.lo(), &rat(-2));
+        assert_eq!(c.hi(), &rat(6));
+    }
+
+    #[test]
+    fn is_point_detects_degenerate_interval() {
+        assert!(iv(3, 3).is_point());
+        assert!(!iv(3, 4).is_point());
+    }
+
+    #[test]
+    fn contains_respects_endpoints() {
+        let a = iv(0, 5);
+        assert!(a.contains(&rat(0)));
+        assert!(a.contains(&rat(5)));
+        assert!(a.contains(&rat(-0)));
+    }
 }

@@ -334,4 +334,65 @@ mod tests {
         assert_eq!(t.nrows(), 2);
         assert_eq!(t.ncols(), 1);
     }
+
+    #[test]
+    fn mat_add_and_sub_keep_units() {
+        let a = Mat::<Length, Time>::from_raw(DMatrix::from_row_slice(2, 2, &[1.0, 2.0, 3.0, 4.0]));
+        let b = Mat::<Length, Time>::from_raw(DMatrix::from_row_slice(2, 2, &[4.0, 3.0, 2.0, 1.0]));
+        let sum: Mat<Length, Time> = a.clone() + b.clone();
+        assert_eq!(
+            sum.raw(),
+            &DMatrix::from_row_slice(2, 2, &[5.0, 5.0, 5.0, 5.0])
+        );
+        let diff: Mat<Length, Time> = a - b;
+        assert_eq!(
+            diff.raw(),
+            &DMatrix::from_row_slice(2, 2, &[-3.0, -1.0, 1.0, 3.0])
+        );
+    }
+
+    #[test]
+    fn vec_sub_keeps_unit() {
+        let a = Vec::<Length>::from_raw(DVector::from_row_slice(&[5.0, 6.0]));
+        let b = Vec::<Length>::from_raw(DVector::from_row_slice(&[1.0, 2.0]));
+        let c = a - b;
+        assert_eq!(c.raw(), &DVector::from_row_slice(&[4.0, 4.0]));
+    }
+
+    #[test]
+    fn vec_scalar_mul_div_keep_unit() {
+        let a = Vec::<Length>::from_raw(DVector::from_row_slice(&[2.0, 4.0]));
+        let doubled: Vec<Length> = a.clone() * 3.0;
+        assert_eq!(doubled.raw(), &DVector::from_row_slice(&[6.0, 12.0]));
+        let halved: Vec<Length> = a / 2.0;
+        assert_eq!(halved.raw(), &DVector::from_row_slice(&[1.0, 2.0]));
+    }
+
+    #[test]
+    fn vec_neg_keeps_unit() {
+        let a = Vec::<Length>::from_raw(DVector::from_row_slice(&[1.0, -2.0]));
+        let b: Vec<Length> = -a;
+        assert_eq!(b.raw(), &DVector::from_row_slice(&[-1.0, 2.0]));
+    }
+
+    #[test]
+    fn vec_index_and_len() {
+        let a = Vec::<Length>::from_raw(DVector::from_row_slice(&[3.0, 1.0, 4.0]));
+        assert_eq!(a.len(), 3);
+        assert!(!a.is_empty());
+        assert_eq!(a[0], 3.0);
+        assert_eq!(a[2], 4.0);
+        let empty = Vec::<Length>::from_raw(DVector::from_row_slice(&[]));
+        assert!(empty.is_empty());
+    }
+
+    #[test]
+    fn zeros_construct_zero_filled() {
+        let v = Vec::<Length>::zeros(3);
+        assert_eq!(v.raw(), &DVector::from_row_slice(&[0.0, 0.0, 0.0]));
+        let m = Mat::<Length, Time>::zeros(2, 3);
+        assert_eq!(m.nrows(), 2);
+        assert_eq!(m.ncols(), 3);
+        assert_eq!(m.raw(), &DMatrix::from_row_slice(2, 3, &[0.0; 6]));
+    }
 }

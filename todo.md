@@ -938,30 +938,41 @@ code; these are the concrete hardening items the review surfaced, plus
 committing the in-progress no_std-hygiene fix already sitting in the working
 tree.*
 
-- [ ] Commit the pending working-tree changes (no_std hygiene +
+- [x] Commit the pending working-tree changes (no_std hygiene +
       `default-features = false` cleanup): root `Cargo.toml`,
       `crates/tpt-math-spatial/{Cargo.toml,src/lib.rs}`,
       `crates/tpt-math-geometry/src/lib.rs`,
       `crates/tpt-math-linalg-complex/src/lib.rs`, and this `todo.md`'s
       Phase F checkboxes
-- [ ] `tpt-math-spatial::Screw::log`: clamp `cos_t = (tr - 1) / 2` to
+      (already committed in `5bab272` — working tree was clean)
+- [x] `tpt-math-spatial::Screw::log`: clamp `cos_t = (tr - 1) / 2` to
       `[-1, 1]` before calling `.acos()` — floating-point rounding near
       identity or 180° rotations can otherwise push `cos_t` out of domain
       and silently propagate `NaN`
-- [ ] `tpt-math-spatial::Screw::log`: document (or guard) the second
+- [x] `tpt-math-spatial::Screw::log`: document (or guard) the second
       singularity in axis extraction near `theta ≈ π` (division by
-      `2*sin(theta)` — only the `theta ≈ 0` branch is currently guarded)
-- [ ] Add `tpt-math-spatial` test coverage for the `theta ≈ 0` and
+      `2*sin(theta)` — guarded by taking the direction from `(R + I) = 2 w wᵀ`
+      with the sign recovered from the skew part; doc-commented)
+- [x] Add `tpt-math-spatial` test coverage for the `theta ≈ 0` and
       `theta ≈ π` edge cases of `Screw::log`
-- [ ] Confirm `tpt-math-prob-markov`'s panic-on-out-of-range-state-index
+- [x] Confirm `tpt-math-prob-markov`'s panic-on-out-of-range-state-index
       API (`chain.rs`, `hmm.rs`) is the intended contract vs. a `Result`-
       returning `try_*` variant, consistent with the `try_X`/`X` pattern
       used elsewhere in the workspace (stats, prob-bayes, units-dyn,
-      linalg-sparse)
-- [ ] Audit `tpt-math-prob-sampler`'s `as usize`/`as i32` float-to-int
+      linalg-sparse): `chain.rs` already had `try_*` pairs; `hmm.rs` setters
+      (`set_initial`/`set_transition`/`set_emission`) were missing `try_*`
+      counterparts — added `try_set_initial`/`try_set_transition`/
+      `try_set_emission` and refactored the panicking setters to delegate
+- [x] Audit `tpt-math-prob-sampler`'s `as usize`/`as i32` float-to-int
       casts (highest concentration in the workspace) for unvalidated
-      truncation on out-of-range input
-- [ ] Review thin test coverage in `tpt-math-symbolic` (6 tests),
-      `tpt-math-exact` (5 tests), and `tpt-math-linalg` (4 tests) relative
-      to their surface area; add tests where gaps are found
+      truncation on out-of-range input: no float→int casts exist in production
+      code (only `u64`→`usize` on a stream-count that is bounded by the index
+      space); the only float→int casts were in tests and are range-bounded by
+      construction — no fix required
+- [x] Review thin test coverage in `tpt-math-symbolic` (6→16 tests),
+      `tpt-math-exact` (5→8 tests), and `tpt-math-linalg` (4→10 tests)
+      relative to their surface area; added tests for the gaps (interval
+      `Sub`/`is_point`, `Vec`/`Mat` add-sub-neg-scalar-index-zeros, symbolic
+      Div-by-one/Func-of-const/Pow-of-const/double-neg/`eval` `None`
+      cases and `cos`/`ln`/quotient/`pow(0)` derivatives)
 

@@ -175,15 +175,31 @@ impl Hmm {
     /// # Panics
     ///
     /// Panics if `state` is out of range or `prob` is not a finite,
-    /// non-negative number.
+    /// non-negative number. Use [`try_set_initial`](Self::try_set_initial) to
+    /// get a [`MarkovError`] instead.
     pub fn set_initial(&mut self, state: usize, prob: f64) {
-        check_prob(prob);
+        self.try_set_initial(state, prob)
+            .expect("set_initial: invalid argument")
+    }
+
+    /// Checked form of [`set_initial`](Self::set_initial).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`MarkovError::StateOutOfRange`] if `state` is not a valid state,
+    /// or [`MarkovError::InvalidProbability`] if `prob` is negative, infinite,
+    /// or `NaN`.
+    pub fn try_set_initial(&mut self, state: usize, prob: f64) -> Result<(), MarkovError> {
+        if !prob.is_finite() || prob < 0.0 {
+            return Err(MarkovError::InvalidProbability { value: prob });
+        }
         let states = self.states;
         let slot = self
             .initial
             .get_mut(state)
-            .unwrap_or_else(|| panic!("set_initial: state {state} is out of range for {states}"));
+            .ok_or(MarkovError::StateOutOfRange { state, states })?;
         *slot = prob;
+        Ok(())
     }
 
     /// Set `P(X_{t+1} = to | X_t = from)`.
@@ -191,18 +207,41 @@ impl Hmm {
     /// # Panics
     ///
     /// Panics if `from` or `to` is out of range, or `prob` is not a finite,
-    /// non-negative number.
+    /// non-negative number. Use [`try_set_transition`](Self::try_set_transition)
+    /// to get a [`MarkovError`] instead.
     pub fn set_transition(&mut self, from: usize, to: usize, prob: f64) {
-        check_prob(prob);
+        self.try_set_transition(from, to, prob)
+            .expect("set_transition: invalid argument")
+    }
+
+    /// Checked form of [`set_transition`](Self::set_transition).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`MarkovError::StateOutOfRange`] if `from` or `to` is not a valid
+    /// state, or [`MarkovError::InvalidProbability`] if `prob` is negative,
+    /// infinite, or `NaN`.
+    pub fn try_set_transition(
+        &mut self,
+        from: usize,
+        to: usize,
+        prob: f64,
+    ) -> Result<(), MarkovError> {
+        if !prob.is_finite() || prob < 0.0 {
+            return Err(MarkovError::InvalidProbability { value: prob });
+        }
         let states = self.states;
-        let slot = self
+        let row = self
             .transition
             .get_mut(from)
-            .and_then(|row| row.get_mut(to))
-            .unwrap_or_else(|| {
-                panic!("set_transition: ({from}, {to}) is out of range for {states} states")
-            });
-        *slot = prob;
+            .ok_or(MarkovError::StateOutOfRange {
+                state: from,
+                states,
+            })?;
+        row.get_mut(to)
+            .ok_or(MarkovError::StateOutOfRange { state: to, states })?;
+        self.transition[from][to] = prob;
+        Ok(())
     }
 
     /// Set `P(Y_t = observation | X_t = state)`.
@@ -210,21 +249,42 @@ impl Hmm {
     /// # Panics
     ///
     /// Panics if `state` or `observation` is out of range, or `prob` is not a
-    /// finite, non-negative number.
+    /// finite, non-negative number. Use [`try_set_emission`](Self::try_set_emission)
+    /// to get a [`MarkovError`] instead.
     pub fn set_emission(&mut self, state: usize, observation: usize, prob: f64) {
-        check_prob(prob);
+        self.try_set_emission(state, observation, prob)
+            .expect("set_emission: invalid argument")
+    }
+
+    /// Checked form of [`set_emission`](Self::set_emission).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`MarkovError::StateOutOfRange`] if `state` is not a valid state,
+    /// [`MarkovError::ObservationOutOfRange`] if `observation` is not a valid
+    /// symbol, or [`MarkovError::InvalidProbability`] if `prob` is negative,
+    /// infinite, or `NaN`.
+    pub fn try_set_emission(
+        &mut self,
+        state: usize,
+        observation: usize,
+        prob: f64,
+    ) -> Result<(), MarkovError> {
+        if !prob.is_finite() || prob < 0.0 {
+            return Err(MarkovError::InvalidProbability { value: prob });
+        }
         let (states, observations) = (self.states, self.observations);
-        let slot = self
+        let row = self
             .emission
             .get_mut(state)
-            .and_then(|row| row.get_mut(observation))
-            .unwrap_or_else(|| {
-                panic!(
-                    "set_emission: ({state}, {observation}) is out of range for \
-                         {states} states and {observations} symbols"
-                )
-            });
-        *slot = prob;
+            .ok_or(MarkovError::StateOutOfRange { state, states })?;
+        row.get_mut(observation)
+            .ok_or(MarkovError::ObservationOutOfRange {
+                observation,
+                observations,
+            })?;
+        self.emission[state][observation] = prob;
+        Ok(())
     }
 
     /// Rescale the initial distribution and every transition and emission row
@@ -605,13 +665,6 @@ fn argmax(values: &[f64]) -> (usize, f64) {
     (best_index, best_value)
 }
 
-fn check_prob(prob: f64) {
-    assert!(
-        prob.is_finite() && prob >= 0.0,
-        "{prob} is not a valid probability"
-    );
-}
-
 fn normalize_or_uniform(row: &mut [f64]) {
     if row.is_empty() {
         return;
@@ -725,9 +778,71 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "out of range")]
+    fn try_setters_reject_bad_input() {
+        let mut model = Hmm::new(2, 2);
+        assert_eq!(
+            model.try_set_initial(2, 0.5).unwrap_err(),
+            MarkovError::StateOutOfRange {
+                state: 2,
+                states: 2
+            }
+        );
+        assert!(matches!(
+            model.try_set_initial(0, -0.5).unwrap_err(),
+            MarkovError::InvalidProbability { .. }
+        ));
+
+        assert_eq!(
+            model.try_set_transition(2, 0, 0.5).unwrap_err(),
+            MarkovError::StateOutOfRange {
+                state: 2,
+                states: 2
+            }
+        );
+        assert_eq!(
+            model.try_set_transition(0, 2, 0.5).unwrap_err(),
+            MarkovError::StateOutOfRange {
+                state: 2,
+                states: 2
+            }
+        );
+        assert!(matches!(
+            model.try_set_transition(0, 0, f64::NAN).unwrap_err(),
+            MarkovError::InvalidProbability { .. }
+        ));
+
+        assert_eq!(
+            model.try_set_emission(2, 0, 0.5).unwrap_err(),
+            MarkovError::StateOutOfRange {
+                state: 2,
+                states: 2
+            }
+        );
+        assert_eq!(
+            model.try_set_emission(0, 2, 0.5).unwrap_err(),
+            MarkovError::ObservationOutOfRange {
+                observation: 2,
+                observations: 2
+            }
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "invalid argument")]
     fn set_emission_panics_on_bad_symbol() {
         Hmm::new(2, 2).set_emission(0, 7, 0.5);
+    }
+
+    #[test]
+    #[should_panic(expected = "invalid argument")]
+    fn set_initial_panics_on_bad_state() {
+        Hmm::new(2, 2).set_initial(5, 0.5);
+    }
+
+    #[test]
+    #[should_panic(expected = "invalid argument")]
+    fn set_transition_panics_on_bad_state() {
+        Hmm::new(2, 2).set_transition(5, 0, 0.5);
     }
 
     #[test]

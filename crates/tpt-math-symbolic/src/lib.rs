@@ -669,4 +669,75 @@ mod tests {
         let d = (x.clone() + y.clone()).derivative("y").simplify();
         assert_eq!(d.eval_str("x", 10.0).unwrap(), 1.0);
     }
+
+    #[test]
+    fn div_by_one_simplifies() {
+        let x = Expr64::var("x");
+        let e = x.clone() / Expr64::from(1.0);
+        assert_eq!(e.simplify(), x);
+    }
+
+    #[test]
+    fn func_of_constant_simplifies() {
+        // sin(0) -> 0
+        let e = Expr64::func("sin", Expr64::from(0.0));
+        assert_eq!(e.simplify(), Expr64::from(0.0));
+    }
+
+    #[test]
+    fn pow_of_constant_simplifies() {
+        let e = Expr64::from(2.0).pow(10);
+        assert_eq!(e.simplify(), Expr64::from(1024.0));
+    }
+
+    #[test]
+    fn double_negation_cancels() {
+        let x = Expr64::var("x");
+        let e = -(-x.clone());
+        assert_eq!(e.simplify(), x);
+    }
+
+    #[test]
+    fn eval_undefined_variable_is_none() {
+        let x = Expr64::var("x");
+        assert_eq!(x.eval_str("y", 1.0), None);
+    }
+
+    #[test]
+    fn eval_divide_by_zero_is_none() {
+        let expr = Expr64::from(1.0) / Expr64::from(0.0);
+        assert_eq!(expr.eval(&HashMap::new()), None);
+    }
+
+    #[test]
+    fn derivative_quotient_rule() {
+        // d/dx (x / (x + 1)) = 1 / (x + 1)^2; at x = 1 this is 1/4.
+        let x = Expr64::var("x");
+        let e = x.clone() / (x.clone() + Expr64::from(1.0));
+        let d = e.derivative("x").simplify();
+        assert!((d.eval_str("x", 1.0).unwrap() - 0.25).abs() < 1e-9);
+    }
+
+    #[test]
+    fn derivative_cos() {
+        // d/dx cos(x) = -sin(x); at x = 0 this is 0.
+        let x = Expr64::var("x");
+        let d = Expr64::func("cos", x.clone()).derivative("x").simplify();
+        assert!(d.eval_str("x", 0.0).unwrap().abs() < 1e-9);
+    }
+
+    #[test]
+    fn derivative_ln() {
+        // d/dx ln(x) = 1/x; at x = 2 this is 0.5.
+        let x = Expr64::var("x");
+        let d = Expr64::func("ln", x.clone()).derivative("x").simplify();
+        assert!((d.eval_str("x", 2.0).unwrap() - 0.5).abs() < 1e-9);
+    }
+
+    #[test]
+    fn derivative_pow_zero_is_zero() {
+        let x = Expr64::var("x");
+        let d = x.clone().pow(0).derivative("x");
+        assert_eq!(d.simplify(), Expr64::from(0.0));
+    }
 }
