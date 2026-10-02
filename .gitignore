@@ -7,3 +7,5 @@ Thumbs.db
 .vscode/
 .idea/
 .kilo/
+# tpt-weave working state
+/.tpt-weave/
