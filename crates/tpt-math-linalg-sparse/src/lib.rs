@@ -475,7 +475,7 @@ fn to_csc_impl<T: Scalar + Copy>(
 /// length does not match `a.nrows()`. Returns [`SparseError::NotConverged`] if
 /// the method fails to reach `tol` within `max_iter` steps (or breaks down).
 #[cfg(feature = "alloc")]
-pub fn conjugate_gradient<T: Scalar + Copy>(
+pub fn conjugate_gradient<T: Scalar + Copy + 'static>(
     a: &CsrMatrix<T>,
     b: &DVector<T>,
     x0: Option<DVector<T>>,
@@ -528,7 +528,7 @@ pub fn conjugate_gradient<T: Scalar + Copy>(
 /// incompatible, and [`SparseError::NotConverged`] if the method does not reach
 /// `tol` within `max_iter` steps or encounters a breakdown.
 #[cfg(feature = "alloc")]
-pub fn bicgstab<T: Scalar + Copy>(
+pub fn bicgstab<T: Scalar + Copy + 'static>(
     a: &CsrMatrix<T>,
     b: &DVector<T>,
     x0: Option<DVector<T>>,

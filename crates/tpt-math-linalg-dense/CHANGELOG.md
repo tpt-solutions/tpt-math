@@ -9,6 +9,15 @@ and this project adheres to SemVer.
 
 ### Added
 
+- `as_slice` / `as_mut_slice` on `DVector` and `DMatrix` (column-major order for
+  matrices).
+- Optional `simd` feature (off by default): `DMatrix * DMatrix`,
+  `DMatrix * DVector`, `DVector::dot` and `DVector::norm` use `tpt-simd-blas` for
+  `f32`/`f64` (other scalars keep the generic loops). Sums reassociate, so
+  results can differ from the scalar loops by a few ulps. Requires `T: 'static`
+  for those operations and Rust 1.85+ (tpt-simd is edition 2024). `simd-runtime`
+  additionally detects AVX2+FMA at run time (no `-C target-cpu` needed).
+
 - `DVector<T>` / `DMatrix<T>` dense linear-algebra types, implemented in-house
   (column-major `Vec<T>` storage, no external backend).
 - Construction (`zeros`, `from_vec`, `from_row_slice`, `from_fn`, `from_diagonal`),

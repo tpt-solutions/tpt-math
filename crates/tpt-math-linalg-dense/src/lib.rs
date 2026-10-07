@@ -172,6 +172,16 @@ impl<T> DVector<T> {
     pub fn iter(&self) -> impl Iterator<Item = &T> {
         self.data.iter()
     }
+
+    /// The elements as a contiguous slice.
+    pub fn as_slice(&self) -> &[T] {
+        &self.data
+    }
+
+    /// The elements as a contiguous mutable slice.
+    pub fn as_mut_slice(&mut self) -> &mut [T] {
+        &mut self.data
+    }
 }
 
 impl<T> DMatrix<T> {
@@ -193,6 +203,17 @@ impl<T> DMatrix<T> {
     /// Iterate over all elements in column-major order.
     pub fn iter(&self) -> impl Iterator<Item = &T> {
         self.data.iter()
+    }
+
+    /// The elements as a contiguous column-major slice (`(i, j)` is at
+    /// `i + j * nrows`).
+    pub fn as_slice(&self) -> &[T] {
+        &self.data
+    }
+
+    /// The elements as a contiguous mutable column-major slice.
+    pub fn as_mut_slice(&mut self) -> &mut [T] {
+        &mut self.data
     }
 
     /// Column-major linear index of `(i, j)`.
@@ -229,15 +250,55 @@ impl<T> Index<(usize, usize)> for DMatrix<T> {
 // Norms / dot products (allocator-free)
 // ---------------------------------------------------------------------------
 
+#[cfg(not(feature = "simd"))]
 impl<T: Scalar> DVector<T> {
     /// The Euclidean (L2) norm.
     pub fn norm(&self) -> T {
-        let s = self.iter().fold(T::zero(), |acc, x| acc + (*x) * (*x));
-        s.sqrt()
+        self.norm_generic()
     }
 
     /// Dot product with another vector of the same length.
     pub fn dot(&self, other: &DVector<T>) -> T {
+        self.dot_generic(other)
+    }
+}
+
+/// With the `simd` feature, `f32`/`f64` vectors use `tpt-simd-blas` (reassociated
+/// sums; may differ from the scalar loop by a few ulps).
+#[cfg(feature = "simd")]
+impl<T: Scalar + 'static> DVector<T> {
+    /// The Euclidean (L2) norm.
+    pub fn norm(&self) -> T {
+        if let Some(v) = simd::as_f64(&self.data) {
+            return simd::from_f64(tpt_simd_blas::nrm2_f64(v));
+        }
+        if let Some(v) = simd::as_f32(&self.data) {
+            return simd::from_f32(tpt_simd_blas::nrm2_f32(v));
+        }
+        self.norm_generic()
+    }
+
+    /// Dot product with another vector of the same length.
+    pub fn dot(&self, other: &DVector<T>) -> T {
+        if self.len() == other.len() {
+            if let (Some(a), Some(b)) = (simd::as_f64(&self.data), simd::as_f64(&other.data)) {
+                return simd::from_f64(tpt_simd_blas::dot_f64(a, b));
+            }
+            if let (Some(a), Some(b)) = (simd::as_f32(&self.data), simd::as_f32(&other.data)) {
+                return simd::from_f32(tpt_simd_blas::dot_f32(a, b));
+            }
+        }
+        self.dot_generic(other)
+    }
+}
+
+impl<T: Scalar> DVector<T> {
+    fn norm_generic(&self) -> T {
+        let s = self.iter().fold(T::zero(), |acc, x| acc + (*x) * (*x));
+        s.sqrt()
+    }
+
+    fn dot_generic(&self, other: &DVector<T>) -> T {
         self.iter()
             .zip(other.iter())
             .fold(T::zero(), |acc, (a, b)| acc + (*a) * (*b))
@@ -400,42 +461,189 @@ impl<T: Scalar> Sub<T> for DMatrix<T> {
 // Matrix * matrix and matrix * vector
 // ---------------------------------------------------------------------------
 
-#[cfg(feature = "alloc")]
+#[cfg(all(feature = "alloc", not(feature = "simd")))]
 impl<T: Scalar> Mul<DMatrix<T>> for DMatrix<T> {
     type Output = DMatrix<T>;
     /// # Panics
     ///
     /// Panics if the inner dimensions do not match.
     fn mul(self, rhs: DMatrix<T>) -> DMatrix<T> {
-        let m = self.nrows;
-        let k = self.ncols;
-        let n = rhs.ncols;
-        DMatrix::from_fn(m, n, |i, j| {
-            let mut s = T::zero();
-            for kk in 0..k {
-                s = s + self[(i, kk)] * rhs[(kk, j)];
-            }
-            s
-        })
+        mul_matrix_generic(&self, &rhs)
     }
 }
 
-#[cfg(feature = "alloc")]
+#[cfg(all(feature = "alloc", not(feature = "simd")))]
 impl<T: Scalar> Mul<DVector<T>> for DMatrix<T> {
     type Output = DVector<T>;
     /// # Panics
     ///
     /// Panics if the matrix column count does not match the vector length.
     fn mul(self, rhs: DVector<T>) -> DVector<T> {
-        let m = self.nrows;
-        let k = self.ncols;
-        DVector::from_fn(m, |i| {
-            let mut s = T::zero();
-            for kk in 0..k {
-                s = s + self[(i, kk)] * rhs[kk];
-            }
-            s
-        })
+        mul_vector_generic(&self, &rhs)
+    }
+}
+
+/// With the `simd` feature, `f32`/`f64` products use `tpt-simd-blas` (blocked
+/// FMA `gemm`; sums reassociate, so results can differ from the scalar loop by a
+/// few ulps). Other scalar types use the generic loop.
+#[cfg(feature = "simd")]
+impl<T: Scalar + 'static> Mul<DMatrix<T>> for DMatrix<T> {
+    type Output = DMatrix<T>;
+    /// # Panics
+    ///
+    /// Panics if the inner dimensions do not match.
+    fn mul(self, rhs: DMatrix<T>) -> DMatrix<T> {
+        assert_eq!(
+            self.ncols, rhs.nrows,
+            "inner dimensions do not match: {}x{} * {}x{}",
+            self.nrows, self.ncols, rhs.nrows, rhs.ncols
+        );
+        let (m, k, n) = (self.nrows, self.ncols, rhs.ncols);
+        if let (Some(a), Some(b)) = (simd::as_f64(&self.data), simd::as_f64(&rhs.data)) {
+            let mut c = vec![0.0f64; m * n];
+            tpt_simd_blas::gemm_f64(
+                m,
+                n,
+                k,
+                1.0,
+                a,
+                m.max(1),
+                b,
+                k.max(1),
+                0.0,
+                &mut c,
+                m.max(1),
+            );
+            return DMatrix {
+                nrows: m,
+                ncols: n,
+                data: simd::vec_from_f64(c),
+            };
+        }
+        if let (Some(a), Some(b)) = (simd::as_f32(&self.data), simd::as_f32(&rhs.data)) {
+            let mut c = vec![0.0f32; m * n];
+            tpt_simd_blas::gemm_f32(
+                m,
+                n,
+                k,
+                1.0,
+                a,
+                m.max(1),
+                b,
+                k.max(1),
+                0.0,
+                &mut c,
+                m.max(1),
+            );
+            return DMatrix {
+                nrows: m,
+                ncols: n,
+                data: simd::vec_from_f32(c),
+            };
+        }
+        mul_matrix_generic(&self, &rhs)
+    }
+}
+
+#[cfg(feature = "simd")]
+impl<T: Scalar + 'static> Mul<DVector<T>> for DMatrix<T> {
+    type Output = DVector<T>;
+    /// # Panics
+    ///
+    /// Panics if the matrix column count does not match the vector length.
+    fn mul(self, rhs: DVector<T>) -> DVector<T> {
+        assert_eq!(
+            self.ncols,
+            rhs.len(),
+            "matrix has {} columns but vector has length {}",
+            self.ncols,
+            rhs.len()
+        );
+        let (m, n) = (self.nrows, self.ncols);
+        if let (Some(a), Some(x)) = (simd::as_f64(&self.data), simd::as_f64(&rhs.data)) {
+            let mut y = vec![0.0f64; m];
+            tpt_simd_blas::gemv_f64(m, n, 1.0, a, m.max(1), x, 0.0, &mut y);
+            return DVector {
+                data: simd::vec_from_f64(y),
+            };
+        }
+        if let (Some(a), Some(x)) = (simd::as_f32(&self.data), simd::as_f32(&rhs.data)) {
+            let mut y = vec![0.0f32; m];
+            tpt_simd_blas::gemv_f32(m, n, 1.0, a, m.max(1), x, 0.0, &mut y);
+            return DVector {
+                data: simd::vec_from_f32(y),
+            };
+        }
+        mul_vector_generic(&self, &rhs)
+    }
+}
+
+#[cfg(feature = "alloc")]
+fn mul_matrix_generic<T: Scalar>(a: &DMatrix<T>, b: &DMatrix<T>) -> DMatrix<T> {
+    let m = a.nrows;
+    let k = a.ncols;
+    let n = b.ncols;
+    DMatrix::from_fn(m, n, |i, j| {
+        let mut s = T::zero();
+        for kk in 0..k {
+            s = s + a[(i, kk)] * b[(kk, j)];
+        }
+        s
+    })
+}
+
+#[cfg(feature = "alloc")]
+fn mul_vector_generic<T: Scalar>(a: &DMatrix<T>, x: &DVector<T>) -> DVector<T> {
+    let m = a.nrows;
+    let k = a.ncols;
+    DVector::from_fn(m, |i| {
+        let mut s = T::zero();
+        for kk in 0..k {
+            s = s + a[(i, kk)] * x[kk];
+        }
+        s
+    })
+}
+
+/// `Any`-based `f32`/`f64` detection (safe; no `unsafe` needed).
+#[cfg(feature = "simd")]
+mod simd {
+    use alloc::boxed::Box;
+    use alloc::vec::Vec;
+    use core::any::Any;
+    use tpt_math_numeric::Scalar;
+
+    #[allow(clippy::ptr_arg)] // `Any` downcasting needs the concrete `Vec<T>`
+    pub(crate) fn as_f64<T: 'static>(v: &Vec<T>) -> Option<&[f64]> {
+        (v as &dyn Any)
+            .downcast_ref::<Vec<f64>>()
+            .map(|v| v.as_slice())
+    }
+    #[allow(clippy::ptr_arg)]
+    pub(crate) fn as_f32<T: 'static>(v: &Vec<T>) -> Option<&[f32]> {
+        (v as &dyn Any)
+            .downcast_ref::<Vec<f32>>()
+            .map(|v| v.as_slice())
+    }
+    pub(crate) fn vec_from_f64<T: 'static>(v: Vec<f64>) -> Vec<T> {
+        *(Box::new(v) as Box<dyn Any>)
+            .downcast::<Vec<T>>()
+            .unwrap_or_else(|_| unreachable!("checked by as_f64"))
+    }
+    pub(crate) fn vec_from_f32<T: 'static>(v: Vec<f32>) -> Vec<T> {
+        *(Box::new(v) as Box<dyn Any>)
+            .downcast::<Vec<T>>()
+            .unwrap_or_else(|_| unreachable!("checked by as_f32"))
+    }
+    pub(crate) fn from_f64<T: Scalar + 'static>(x: f64) -> T {
+        *(Box::new(x) as Box<dyn Any>)
+            .downcast::<T>()
+            .unwrap_or_else(|_| unreachable!("checked by as_f64"))
+    }
+    pub(crate) fn from_f32<T: Scalar + 'static>(x: f32) -> T {
+        *(Box::new(x) as Box<dyn Any>)
+            .downcast::<T>()
+            .unwrap_or_else(|_| unreachable!("checked by as_f32"))
     }
 }
 
@@ -699,5 +907,94 @@ mod tests {
         assert_eq!(d[(1, 1)], 3.0);
         assert_eq!(d[(2, 2)], 4.0);
         assert_eq!(d[(0, 1)], 0.0);
+    }
+}
+
+/// Checks the kernel-routed paths against the generic loops. These also run
+/// (trivially) without the `simd` feature, where both sides are the same code.
+#[cfg(all(test, feature = "alloc"))]
+mod simd_tests {
+    use super::*;
+
+    fn a_f64(i: usize, j: usize) -> f64 {
+        ((i * 7 + j * 3) % 17) as f64 * 0.25 - 2.0
+    }
+    fn b_f64(i: usize, j: usize) -> f64 {
+        ((i * 5 + j * 11) % 13) as f64 * 0.25 - 1.5
+    }
+
+    #[test]
+    fn matmul_f64_matches_generic() {
+        for &(m, k, n) in &[
+            (1, 1, 1),
+            (3, 5, 2),
+            (17, 9, 33),
+            (64, 64, 64),
+            (70, 130, 65),
+        ] {
+            let a = DMatrix::from_fn(m, k, a_f64);
+            let b = DMatrix::from_fn(k, n, b_f64);
+            let want = mul_matrix_generic(&a, &b);
+            let got = a * b;
+            assert_eq!((got.nrows(), got.ncols()), (m, n));
+            for (g, w) in got.iter().zip(want.iter()) {
+                assert!((g - w).abs() <= 1e-9 * (1.0 + w.abs()), "{g} vs {w}");
+            }
+        }
+    }
+
+    #[test]
+    fn matmul_f32_matches_generic() {
+        let a = DMatrix::from_fn(33, 21, |i, j| a_f64(i, j) as f32);
+        let b = DMatrix::from_fn(21, 40, |i, j| b_f64(i, j) as f32);
+        let want = mul_matrix_generic(&a, &b);
+        let got = a * b;
+        for (g, w) in got.iter().zip(want.iter()) {
+            assert!((g - w).abs() <= 1e-3 * (1.0 + w.abs()), "{g} vs {w}");
+        }
+    }
+
+    #[test]
+    fn matvec_dot_norm_match_generic() {
+        let a = DMatrix::from_fn(37, 29, a_f64);
+        let x = DVector::from_fn(29, |i| b_f64(i, 1));
+        let want = mul_vector_generic(&a, &x);
+        let got = a * x.clone();
+        for (g, w) in got.iter().zip(want.iter()) {
+            assert!((g - w).abs() <= 1e-9 * (1.0 + w.abs()));
+        }
+        let y = DVector::from_fn(29, |i| a_f64(i, 2));
+        assert!((x.dot(&y) - x.dot_generic(&y)).abs() <= 1e-9);
+        assert!((x.norm() - x.norm_generic()).abs() <= 1e-9);
+    }
+
+    #[test]
+    fn empty_and_degenerate_shapes() {
+        let a = DMatrix::<f64>::zeros(0, 3);
+        let b = DMatrix::<f64>::zeros(3, 4);
+        let c = a * b;
+        assert_eq!((c.nrows(), c.ncols()), (0, 4));
+        let a = DMatrix::<f64>::zeros(2, 0);
+        let b = DMatrix::<f64>::zeros(0, 3);
+        let c = a * b;
+        assert_eq!((c.nrows(), c.ncols()), (2, 3));
+        assert!(c.iter().all(|v| *v == 0.0));
+        assert_eq!(DVector::<f64>::from_vec(vec![]).norm(), 0.0);
+    }
+
+    #[test]
+    fn slices_expose_column_major_data() {
+        let m = DMatrix::from_row_slice(2, 2, &[1.0_f64, 2.0, 3.0, 4.0]);
+        assert_eq!(m.as_slice(), &[1.0, 3.0, 2.0, 4.0]);
+        let mut v = DVector::from_vec(vec![1.0_f64, 2.0]);
+        v.as_mut_slice()[1] = 5.0;
+        assert_eq!(v.as_slice(), &[1.0, 5.0]);
+    }
+
+    #[cfg(feature = "simd")]
+    #[test]
+    #[should_panic(expected = "inner dimensions")]
+    fn matmul_dimension_mismatch_panics() {
+        let _ = DMatrix::<f64>::zeros(2, 3) * DMatrix::<f64>::zeros(4, 2);
     }
 }

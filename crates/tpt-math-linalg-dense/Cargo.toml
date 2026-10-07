@@ -15,6 +15,9 @@ categories = ["mathematics", "science", "algorithms", "no-std"]
 
 [dependencies]
 tpt-math-numeric = { workspace = true, default-features = false }
+# Optional SIMD kernels (see the `simd` feature). Path dependency on the sibling
+# tpt-simd repo until tpt-simd is published; needs Rust 1.85+ (edition 2024).
+tpt-simd-blas = { path = "../../../tpt-simd/tpt-simd-blas", version = "0.1.0", optional = true, default-features = false, features = ["alloc"] }
 
 [features]
 default = ["std"]
@@ -22,6 +25,13 @@ default = ["std"]
 std = ["tpt-math-numeric/std", "alloc"]
 # Dynamic vectors/matrices always need an allocator.
 alloc = ["tpt-math-numeric/alloc"]
+# Route `DMatrix * DMatrix`, `DMatrix * DVector`, `DVector::dot` and `norm` to
+# tpt-simd-blas for `f32`/`f64` (other scalar types use the generic loops).
+# Off by default: results reassociate sums, so they can differ from the scalar
+# loops by a few ulps (tpt-simd ADR 0003, tier 2). Adds a `T: 'static` bound to
+# those operations. Enable `simd-runtime` to detect AVX2+FMA at run time.
+simd = ["alloc", "dep:tpt-simd-blas"]
+simd-runtime = ["simd", "tpt-simd-blas/runtime-dispatch"]
 
 [dev-dependencies]
 criterion = "0.5"
