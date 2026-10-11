@@ -1079,12 +1079,11 @@ tree.*
       (factor once, solve many RHS); flat storage instead of `Vec<Vec<_>>`;
       in-place `+=` / `axpy` / `*_into` operators
       Status: Partial: reusable `Lu` and the j-k-i matmul are done (`tpt-math-linalg-dense`). In-place operators are not. Dense storage is already a flat column-major `Vec`.
-- [ ] Sparse: `matvec_into`, in-place axpy in CG/BiCGSTAB, residual norm
+- [x] Sparse: `matvec_into`, in-place axpy in CG/BiCGSTAB, residual norm
       computed once per iteration, counting-sort transpose/convert
-      Status: Partial: `CsrMatrix::matvec_into` is done, and the residual norm is
-      already computed once per iteration. In-place axpy and counting-sort
-      conversion are not. `DVector` has no `IndexMut`, so the solver updates still
-      allocate.
+      Status: Done: `CsrMatrix::matvec_into`, residual norm once per iteration,
+      in-place axpy/xpay updates in CG and BiCGSTAB (slice-based, since `DVector`
+      has no `IndexMut`), and counting-sort COO→CSR/CSC conversion.
 - [x] `Kriging::predict`: factor once in `new` (currently O(n³) per call)
 - [x] HMM Viterbi: precompute log transition/emission matrices
 - [x] `tpt-math-exact` intervals: add/sub in 2 ops, not 12 BigRational clones
@@ -1122,10 +1121,11 @@ tree.*
       (`run_adaptive_metropolis`, which is multivariate) in `tpt-math-prob-bayes`,
       with split-R̂, effective sample size and self-normalised importance sampling
       (`diagnostics`).
-- [ ] ODE solvers (RK4/RK45), quadrature, root finding
-      Status: Partial: fixed-step RK4, adaptive Dormand–Prince 5(4) (`dopri5_integrate`),
-      composite Simpson, fixed and adaptive Gauss–Legendre quadrature, and bisection
-      and Brent root finding exist in `tpt-math-numeric`. Gauss–Kronrod is not.
+- [x] ODE solvers (RK4/RK45), quadrature, root finding
+      Status: Done: fixed-step RK4, adaptive Dormand–Prince 5(4) (`dopri5_integrate`),
+      composite Simpson, fixed and adaptive Gauss–Legendre, 15-point Gauss–Kronrod
+      (`gauss_kronrod_15`, `adaptive_gauss_kronrod`), and bisection and Brent root
+      finding in `tpt-math-numeric`.
 - [x] IIR / biquad / Butterworth filters in `signal-filter`
       Status: Done: RBJ biquads for lowpass, highpass, bandpass (constant 0 dB
       peak) and notch, plus Butterworth lowpass, highpass and bandpass cascades.

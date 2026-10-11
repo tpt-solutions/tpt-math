@@ -7,6 +7,11 @@ and this project adheres to SemVer.
 
 ## [Unreleased]
 
+### Changed
+
+- `conjugate_gradient` and `bicgstab` update their vectors in place and reuse work buffers, so their iteration loops no longer allocate.
+- COO→CSR/CSC conversion uses a two-pass stable counting sort (`O(nnz + n)`) instead of a comparison sort. Results are unchanged.
+
 ### Added
 
 - `gmres_right_preconditioned`: restarted GMRES with a caller-supplied right preconditioner `M⁻¹`. `gmres` is now this function with the identity preconditioner, so its behaviour is unchanged.

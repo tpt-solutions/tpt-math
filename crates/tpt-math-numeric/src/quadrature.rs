@@ -186,6 +186,183 @@ where
     Ok(l + r)
 }
 
+/// Kronrod extension nodes of the 15-point rule on `[−1, 1]` (QUADPACK
+/// `qk15`). Odd indices are the embedded 7-point Gauss nodes; index 7 is the
+/// centre.
+const GK15_NODES: [f64; 8] = [
+    0.9914553711208126,
+    0.9491079123427585,
+    0.8648644233597691,
+    0.7415311855993945,
+    0.5860872354676911,
+    0.4058451513773972,
+    0.20778495500789848,
+    0.0,
+];
+
+/// Kronrod weights matching [`GK15_NODES`].
+const GK15_WEIGHTS: [f64; 8] = [
+    0.022935322010529224,
+    0.06309209262997856,
+    0.10479001032225019,
+    0.14065325971552592,
+    0.1690047266392679,
+    0.19035057806478542,
+    0.20443294007529889,
+    0.20948214108472782,
+];
+
+/// Gauss weights for the embedded 7-point rule, at the odd Kronrod indices
+/// `1, 3, 5` and the centre `7`.
+const G7_WEIGHTS: [f64; 4] = [
+    0.1294849661688697,
+    0.27970539148927664,
+    0.3818300505051189,
+    0.4179591836734694,
+];
+
+/// The 15-point Gauss–Kronrod pair on `[a, b]`.
+///
+/// Returns `(kronrod, error)`. `kronrod` is the 15-point Kronrod estimate, which
+/// is exact for polynomials of degree 22 or less. `error` is `|K₁₅ − G₇|`, the
+/// difference from the embedded 7-point Gauss rule, and serves as the usual
+/// error estimate for an adaptive scheme.
+///
+/// # Examples
+///
+/// ```
+/// use tpt_math_numeric::quadrature::gauss_kronrod_15;
+///
+/// // ∫₀¹ eˣ dx = e − 1.
+/// let (v, err) = gauss_kronrod_15(f64::exp, 0.0, 1.0);
+/// assert!((v - (core::f64::consts::E - 1.0)).abs() < 1e-14);
+/// assert!(err < 1e-10);
+/// ```
+pub fn gauss_kronrod_15<F>(f: F, a: f64, b: f64) -> (f64, f64)
+where
+    F: Fn(f64) -> f64,
+{
+    let mid = 0.5 * (a + b);
+    let half = 0.5 * (b - a);
+    let centre = f(mid);
+    let mut kronrod = GK15_WEIGHTS[7] * centre;
+    let mut gauss = G7_WEIGHTS[3] * centre;
+    for j in 0..7 {
+        let x = half * GK15_NODES[j];
+        let pair = f(mid - x) + f(mid + x);
+        kronrod += GK15_WEIGHTS[j] * pair;
+        // Gauss nodes are the odd indices 1, 3, 5 (index 6 is Kronrod-only).
+        if j % 2 == 1 {
+            gauss += G7_WEIGHTS[j / 2] * pair;
+        }
+    }
+    (half * kronrod, (half * (kronrod - gauss)).abs())
+}
+
+/// Adaptive 15-point Gauss–Kronrod quadrature on `[a, b]`.
+///
+/// Each panel is integrated with [`gauss_kronrod_15`]. A panel is accepted when
+/// its error estimate is at most `tol`; otherwise it is bisected, to at most
+/// `max_depth` levels. As with [`adaptive_gauss_legendre`], `tol` applies per
+/// accepted panel.
+///
+/// # Errors
+///
+/// Returns [`QuadratureError::MaxDepth`] if a panel is still inaccurate at
+/// `max_depth` levels.
+///
+/// # Examples
+///
+/// ```
+/// use tpt_math_numeric::quadrature::adaptive_gauss_kronrod;
+///
+/// // ∫₀¹ 1/√x dx = 2, despite the integrable singularity at 0.
+/// let v = adaptive_gauss_kronrod(|x: f64| 1.0 / x.sqrt(), 0.0, 1.0, 1e-10, 60).unwrap();
+/// assert!((v - 2.0).abs() < 1e-8);
+/// ```
+pub fn adaptive_gauss_kronrod<F>(
+    f: F,
+    a: f64,
+    b: f64,
+    tol: f64,
+    max_depth: usize,
+) -> Result<f64, QuadratureError>
+where
+    F: Fn(f64) -> f64,
+{
+    adaptive_gk_panel(&f, a, b, tol, max_depth)
+}
+
+fn adaptive_gk_panel<F>(
+    f: &F,
+    a: f64,
+    b: f64,
+    tol: f64,
+    depth: usize,
+) -> Result<f64, QuadratureError>
+where
+    F: Fn(f64) -> f64,
+{
+    let (value, err) = gauss_kronrod_15(f, a, b);
+    if err <= tol {
+        return Ok(value);
+    }
+    if depth == 0 {
+        return Err(QuadratureError::MaxDepth);
+    }
+    let mid = 0.5 * (a + b);
+    let l = adaptive_gk_panel(f, a, mid, tol, depth - 1)?;
+    let r = adaptive_gk_panel(f, mid, b, tol, depth - 1)?;
+    Ok(l + r)
+}
+
+#[cfg(test)]
+mod gauss_kronrod_tests {
+    use super::*;
+
+    #[test]
+    fn kronrod_weights_sum_to_two() {
+        // Weights are on [−1, 1] over the full symmetric node set.
+        let total = GK15_WEIGHTS[7] + 2.0 * GK15_WEIGHTS[..7].iter().sum::<f64>();
+        assert!((total - 2.0).abs() < 1e-14, "{total}");
+        let gauss = G7_WEIGHTS[3] + 2.0 * G7_WEIGHTS[..3].iter().sum::<f64>();
+        assert!((gauss - 2.0).abs() < 1e-14, "{gauss}");
+    }
+
+    #[test]
+    fn exact_for_polynomials_up_to_degree_22() {
+        // ∫₋₁¹ xᵏ dx is 2/(k+1) for even k and 0 for odd k.
+        for k in 0..=22 {
+            let exact = if k % 2 == 0 {
+                2.0 / (k as f64 + 1.0)
+            } else {
+                0.0
+            };
+            let (v, _) = gauss_kronrod_15(|x: f64| x.powi(k), -1.0, 1.0);
+            assert!((v - exact).abs() < 1e-13, "degree {k}: {v} vs {exact}");
+        }
+    }
+
+    #[test]
+    fn error_estimate_vanishes_for_low_degree() {
+        // Both rules are exact through degree 13, so the estimate is ~0.
+        let (_, err) = gauss_kronrod_15(|x: f64| x.powi(12), -1.0, 1.0);
+        assert!(err < 1e-13, "{err}");
+    }
+
+    #[test]
+    fn adaptive_handles_integrable_endpoint_singularity() {
+        let v = adaptive_gauss_kronrod(|x: f64| 1.0 / x.sqrt(), 0.0, 1.0, 1e-10, 60).unwrap();
+        assert!((v - 2.0).abs() < 1e-8, "{v}");
+    }
+
+    #[test]
+    fn adaptive_reports_max_depth_when_budget_is_zero() {
+        let result = adaptive_gauss_kronrod(|x: f64| 1.0 / x.sqrt(), 0.0, 1.0, 1e-14, 0);
+        assert_eq!(result, Err(QuadratureError::MaxDepth));
+    }
+}
+
 #[cfg(test)]
 mod gauss_tests {
     use super::*;

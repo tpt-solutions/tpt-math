@@ -370,32 +370,68 @@ impl<T: Scalar> CscMatrix<T> {
 // Conversion helpers (duplicate-summing)
 // ---------------------------------------------------------------------------
 
-fn merge_triplets<T: Scalar + Copy>(
-    rows: &[usize],
-    cols: &[usize],
-    vals: &[T],
+/// Stable counting sort of `(row, col, value)` triplets by one of their
+/// indices: `key` selects the row (`0`) or column (`1`). Runs in `O(nnz + n)`.
+#[cfg(feature = "alloc")]
+fn bucket_by<T: Copy>(
+    entries: &[(usize, usize, T)],
+    key: impl Fn(&(usize, usize, T)) -> usize,
+    nkeys: usize,
 ) -> Vec<(usize, usize, T)> {
-    let mut entries: Vec<(usize, usize, T)> = Vec::with_capacity(rows.len());
-    for k in 0..rows.len() {
-        entries.push((rows[k], cols[k], vals[k]));
+    let mut offsets = vec![0usize; nkeys + 1];
+    for e in entries {
+        offsets[key(e) + 1] += 1;
     }
-    entries.sort_by(|a, b| a.0.cmp(&b.0).then_with(|| a.1.cmp(&b.1)));
-    let mut merged: Vec<(usize, usize, T)> = Vec::new();
-    let mut k = 0;
-    while k < entries.len() {
-        let (r, c, v) = (entries[k].0, entries[k].1, entries[k].2);
-        let mut summed = v;
-        let mut kk = k + 1;
-        while kk < entries.len() && entries[kk].0 == r && entries[kk].1 == c {
-            summed = summed + entries[kk].2;
-            kk += 1;
-        }
-        merged.push((r, c, summed));
-        k = kk;
+    for k in 0..nkeys {
+        offsets[k + 1] += offsets[k];
     }
-    merged
+    // Slots are pre-filled with a copy of the first entry (or left empty) and
+    // then overwritten, each at its bucket's running offset.
+    let mut out = match entries.first() {
+        Some(&first) => vec![first; entries.len()],
+        None => Vec::new(),
+    };
+    for e in entries {
+        let k = key(e);
+        out[offsets[k]] = *e;
+        offsets[k] += 1;
+    }
+    out
 }
 
+/// Sum adjacent entries with the same `(row, col)` in an input already grouped
+/// by `(outer, inner)` order. Returns the merged entries and, per outer index,
+/// how many survive.
+#[cfg(feature = "alloc")]
+fn merge_sorted<T: Scalar + Copy>(
+    sorted: &[(usize, usize, T)],
+    outer: impl Fn(&(usize, usize, T)) -> usize,
+    nouter: usize,
+) -> (Vec<(usize, usize, T)>, Vec<usize>) {
+    let mut merged: Vec<(usize, usize, T)> = Vec::with_capacity(sorted.len());
+    let mut counts = vec![0usize; nouter];
+    for &(r, c, v) in sorted {
+        match merged.last_mut() {
+            Some(last) if last.0 == r && last.1 == c => last.2 = last.2 + v,
+            _ => {
+                merged.push((r, c, v));
+                counts[outer(&(r, c, v))] += 1;
+            }
+        }
+    }
+    (merged, counts)
+}
+
+#[cfg(feature = "alloc")]
+fn zip_triplets<T: Copy>(rows: &[usize], cols: &[usize], vals: &[T]) -> Vec<(usize, usize, T)> {
+    rows.iter()
+        .zip(cols)
+        .zip(vals)
+        .map(|((&r, &c), &v)| (r, c, v))
+        .collect()
+}
+
+#[cfg(feature = "alloc")]
 fn to_csr_impl<T: Scalar + Copy>(
     nrows: usize,
     ncols: usize,
@@ -403,20 +439,21 @@ fn to_csr_impl<T: Scalar + Copy>(
     cols: &[usize],
     vals: &[T],
 ) -> CsrMatrix<T> {
-    let merged = merge_triplets(rows, cols, vals);
-    let mut counts = vec![0usize; nrows];
-    for (r, _, _) in &merged {
-        counts[*r] += 1;
-    }
+    // Column-bucket first, then stable row-bucket: the result is row-major with
+    // columns ascending inside each row, so duplicates are adjacent.
+    let entries = zip_triplets(rows, cols, vals);
+    let by_col = bucket_by(&entries, |e| e.1, ncols);
+    let by_row = bucket_by(&by_col, |e| e.0, nrows);
+    let (merged, counts) = merge_sorted(&by_row, |e| e.0, nrows);
     let mut row_ptr = vec![0usize; nrows + 1];
     for i in 0..nrows {
         row_ptr[i + 1] = row_ptr[i] + counts[i];
     }
     let mut col_idx = Vec::with_capacity(merged.len());
     let mut values = Vec::with_capacity(merged.len());
-    for (_, c, v) in &merged {
-        col_idx.push(*c);
-        values.push(*v);
+    for (_, c, v) in merged {
+        col_idx.push(c);
+        values.push(v);
     }
     CsrMatrix {
         nrows,
@@ -427,6 +464,7 @@ fn to_csr_impl<T: Scalar + Copy>(
     }
 }
 
+#[cfg(feature = "alloc")]
 fn to_csc_impl<T: Scalar + Copy>(
     nrows: usize,
     ncols: usize,
@@ -434,39 +472,20 @@ fn to_csc_impl<T: Scalar + Copy>(
     cols: &[usize],
     vals: &[T],
 ) -> CscMatrix<T> {
-    let n = rows.len();
-    let mut entries: Vec<(usize, usize, T)> = Vec::with_capacity(n);
-    for k in 0..n {
-        entries.push((rows[k], cols[k], vals[k]));
-    }
-    // Sort by (col, row) for CSC layout.
-    entries.sort_by(|a, b| a.1.cmp(&b.1).then_with(|| a.0.cmp(&b.0)));
-    let mut merged: Vec<(usize, usize, T)> = Vec::new();
-    let mut k = 0;
-    while k < entries.len() {
-        let (r, c, v) = (entries[k].0, entries[k].1, entries[k].2);
-        let mut summed = v;
-        let mut kk = k + 1;
-        while kk < entries.len() && entries[kk].1 == c && entries[kk].0 == r {
-            summed = summed + entries[kk].2;
-            kk += 1;
-        }
-        merged.push((r, c, summed));
-        k = kk;
-    }
-    let mut counts = vec![0usize; ncols];
-    for (_, c, _) in &merged {
-        counts[*c] += 1;
-    }
+    // Mirror image of `to_csr_impl`: row-bucket first, then stable column-bucket.
+    let entries = zip_triplets(rows, cols, vals);
+    let by_row = bucket_by(&entries, |e| e.0, nrows);
+    let by_col = bucket_by(&by_row, |e| e.1, ncols);
+    let (merged, counts) = merge_sorted(&by_col, |e| e.1, ncols);
     let mut col_ptr = vec![0usize; ncols + 1];
     for j in 0..ncols {
         col_ptr[j + 1] = col_ptr[j] + counts[j];
     }
     let mut row_idx = Vec::with_capacity(merged.len());
     let mut values = Vec::with_capacity(merged.len());
-    for (r, _, v) in &merged {
-        row_idx.push(*r);
-        values.push(*v);
+    for (r, _, v) in merged {
+        row_idx.push(r);
+        values.push(v);
     }
     CscMatrix {
         nrows,
@@ -520,9 +539,11 @@ pub fn conjugate_gradient<T: Scalar + Copy + 'static>(
         return Ok(x);
     }
     let mut p = r.clone();
+    // Work buffer reused across iterations: the loop allocates nothing.
+    let mut ap = DVector::zeros(n);
     let mut rs_old = r.dot(&r);
     for it in 0..max_iter {
-        let ap = a.matvec(&p)?;
+        a.matvec_into(p.as_slice(), ap.as_mut_slice())?;
         let p_ap = p.dot(&ap);
         // For SPD A, pᵀAp > 0 until convergence; anything else (including NaN)
         // means the method cannot continue.
@@ -530,8 +551,8 @@ pub fn conjugate_gradient<T: Scalar + Copy + 'static>(
             return Err(SparseError::Breakdown { iterations: it });
         }
         let alpha = rs_old / p_ap;
-        x = x.clone() + p.clone() * alpha;
-        r = r.clone() - ap * alpha;
+        axpy_slice(x.as_mut_slice(), alpha, p.as_slice());
+        axpy_slice(r.as_mut_slice(), -alpha, ap.as_slice());
         if r.norm() <= target {
             return Ok(x);
         }
@@ -540,7 +561,7 @@ pub fn conjugate_gradient<T: Scalar + Copy + 'static>(
             return Err(SparseError::Breakdown { iterations: it });
         }
         let beta = rs_new / rs_old;
-        p = r.clone() + p * beta;
+        xpay_slice(p.as_mut_slice(), beta, r.as_slice());
         rs_old = rs_new;
     }
     Err(SparseError::NotConverged {
@@ -585,8 +606,11 @@ pub fn bicgstab<T: Scalar + Copy + 'static>(
         return Ok(x);
     }
     let r0 = r.clone();
+    // Work buffers reused across iterations: the loop allocates nothing.
     let mut p = DVector::zeros(n);
     let mut v = DVector::zeros(n);
+    let mut s = DVector::zeros(n);
+    let mut t = DVector::zeros(n);
     let mut rho = T::one();
     let mut alpha = T::one();
     let mut omega = T::one();
@@ -596,21 +620,30 @@ pub fn bicgstab<T: Scalar + Copy + 'static>(
             return Err(SparseError::Breakdown { iterations: it });
         }
         let beta = (rho_new / rho) * (alpha / omega);
-        p = r.clone() + (p - v.clone() * omega) * beta;
-        let ap = a.matvec(&p)?;
-        v = ap.clone();
-        let r0_ap = r0.dot(&ap);
-        if r0_ap == T::zero() || !r0_ap.is_finite() {
+        // p = r + beta * (p - omega * v), using the previous v.
+        for ((pi, &vi), &ri) in p
+            .as_mut_slice()
+            .iter_mut()
+            .zip(v.as_slice())
+            .zip(r.as_slice())
+        {
+            *pi = ri + beta * (*pi - omega * vi);
+        }
+        a.matvec_into(p.as_slice(), v.as_mut_slice())?;
+        let r0_v = r0.dot(&v);
+        if r0_v == T::zero() || !r0_v.is_finite() {
             return Err(SparseError::Breakdown { iterations: it });
         }
-        alpha = rho_new / r0_ap;
-        let s = r.clone() - ap * alpha;
+        alpha = rho_new / r0_v;
+        // s = r - alpha * v
+        s.as_mut_slice().copy_from_slice(r.as_slice());
+        axpy_slice(s.as_mut_slice(), -alpha, v.as_slice());
         // Half-step exit: if s is already small enough, x + alpha·p is the answer.
         if s.norm() <= target {
-            x = x.clone() + p.clone() * alpha;
+            axpy_slice(x.as_mut_slice(), alpha, p.as_slice());
             return Ok(x);
         }
-        let t = a.matvec(&s)?;
+        a.matvec_into(s.as_slice(), t.as_mut_slice())?;
         let t_sq = t.dot(&t);
         if t_sq == T::zero() {
             return Err(SparseError::Breakdown { iterations: it });
@@ -619,8 +652,11 @@ pub fn bicgstab<T: Scalar + Copy + 'static>(
         if omega == T::zero() || !omega.is_finite() {
             return Err(SparseError::Breakdown { iterations: it });
         }
-        x = x.clone() + p.clone() * alpha + s.clone() * omega;
-        r = s.clone() - t.clone() * omega;
+        // x += alpha * p + omega * s; r = s - omega * t.
+        axpy_slice(x.as_mut_slice(), alpha, p.as_slice());
+        axpy_slice(x.as_mut_slice(), omega, s.as_slice());
+        r.as_mut_slice().copy_from_slice(s.as_slice());
+        axpy_slice(r.as_mut_slice(), -omega, t.as_slice());
         if r.norm() <= target {
             return Ok(x);
         }
@@ -641,6 +677,22 @@ fn slice_norm<T: Scalar + Copy>(v: &[T]) -> T {
 #[cfg(feature = "alloc")]
 fn slice_dot<T: Scalar + Copy>(a: &[T], b: &[T]) -> T {
     a.iter().zip(b).fold(T::zero(), |acc, (&x, &y)| acc + x * y)
+}
+
+/// In-place `y ← y + α·x`.
+#[cfg(feature = "alloc")]
+fn axpy_slice<T: Scalar + Copy>(y: &mut [T], alpha: T, x: &[T]) {
+    for (yi, &xi) in y.iter_mut().zip(x) {
+        *yi = *yi + alpha * xi;
+    }
+}
+
+/// In-place `y ← x + β·y` (the search-direction update in CG).
+#[cfg(feature = "alloc")]
+fn xpay_slice<T: Scalar + Copy>(y: &mut [T], beta: T, x: &[T]) {
+    for (yi, &xi) in y.iter_mut().zip(x) {
+        *yi = xi + beta * *yi;
+    }
 }
 
 /// Givens rotation `(c, s)` with `c·a + s·b = r` and `−s·a + c·b = 0`.
@@ -1602,6 +1654,57 @@ mod tests {
         assert_eq!(csc.col_ptr, vec![0, 2, 4]);
         assert_eq!(csc.row_idx, vec![0, 1, 0, 1]);
         assert_eq!(csc.values, vec![3.0, 9.0, 7.0, 5.0]);
+    }
+
+    #[test]
+    fn counting_sort_conversion_matches_dense_accumulation() {
+        // Unsorted triplets with duplicates in both row- and column-major order.
+        let entries = [
+            (2usize, 1usize, 1.5_f64),
+            (0, 3, 2.0),
+            (2, 1, -0.5),
+            (1, 0, 4.0),
+            (0, 0, 1.0),
+            (2, 3, 3.0),
+            (0, 3, 0.25),
+        ];
+        let (nrows, ncols) = (3, 4);
+        let mut dense = [[0.0_f64; 4]; 3];
+        for &(r, c, v) in &entries {
+            dense[r][c] += v;
+        }
+        let mut coo = CooMatrix::new(nrows, ncols);
+        for &(r, c, v) in &entries {
+            coo.push(r, c, v);
+        }
+        let csr = coo.to_csr();
+        let csc = coo.to_csc();
+        assert_eq!(csr.nnz(), 5);
+        assert_eq!(csc.nnz(), 5);
+        for (i, row) in dense.iter().enumerate() {
+            for (j, &expected) in row.iter().enumerate() {
+                let from_csr: f64 = csr
+                    .iter()
+                    .filter(|e| e.0 == i && e.1 == j)
+                    .map(|e| *e.2)
+                    .sum();
+                let from_csc: f64 = csc
+                    .iter()
+                    .filter(|e| e.0 == i && e.1 == j)
+                    .map(|e| *e.2)
+                    .sum();
+                assert_eq!(from_csr, expected, "CSR ({i},{j})");
+                assert_eq!(from_csc, expected, "CSC ({i},{j})");
+            }
+        }
+        // CSR stores columns ascending within each row.
+        let mut prev: Option<(usize, usize)> = None;
+        for (r, c, _) in csr.iter() {
+            if let Some((pr, pc)) = prev {
+                assert!(r > pr || (r == pr && c > pc), "order at ({r},{c})");
+            }
+            prev = Some((r, c));
+        }
     }
 
     #[test]
