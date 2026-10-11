@@ -350,6 +350,20 @@ fn fold_add<C: Coefficient>(items: Vec<Expr<C>>) -> Expr<C> {
             other => terms.push(other),
         }
     }
+    // Merge like terms (`2x + 3x` becomes `5x`), keeping first-seen order.
+    let mut groups: Vec<(C, Expr<C>)> = Vec::new();
+    for term in terms {
+        let (coef, base) = split_coefficient(term);
+        match groups.iter_mut().find(|(_, b)| *b == base) {
+            Some((acc, _)) => *acc = acc.clone() + coef,
+            None => groups.push((coef, base)),
+        }
+    }
+    let terms: Vec<Expr<C>> = groups
+        .into_iter()
+        .filter(|(c, _)| !c.is_zero_value())
+        .map(|(c, b)| join_coefficient(c, b))
+        .collect();
     if terms.is_empty() {
         return Expr::Const(const_acc);
     }
@@ -364,6 +378,36 @@ fn fold_add<C: Coefficient>(items: Vec<Expr<C>>) -> Expr<C> {
         result
     } else {
         Expr::Add(Box::new(Expr::Const(const_acc)), Box::new(result))
+    }
+}
+
+/// Splits a term into `(coefficient, base)` so that like terms can be merged.
+///
+/// `c·b` with a leading constant `c` gives `(c, b)`, `−t` gives `(−1, t)` (or
+/// the negated coefficient of `t`), and anything else gives `(1, term)`.
+fn split_coefficient<C: Coefficient>(term: Expr<C>) -> (C, Expr<C>) {
+    match term {
+        Expr::Mul(l, r) => match *l {
+            Expr::Const(c) => (c, *r),
+            other => (C::one(), Expr::Mul(Box::new(other), r)),
+        },
+        Expr::Neg(inner) => {
+            let (c, base) = split_coefficient(*inner);
+            (C::zero() - c, base)
+        }
+        other => (C::one(), other),
+    }
+}
+
+/// Rebuilds a term from a coefficient and base. The inverse of
+/// [`split_coefficient`] for coefficients other than `0`.
+fn join_coefficient<C: Coefficient>(coef: C, base: Expr<C>) -> Expr<C> {
+    if coef == C::one() {
+        base
+    } else if coef == C::from(-1.0) {
+        Expr::Neg(Box::new(base))
+    } else {
+        Expr::Mul(Box::new(Expr::Const(coef)), Box::new(base))
     }
 }
 
@@ -655,6 +699,47 @@ pub use exact::{ExprRational, Rational};
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn like_terms_merge_into_one_coefficient() {
+        let x = Expr64::var("x");
+        let e = (x.clone() + x.clone()).simplify();
+        assert_eq!(e, Expr64::constant(2.0) * x.clone());
+        let e = (Expr64::constant(2.0) * x.clone() + Expr64::constant(3.0) * x.clone()).simplify();
+        assert_eq!(e, Expr64::constant(5.0) * x.clone());
+    }
+
+    #[test]
+    fn like_terms_cancel_to_zero() {
+        let x = Expr64::var("x");
+        let e = (x.clone() - x.clone()).simplify();
+        assert_eq!(e, Expr64::constant(0.0));
+        let e = (x.clone() + Expr64::constant(2.0) * x.clone() - Expr64::constant(3.0) * x.clone())
+            .simplify();
+        assert_eq!(e, Expr64::constant(0.0));
+    }
+
+    #[test]
+    fn like_terms_merge_products_with_shared_factors() {
+        // x·y + 2·(x·y) = 3·(x·y).
+        let (x, y) = (Expr64::var("x"), Expr64::var("y"));
+        let xy = x.clone() * y.clone();
+        let e = (xy.clone() + Expr64::constant(2.0) * xy.clone()).simplify();
+        assert_eq!(e, Expr64::constant(3.0) * (x.clone() * y.clone()));
+    }
+
+    #[test]
+    fn like_term_merge_preserves_value() {
+        let x = Expr64::var("x");
+        let raw = x.clone() * x.clone() + Expr64::func("sin", x.clone()) * Expr64::constant(2.0)
+            - x.clone() * x.clone() * Expr64::constant(0.5);
+        let simplified = raw.clone().simplify();
+        for &value in &[-1.3, 0.0, 0.7, 2.5] {
+            let want = raw.eval_str("x", value).unwrap();
+            let got = simplified.eval_str("x", value).unwrap();
+            assert!((got - want).abs() < 1e-12, "x = {value}: {got} vs {want}");
+        }
+    }
 
     #[test]
     fn const_folding() {
