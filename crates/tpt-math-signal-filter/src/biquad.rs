@@ -39,19 +39,53 @@ impl Biquad {
     ///
     /// Returns `None` if `cutoff` is outside `(0, 0.5)` or `q` is not positive.
     pub fn lowpass(cutoff: f64, q: f64) -> Option<Self> {
-        // Written as accepting conditions so that NaN inputs are rejected.
-        let cutoff_ok = cutoff > 0.0 && cutoff < 0.5;
-        let q_ok = q > 0.0;
-        if !cutoff_ok || !q_ok {
-            return None;
-        }
-        let w0 = 2.0 * PI * cutoff;
-        let (sin_w, cos_w) = (w0.sin(), w0.cos());
-        let alpha = sin_w / (2.0 * q);
+        let (cos_w, alpha) = rbj_terms(cutoff, q)?;
         let a0 = 1.0 + alpha;
         let b0 = (1.0 - cos_w) / 2.0 / a0;
         Some(Biquad::new(
             [b0, (1.0 - cos_w) / a0, b0],
+            [-2.0 * cos_w / a0, (1.0 - alpha) / a0],
+        ))
+    }
+
+    /// Second-order high-pass section (RBJ audio-EQ cookbook form).
+    ///
+    /// Same parameters and `None` conditions as [`Biquad::lowpass`].
+    pub fn highpass(cutoff: f64, q: f64) -> Option<Self> {
+        let (cos_w, alpha) = rbj_terms(cutoff, q)?;
+        let a0 = 1.0 + alpha;
+        let b0 = (1.0 + cos_w) / 2.0 / a0;
+        Some(Biquad::new(
+            [b0, -(1.0 + cos_w) / a0, b0],
+            [-2.0 * cos_w / a0, (1.0 - alpha) / a0],
+        ))
+    }
+
+    /// Second-order band-pass section with constant 0 dB peak gain (RBJ).
+    ///
+    /// `center` is the centre frequency in cycles per sample, and `q` sets the
+    /// bandwidth: a larger `q` gives a narrower band. The response is exactly 1
+    /// at `center` and 0 at DC and Nyquist.
+    ///
+    /// Returns `None` for an out-of-range `center` or a non-positive `q`.
+    pub fn bandpass(center: f64, q: f64) -> Option<Self> {
+        let (cos_w, alpha) = rbj_terms(center, q)?;
+        let a0 = 1.0 + alpha;
+        Some(Biquad::new(
+            [alpha / a0, 0.0, -alpha / a0],
+            [-2.0 * cos_w / a0, (1.0 - alpha) / a0],
+        ))
+    }
+
+    /// Second-order notch (band-reject) section (RBJ).
+    ///
+    /// The response is exactly 0 at `center` and 1 at DC and Nyquist. The
+    /// parameters are as for [`Biquad::bandpass`].
+    pub fn notch(center: f64, q: f64) -> Option<Self> {
+        let (cos_w, alpha) = rbj_terms(center, q)?;
+        let a0 = 1.0 + alpha;
+        Some(Biquad::new(
+            [1.0 / a0, -2.0 * cos_w / a0, 1.0 / a0],
             [-2.0 * cos_w / a0, (1.0 - alpha) / a0],
         ))
     }
@@ -90,6 +124,21 @@ impl Biquad {
     }
 }
 
+/// Shared RBJ terms `(cos ω₀, α)` for a section at `frequency` (cycles per
+/// sample) and quality factor `q`, with `α = sin ω₀ / (2q)`.
+///
+/// Returns `None` unless `frequency` lies in `(0, 0.5)` and `q` is positive.
+/// The comparisons are written so that NaN is rejected.
+fn rbj_terms(frequency: f64, q: f64) -> Option<(f64, f64)> {
+    let frequency_ok = frequency > 0.0 && frequency < 0.5;
+    let q_ok = q > 0.0;
+    if !frequency_ok || !q_ok {
+        return None;
+    }
+    let w0 = 2.0 * PI * frequency;
+    Some((w0.cos(), w0.sin() / (2.0 * q)))
+}
+
 /// Butterworth low-pass filter of even `order` as a cascade of biquads.
 ///
 /// The poles sit on the unit circle of the analogue prototype, so the response
@@ -125,6 +174,42 @@ pub fn butterworth_lowpass(order: usize, cutoff: f64) -> Option<Vec<Biquad>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn highpass_blocks_dc_and_passes_high_frequencies() {
+        let hp = Biquad::highpass(0.1, 0.5).unwrap();
+        assert!(hp.magnitude(0.0) < 1e-12);
+        assert!((hp.magnitude(0.5) - 1.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn highpass_is_minus_3db_at_butterworth_cutoff() {
+        let hp = Biquad::highpass(0.1, core::f64::consts::FRAC_1_SQRT_2).unwrap();
+        assert!((hp.magnitude(0.1) - core::f64::consts::FRAC_1_SQRT_2).abs() < 1e-9);
+    }
+
+    #[test]
+    fn bandpass_has_unity_peak_at_center_and_rejects_dc() {
+        let bp = Biquad::bandpass(0.1, 5.0).unwrap();
+        assert!((bp.magnitude(0.1) - 1.0).abs() < 1e-9);
+        assert!(bp.magnitude(0.0) < 1e-12);
+        assert!(bp.magnitude(0.5) < 1e-12);
+    }
+
+    #[test]
+    fn notch_is_zero_at_center_and_unity_at_dc() {
+        let notch = Biquad::notch(0.1, 5.0).unwrap();
+        assert!(notch.magnitude(0.1) < 1e-9);
+        assert!((notch.magnitude(0.0) - 1.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn new_designs_reject_out_of_range_parameters() {
+        assert!(Biquad::highpass(0.0, 1.0).is_none());
+        assert!(Biquad::highpass(0.1, 0.0).is_none());
+        assert!(Biquad::bandpass(0.6, 1.0).is_none());
+        assert!(Biquad::notch(0.1, f64::NAN).is_none());
+    }
 
     #[test]
     fn lowpass_has_unity_dc_gain_and_rejects_nyquist() {
