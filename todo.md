@@ -1116,11 +1116,12 @@ tree.*
       independence, one-way ANOVA, Mann-Whitney, Wilcoxon signed-rank,
       two-sample KS, Bonferroni/Holm/Benjamini-Hochberg corrections, and a
       percentile bootstrap CI (`try_bootstrap_ci`).
-- [ ] Sampling: HMC, multivariate/adaptive Metropolis, R-hat/ESS
+- [x] Sampling: HMC, multivariate/adaptive Metropolis, R-hat/ESS
       diagnostics, self-normalised importance sampling + ESS
-      Status: Partial: `Metropolis` and HMC (`run_hmc`, unit mass) samplers exist in
-      `tpt-math-prob-bayes`, with split-R̂, effective sample size and self-normalised
-      importance sampling (`diagnostics`). Adaptive and multivariate Metropolis are not.
+      Status: Done: `Metropolis`, HMC (`run_hmc`, unit mass) and adaptive Metropolis
+      (`run_adaptive_metropolis`, which is multivariate) in `tpt-math-prob-bayes`,
+      with split-R̂, effective sample size and self-normalised importance sampling
+      (`diagnostics`).
 - [ ] ODE solvers (RK4/RK45), quadrature, root finding
       Status: Partial: fixed-step RK4, adaptive Dormand–Prince 5(4) (`dopri5_integrate`),
       composite Simpson, fixed and adaptive Gauss–Legendre quadrature, and bisection
