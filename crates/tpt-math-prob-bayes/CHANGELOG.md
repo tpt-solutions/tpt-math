@@ -8,6 +8,7 @@ All notable changes to this crate are documented here. Format based on
 
 ### Added
 
+- `adaptive` module: `run_adaptive_metropolis`, adaptive random-walk Metropolis with the Haario proposal covariance (`2.38²/d` scaling), adapted until a caller-chosen iteration and frozen afterwards.
 - `hmc` module: `run_hmc`, Hamiltonian Monte Carlo with a leapfrog integrator, unit mass matrix and a caller-supplied gradient.
 - `diagnostics` module: `split_r_hat` (split-R̂ across chains), `effective_sample_size` (Geyer initial positive sequence) and `importance_estimate` (self-normalised importance sampling with its ESS).
 

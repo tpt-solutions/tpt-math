@@ -55,6 +55,7 @@
 
 use core::fmt;
 
+pub mod adaptive;
 mod beta;
 pub mod diagnostics;
 mod gamma;
