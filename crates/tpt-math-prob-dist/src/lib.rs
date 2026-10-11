@@ -42,6 +42,11 @@ extern crate alloc;
 #[cfg(feature = "std")]
 extern crate std;
 
+/// Densities, probability mass functions, CDFs and quantiles. Needs `std`
+/// (the default) for the special functions in `tpt-math-prob-core`.
+#[cfg(feature = "std")]
+pub mod density;
+
 // Re-export the core randomness traits/types so consumers can depend on this
 // crate alone. We deliberately re-export `rand_distr` verbatim as well.
 pub use tpt_math_prob_core::{Distribution, Rng, Sampler, SplitMix64, Standard};

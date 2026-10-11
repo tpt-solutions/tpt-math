@@ -1,0 +1,303 @@
+//! Densities, probability mass functions, CDFs and quantiles.
+//!
+//! The sampling side of this crate ([`rand_distr`] wrappers) says nothing about
+//! the shape of a distribution. These free functions supply it, built on the
+//! special functions in [`tpt_math_prob_core::special`].
+//!
+//! Each function takes the distribution's parameters first, then the point.
+//! Invalid parameters (for example a non-positive scale) return `NaN`. Densities
+//! are `0` outside the support, and a `NaN` point returns `NaN`.
+//!
+//! # Examples
+//!
+//! ```
+//! use tpt_math_prob_dist::density::{normal_cdf, normal_quantile};
+//!
+//! assert!((normal_cdf(0.0, 1.0, 1.96) - 0.975_002_104_851_779_5).abs() < 1e-12);
+//! assert!((normal_quantile(0.0, 1.0, 0.975) - 1.959_963_984_540_054).abs() < 1e-9);
+//! ```
+
+use tpt_math_prob_core::special::{
+    gamma_p, gamma_q, ln_beta, ln_gamma, regularized_incomplete_beta, standard_normal_cdf,
+    standard_normal_pdf, standard_normal_quantile,
+};
+
+/// `true` for a strictly positive parameter. NaN is rejected.
+fn is_positive(x: f64) -> bool {
+    x > 0.0
+}
+
+/// `true` for a non-negative parameter. NaN is rejected.
+fn is_nonnegative(x: f64) -> bool {
+    x >= 0.0
+}
+
+/// `true` when `low < high`. NaN is rejected.
+fn is_ordered(low: f64, high: f64) -> bool {
+    low < high
+}
+
+/// Normal distribution with the given mean and standard deviation.
+pub fn normal_pdf(mean: f64, sd: f64, x: f64) -> f64 {
+    if !is_positive(sd) || !mean.is_finite() {
+        return f64::NAN;
+    }
+    standard_normal_pdf((x - mean) / sd) / sd
+}
+
+/// Cumulative distribution function of the normal distribution.
+pub fn normal_cdf(mean: f64, sd: f64, x: f64) -> f64 {
+    if !is_positive(sd) || !mean.is_finite() {
+        return f64::NAN;
+    }
+    standard_normal_cdf((x - mean) / sd)
+}
+
+/// Quantile (inverse CDF) of the normal distribution.
+pub fn normal_quantile(mean: f64, sd: f64, p: f64) -> f64 {
+    if !is_positive(sd) || !mean.is_finite() {
+        return f64::NAN;
+    }
+    mean + sd * standard_normal_quantile(p)
+}
+
+/// Exponential distribution with the given rate `λ`.
+pub fn exponential_pdf(rate: f64, x: f64) -> f64 {
+    if !is_positive(rate) {
+        return f64::NAN;
+    }
+    if x < 0.0 {
+        return 0.0;
+    }
+    rate * (-rate * x).exp()
+}
+
+/// Cumulative distribution function of the exponential distribution.
+pub fn exponential_cdf(rate: f64, x: f64) -> f64 {
+    if !is_positive(rate) {
+        return f64::NAN;
+    }
+    if x <= 0.0 {
+        return 0.0;
+    }
+    -(-rate * x).exp_m1()
+}
+
+/// Quantile of the exponential distribution, `-ln(1 - p) / λ`.
+pub fn exponential_quantile(rate: f64, p: f64) -> f64 {
+    if !is_positive(rate) || !(0.0..=1.0).contains(&p) {
+        return f64::NAN;
+    }
+    -(-p).ln_1p() / rate
+}
+
+/// Gamma distribution with the given shape `k` and scale `θ`.
+pub fn gamma_pdf(shape: f64, scale: f64, x: f64) -> f64 {
+    if !is_positive(shape) || !is_positive(scale) {
+        return f64::NAN;
+    }
+    if x < 0.0 {
+        return 0.0;
+    }
+    if x == 0.0 {
+        // The density at the origin is finite only for shape >= 1.
+        return if shape < 1.0 {
+            f64::INFINITY
+        } else if shape == 1.0 {
+            1.0 / scale
+        } else {
+            0.0
+        };
+    }
+    ((shape - 1.0) * x.ln() - x / scale - shape * scale.ln() - ln_gamma(shape)).exp()
+}
+
+/// Cumulative distribution function of the gamma distribution.
+pub fn gamma_cdf(shape: f64, scale: f64, x: f64) -> f64 {
+    if !is_positive(shape) || !is_positive(scale) {
+        return f64::NAN;
+    }
+    gamma_p(shape, x / scale)
+}
+
+/// Upper-tail probability `P(X > x)` of the gamma distribution.
+pub fn gamma_sf(shape: f64, scale: f64, x: f64) -> f64 {
+    if !is_positive(shape) || !is_positive(scale) {
+        return f64::NAN;
+    }
+    gamma_q(shape, x / scale)
+}
+
+/// Beta distribution on `[0, 1]` with shape parameters `a` and `b`.
+pub fn beta_pdf(a: f64, b: f64, x: f64) -> f64 {
+    if !is_positive(a) || !is_positive(b) {
+        return f64::NAN;
+    }
+    if !(0.0..=1.0).contains(&x) {
+        return if x.is_nan() { f64::NAN } else { 0.0 };
+    }
+    // The density is unbounded at an endpoint whose exponent is below one.
+    // Report zero at the endpoints for the regular cases, which is the usual
+    // convention for a density evaluated at a single point.
+    if x == 0.0 || x == 1.0 {
+        return 0.0;
+    }
+    ((a - 1.0) * x.ln() + (b - 1.0) * (-x).ln_1p() - ln_beta(a, b)).exp()
+}
+
+/// Cumulative distribution function of the beta distribution.
+pub fn beta_cdf(a: f64, b: f64, x: f64) -> f64 {
+    regularized_incomplete_beta(a, b, x)
+}
+
+/// Uniform distribution on `[low, high]`.
+pub fn uniform_pdf(low: f64, high: f64, x: f64) -> f64 {
+    if !is_ordered(low, high) {
+        return f64::NAN;
+    }
+    if (low..=high).contains(&x) {
+        1.0 / (high - low)
+    } else if x.is_nan() {
+        f64::NAN
+    } else {
+        0.0
+    }
+}
+
+/// Cumulative distribution function of the uniform distribution.
+pub fn uniform_cdf(low: f64, high: f64, x: f64) -> f64 {
+    if !is_ordered(low, high) {
+        return f64::NAN;
+    }
+    ((x - low) / (high - low)).clamp(0.0, 1.0)
+}
+
+/// Quantile of the uniform distribution.
+pub fn uniform_quantile(low: f64, high: f64, p: f64) -> f64 {
+    if !is_ordered(low, high) || !(0.0..=1.0).contains(&p) {
+        return f64::NAN;
+    }
+    low + p * (high - low)
+}
+
+/// Poisson probability mass at `k` for rate `λ`.
+pub fn poisson_pmf(lambda: f64, k: u64) -> f64 {
+    if !is_nonnegative(lambda) {
+        return f64::NAN;
+    }
+    if lambda == 0.0 {
+        return if k == 0 { 1.0 } else { 0.0 };
+    }
+    (k as f64 * lambda.ln() - lambda - ln_gamma(k as f64 + 1.0)).exp()
+}
+
+/// `P(X ≤ k)` for a Poisson variable with rate `λ`.
+pub fn poisson_cdf(lambda: f64, k: u64) -> f64 {
+    if !is_nonnegative(lambda) {
+        return f64::NAN;
+    }
+    // P(X ≤ k) = Q(k + 1, λ), the regularized upper incomplete gamma.
+    if lambda == 0.0 {
+        return 1.0;
+    }
+    gamma_q(k as f64 + 1.0, lambda)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn close(a: f64, b: f64, tol: f64) -> bool {
+        (a - b).abs() <= tol
+    }
+
+    #[test]
+    fn normal_matches_reference_values() {
+        assert!(close(
+            normal_pdf(0.0, 1.0, 0.0),
+            0.398_942_280_401_432_7,
+            1e-15
+        ));
+        assert!(close(
+            normal_cdf(0.0, 1.0, 1.96),
+            0.975_002_104_851_779_5,
+            1e-12
+        ));
+        assert!(close(normal_cdf(10.0, 2.0, 10.0), 0.5, 1e-15));
+        assert!(close(
+            normal_quantile(0.0, 1.0, 0.975),
+            1.959_963_984_540_054,
+            1e-9
+        ));
+        assert!(close(normal_quantile(5.0, 2.0, 0.5), 5.0, 1e-12));
+        assert!(normal_pdf(0.0, 0.0, 0.0).is_nan());
+    }
+
+    #[test]
+    fn exponential_closed_forms() {
+        assert!(close(exponential_pdf(1.0, 2.0), (-2.0f64).exp(), 1e-15));
+        assert!(close(
+            exponential_cdf(2.0, 1.0),
+            1.0 - (-2.0f64).exp(),
+            1e-15
+        ));
+        assert!(close(exponential_quantile(1.0, 0.5), 2f64.ln(), 1e-15));
+        assert_eq!(exponential_pdf(1.0, -1.0), 0.0);
+        assert!(exponential_quantile(1.0, 1.5).is_nan());
+    }
+
+    #[test]
+    fn gamma_reduces_to_exponential_and_known_densities() {
+        // Shape 1 is the exponential distribution with mean `scale`.
+        assert!(close(
+            gamma_cdf(1.0, 1.0, 2.0),
+            1.0 - (-2.0f64).exp(),
+            1e-13
+        ));
+        // Shape 2, scale 1: pdf(x) = x e^{-x}.
+        assert!(close(
+            gamma_pdf(2.0, 1.0, 3.0),
+            3.0 * (-3.0f64).exp(),
+            1e-14
+        ));
+        assert!(close(
+            gamma_cdf(2.0, 1.0, 3.0) + gamma_sf(2.0, 1.0, 3.0),
+            1.0,
+            1e-13
+        ));
+        assert!(gamma_pdf(0.0, 1.0, 1.0).is_nan());
+    }
+
+    #[test]
+    fn beta_known_values() {
+        // Beta(2, 2): pdf(x) = 6x(1-x), so pdf(0.5) = 1.5 and cdf(0.5) = 0.5.
+        assert!(close(beta_pdf(2.0, 2.0, 0.5), 1.5, 1e-13));
+        assert!(close(beta_cdf(2.0, 2.0, 0.5), 0.5, 1e-13));
+        // Beta(1, 1) is uniform on [0, 1].
+        assert!(close(beta_pdf(1.0, 1.0, 0.3), 1.0, 1e-13));
+        assert_eq!(beta_pdf(2.0, 2.0, 1.5), 0.0);
+    }
+
+    #[test]
+    fn uniform_closed_forms() {
+        assert!(close(uniform_pdf(0.0, 2.0, 1.0), 0.5, 1e-15));
+        assert_eq!(uniform_pdf(0.0, 2.0, 3.0), 0.0);
+        assert!(close(uniform_cdf(0.0, 2.0, 0.5), 0.25, 1e-15));
+        assert_eq!(uniform_cdf(0.0, 2.0, 5.0), 1.0);
+        assert!(close(uniform_quantile(0.0, 2.0, 0.5), 1.0, 1e-15));
+        assert!(uniform_pdf(2.0, 1.0, 1.5).is_nan());
+    }
+
+    #[test]
+    fn poisson_pmf_and_cdf() {
+        let e2 = (-2.0f64).exp();
+        assert!(close(poisson_pmf(2.0, 0), e2, 1e-15));
+        assert!(close(poisson_pmf(2.0, 2), 2.0 * e2, 1e-14));
+        assert!(close(poisson_cdf(2.0, 1), 3.0 * e2, 1e-13));
+        // The pmf sums to one: check the first terms reach the cdf.
+        let sum: f64 = (0..=20).map(|k| poisson_pmf(2.0, k)).sum();
+        assert!(close(sum, 1.0, 1e-12));
+        assert_eq!(poisson_pmf(0.0, 0), 1.0);
+        assert!(poisson_pmf(-1.0, 0).is_nan());
+    }
+}
