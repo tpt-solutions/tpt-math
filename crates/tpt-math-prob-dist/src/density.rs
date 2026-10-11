@@ -203,6 +203,97 @@ pub fn poisson_cdf(lambda: f64, k: u64) -> f64 {
     gamma_q(k as f64 + 1.0, lambda)
 }
 
+/// Density of Student's t distribution with `nu` degrees of freedom.
+pub fn student_t_pdf(nu: f64, x: f64) -> f64 {
+    if !is_positive(nu) {
+        return f64::NAN;
+    }
+    let log_norm =
+        ln_gamma((nu + 1.0) / 2.0) - ln_gamma(nu / 2.0) - 0.5 * (nu * core::f64::consts::PI).ln();
+    (log_norm - (nu + 1.0) / 2.0 * (x * x / nu).ln_1p()).exp()
+}
+
+/// Cumulative distribution function of Student's t distribution.
+///
+/// `P(T ≤ x) = 1 − ½·I_{ν/(ν+x²)}(ν/2, ½)` for `x ≥ 0`, by symmetry otherwise.
+/// The incomplete beta keeps the tail accurate.
+pub fn student_t_cdf(nu: f64, x: f64) -> f64 {
+    if !is_positive(nu) || x.is_nan() {
+        return f64::NAN;
+    }
+    if x.is_infinite() {
+        return if x > 0.0 { 1.0 } else { 0.0 };
+    }
+    let tail = 0.5 * regularized_incomplete_beta(nu / 2.0, 0.5, nu / (nu + x * x));
+    if x >= 0.0 {
+        1.0 - tail
+    } else {
+        tail
+    }
+}
+
+/// Density of the Cauchy distribution with location `x0` and scale `s`.
+pub fn cauchy_pdf(x0: f64, s: f64, x: f64) -> f64 {
+    if !is_positive(s) {
+        return f64::NAN;
+    }
+    let z = (x - x0) / s;
+    1.0 / (core::f64::consts::PI * s * (1.0 + z * z))
+}
+
+/// Cumulative distribution function of the Cauchy distribution,
+/// `½ + arctan((x − x₀)/s)/π`.
+pub fn cauchy_cdf(x0: f64, s: f64, x: f64) -> f64 {
+    if !is_positive(s) {
+        return f64::NAN;
+    }
+    0.5 + ((x - x0) / s).atan() / core::f64::consts::PI
+}
+
+/// Density of the chi-squared distribution with `k` degrees of freedom.
+///
+/// This is the gamma distribution with shape `k/2` and scale `2`.
+pub fn chi_squared_pdf(k: f64, x: f64) -> f64 {
+    gamma_pdf(k / 2.0, 2.0, x)
+}
+
+/// Cumulative distribution function of the chi-squared distribution.
+pub fn chi_squared_cdf(k: f64, x: f64) -> f64 {
+    gamma_cdf(k / 2.0, 2.0, x)
+}
+
+/// Mean and variance of Student's t, `(0, ν/(ν−2))`.
+///
+/// The mean is `NaN` for `ν ≤ 1`, where it does not exist. The variance is
+/// infinite for `1 < ν ≤ 2`, and `NaN` for `ν ≤ 1`.
+pub fn student_t_moments(nu: f64) -> (f64, f64) {
+    if !is_positive(nu) {
+        return (f64::NAN, f64::NAN);
+    }
+    if nu <= 1.0 {
+        return (f64::NAN, f64::NAN);
+    }
+    let variance = if nu > 2.0 {
+        nu / (nu - 2.0)
+    } else {
+        f64::INFINITY
+    };
+    (0.0, variance)
+}
+
+/// The Cauchy distribution has no finite mean or variance, so both are `NaN`.
+pub fn cauchy_moments() -> (f64, f64) {
+    (f64::NAN, f64::NAN)
+}
+
+/// Mean and variance of the chi-squared distribution, `(k, 2k)`.
+pub fn chi_squared_moments(k: f64) -> (f64, f64) {
+    if !is_positive(k) {
+        return (f64::NAN, f64::NAN);
+    }
+    (k, 2.0 * k)
+}
+
 /// Mean and variance of the normal distribution, `(μ, σ²)`.
 ///
 /// Returns `(NaN, NaN)` for invalid parameters.
@@ -254,6 +345,68 @@ pub fn poisson_moments(lambda: f64) -> (f64, f64) {
         return (f64::NAN, f64::NAN);
     }
     (lambda, lambda)
+}
+
+#[cfg(test)]
+mod family_tests {
+    use super::*;
+
+    #[test]
+    fn student_t_with_one_df_is_cauchy() {
+        // t(1) is the standard Cauchy: CDF(x) = ½ + atan(x)/π.
+        for &x in &[-3.0_f64, -0.5, 0.0, 0.8, 4.0] {
+            let want = 0.5 + x.atan() / core::f64::consts::PI;
+            assert!((student_t_cdf(1.0, x) - want).abs() < 1e-12, "x = {x}");
+        }
+    }
+
+    #[test]
+    fn student_t_known_values() {
+        // t(2) density at 0 is 1/(2√2).
+        assert!((student_t_pdf(2.0, 0.0) - 1.0 / (2.0 * 2f64.sqrt())).abs() < 1e-13);
+        assert!((student_t_cdf(4.0, 0.0) - 0.5).abs() < 1e-14);
+        // Two-sided 5% critical value with 4 df is 2.776445105.
+        assert!((student_t_cdf(4.0, 2.776_445_105) - 0.975).abs() < 1e-7);
+        assert!((student_t_cdf(4.0, -2.776_445_105) - 0.025).abs() < 1e-7);
+    }
+
+    #[test]
+    fn student_t_pdf_integrates_to_its_cdf() {
+        // Midpoint-rule integral of the density over [-2, 1.5] matches the CDF
+        // difference.
+        let (a, b, n) = (-2.0, 1.5, 4000);
+        let h = (b - a) / n as f64;
+        let integral: f64 = (0..n)
+            .map(|i| student_t_pdf(5.0, a + (i as f64 + 0.5) * h) * h)
+            .sum();
+        let diff = student_t_cdf(5.0, b) - student_t_cdf(5.0, a);
+        assert!((integral - diff).abs() < 1e-6, "{integral} vs {diff}");
+    }
+
+    #[test]
+    fn cauchy_closed_forms() {
+        assert!((cauchy_pdf(0.0, 1.0, 0.0) - 1.0 / core::f64::consts::PI).abs() < 1e-15);
+        assert!((cauchy_cdf(0.0, 1.0, 1.0) - 0.75).abs() < 1e-15);
+        assert!((cauchy_cdf(5.0, 2.0, 5.0) - 0.5).abs() < 1e-15);
+        assert!(cauchy_moments().0.is_nan());
+    }
+
+    #[test]
+    fn chi_squared_two_df_is_exponential() {
+        // χ²(2) is exponential with rate 1/2: CDF(x) = 1 − e^{−x/2}.
+        for &x in &[0.5, 2.0, 7.0] {
+            let want = 1.0 - (-x / 2.0f64).exp();
+            assert!((chi_squared_cdf(2.0, x) - want).abs() < 1e-13, "x = {x}");
+        }
+        assert_eq!(chi_squared_moments(3.0), (3.0, 6.0));
+    }
+
+    #[test]
+    fn student_t_moments_respect_existence() {
+        assert!(student_t_moments(0.5).0.is_nan());
+        assert!(student_t_moments(1.5).1.is_infinite());
+        assert_eq!(student_t_moments(5.0), (0.0, 5.0 / 3.0));
+    }
 }
 
 #[cfg(test)]
