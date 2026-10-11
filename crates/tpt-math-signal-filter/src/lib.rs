@@ -4,6 +4,6 @@ mod biquad;
 mod fir;
 mod window;
 
-pub use biquad::{butterworth_lowpass, Biquad};
+pub use biquad::{butterworth_highpass, butterworth_lowpass, Biquad};
 pub use fir::FirFilter;
 pub use window::{apply_window, bartlett, blackman, hamming, hanning, rectangular, Window};

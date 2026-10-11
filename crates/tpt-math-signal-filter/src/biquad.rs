@@ -171,9 +171,56 @@ pub fn butterworth_lowpass(order: usize, cutoff: f64) -> Option<Vec<Biquad>> {
         .collect()
 }
 
+/// Butterworth high-pass filter of even `order` as a cascade of biquads.
+///
+/// The same pole placement as [`butterworth_lowpass`], realised with high-pass
+/// sections. The response is maximally flat in the passband and equal to
+/// `1/√2` at `cutoff`.
+///
+/// Returns `None` under the same conditions as [`butterworth_lowpass`].
+///
+/// # Examples
+///
+/// ```
+/// use tpt_math_signal_filter::butterworth_highpass;
+///
+/// let sections = butterworth_highpass(4, 0.1).unwrap();
+/// let gain = |f: f64| sections.iter().map(|s| s.magnitude(f)).product::<f64>();
+/// assert!(gain(0.0) < 1e-9);
+/// assert!((gain(0.1) - core::f64::consts::FRAC_1_SQRT_2).abs() < 1e-9);
+/// ```
+pub fn butterworth_highpass(order: usize, cutoff: f64) -> Option<Vec<Biquad>> {
+    if order == 0 || order % 2 != 0 {
+        return None;
+    }
+    let n = order as f64;
+    (1..=order / 2)
+        .map(|k| {
+            let theta = PI * (2 * k - 1) as f64 / (2.0 * n);
+            Biquad::highpass(cutoff, 1.0 / (2.0 * theta.cos()))
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn butterworth_highpass_is_minus_3db_and_flat_in_passband() {
+        let sections = butterworth_highpass(4, 0.1).unwrap();
+        let gain = |f: f64| sections.iter().map(|s| s.magnitude(f)).product::<f64>();
+        assert!((gain(0.1) - core::f64::consts::FRAC_1_SQRT_2).abs() < 1e-9);
+        assert!(gain(0.0) < 1e-9);
+        // Passband is flat: the gain at Nyquist is one.
+        assert!((gain(0.5) - 1.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn butterworth_highpass_rejects_bad_order() {
+        assert!(butterworth_highpass(0, 0.1).is_none());
+        assert!(butterworth_highpass(3, 0.1).is_none());
+    }
 
     #[test]
     fn highpass_blocks_dc_and_passes_high_frequencies() {
