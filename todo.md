@@ -1087,7 +1087,9 @@ tree.*
       allocate.
 - [x] `Kriging::predict`: factor once in `new` (currently O(n³) per call)
 - [x] HMM Viterbi: precompute log transition/emission matrices
-- [ ] `tpt-math-exact` intervals: add/sub in 2 ops, not 12 BigRational clones
+- [x] `tpt-math-exact` intervals: add/sub in 2 ops, not 12 BigRational clones
+      Status: Done for add/sub (two endpoint operations each). Multiplication still
+      uses the four-corner rule, which is needed for mixed signs.
 - [ ] `tpt-math-signal-filter`: FFT overlap-add for long FIR kernels; real-FFT
       path in `signal-fft`
 - [ ] Optional `rayon` feature: Monte Carlo, FIR, GEMM
@@ -1125,7 +1127,7 @@ tree.*
       `tpt-math-numeric`. Higher-order quadrature (e.g. Gauss–Kronrod) is not.
 - [ ] IIR / biquad / Butterworth filters in `signal-filter`
       Status: Partial: RBJ biquads for lowpass, highpass, bandpass (constant 0 dB
-      peak) and notch, plus a Butterworth lowpass cascade. Butterworth highpass and
+      peak) and notch, plus Butterworth lowpass and highpass cascades. Butterworth
       bandpass cascades are not.
 - [ ] Sparse LU/Cholesky, Jacobi/ILU/IC preconditioners, GMRES
       Status: Partial: restarted GMRES (`gmres`) and Jacobi-preconditioned CG
@@ -1139,8 +1141,8 @@ tree.*
       distribution-specific quantiles for Gamma/Beta/Poisson are not.
 - [ ] `symbolic`: like-term collection, more functions
       Status: Partial: `x/x` (taken as 1, undefined at 0), `x^0`, `x^1`, nested
-      powers and fixpoint simplification are done. Like-term collection and
-      additional functions are not.
+      powers, fixpoint simplification and like-term collection are done. Additional
+      functions are not.
 - [ ] `tpt-math-linalg` wrappers: `Mat * scalar`, `Vec` dot/norm, solve,
       by-reference operator forms
 
