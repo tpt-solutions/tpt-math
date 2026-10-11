@@ -159,8 +159,10 @@ impl Normal {
 
 impl ContinuousCDF for Normal {
     fn cdf(&self, x: f64) -> f64 {
+        // Φ(x) = erfc(-z)/2. Using 0.5 * (1 + erf(z)) would cancel to 0 in the
+        // left tail.
         let z = (x - self.mu) / (self.sigma * std::f64::consts::SQRT_2);
-        0.5 * (1.0 + crate::special::erf(z))
+        0.5 * crate::special::erfc(-z)
     }
 
     fn sf(&self, x: f64) -> f64 {
@@ -172,6 +174,16 @@ impl ContinuousCDF for Normal {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn normal_cdf_keeps_left_tail_precision() {
+        // Φ(-10) = 7.619853024160527e-24. Computing 0.5 * (1 + erf(z)) cancels
+        // to exactly 0 here, so the lower tail must come from erfc instead.
+        let n = Normal::new(0.0, 1.0).unwrap();
+        let want = 7.619_853_024_160_527e-24;
+        let got = n.cdf(-10.0);
+        assert!(((got - want) / want).abs() < 1e-8, "cdf(-10) = {got}");
+    }
 
     #[test]
     fn chi_squared_survival_matches_erfc_df1() {

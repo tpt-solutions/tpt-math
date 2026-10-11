@@ -27,6 +27,14 @@
 
 pub use tpt_math_numeric as numeric;
 
+// The `special` module uses `f64` transcendental methods, which live in `std`.
+#[cfg(feature = "std")]
+extern crate std;
+
+/// Special functions (log-gamma, incomplete gamma/beta, erf, normal CDF).
+#[cfg(feature = "std")]
+pub mod special;
+
 /// A source of pseudo-random bits.
 ///
 /// Implementors must provide [`next_u64`](Rng::next_u64); [`next_f64`] is
