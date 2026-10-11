@@ -203,6 +203,83 @@ pub fn poisson_cdf(lambda: f64, k: u64) -> f64 {
     gamma_q(k as f64 + 1.0, lambda)
 }
 
+/// Mean and variance of the normal distribution, `(μ, σ²)`.
+///
+/// Returns `(NaN, NaN)` for invalid parameters.
+pub fn normal_moments(mean: f64, sd: f64) -> (f64, f64) {
+    if !is_positive(sd) || !mean.is_finite() {
+        return (f64::NAN, f64::NAN);
+    }
+    (mean, sd * sd)
+}
+
+/// Mean and variance of the exponential distribution, `(1/λ, 1/λ²)`.
+pub fn exponential_moments(rate: f64) -> (f64, f64) {
+    if !is_positive(rate) {
+        return (f64::NAN, f64::NAN);
+    }
+    (1.0 / rate, 1.0 / (rate * rate))
+}
+
+/// Mean and variance of the gamma distribution, `(kθ, kθ²)`.
+pub fn gamma_moments(shape: f64, scale: f64) -> (f64, f64) {
+    if !is_positive(shape) || !is_positive(scale) {
+        return (f64::NAN, f64::NAN);
+    }
+    (shape * scale, shape * scale * scale)
+}
+
+/// Mean and variance of the beta distribution,
+/// `(a/(a+b), ab/((a+b)²(a+b+1)))`.
+pub fn beta_moments(a: f64, b: f64) -> (f64, f64) {
+    if !is_positive(a) || !is_positive(b) {
+        return (f64::NAN, f64::NAN);
+    }
+    let s = a + b;
+    (a / s, a * b / (s * s * (s + 1.0)))
+}
+
+/// Mean and variance of the uniform distribution on `[low, high]`.
+pub fn uniform_moments(low: f64, high: f64) -> (f64, f64) {
+    if !is_ordered(low, high) {
+        return (f64::NAN, f64::NAN);
+    }
+    let width = high - low;
+    (0.5 * (low + high), width * width / 12.0)
+}
+
+/// Mean and variance of the Poisson distribution, both `λ`.
+pub fn poisson_moments(lambda: f64) -> (f64, f64) {
+    if !is_nonnegative(lambda) {
+        return (f64::NAN, f64::NAN);
+    }
+    (lambda, lambda)
+}
+
+#[cfg(test)]
+mod moment_tests {
+    use super::*;
+
+    #[test]
+    fn moments_match_closed_forms() {
+        assert_eq!(normal_moments(1.0, 2.0), (1.0, 4.0));
+        assert_eq!(exponential_moments(2.0), (0.5, 0.25));
+        assert_eq!(gamma_moments(3.0, 2.0), (6.0, 12.0));
+        // Beta(2, 2): mean 1/2, variance 4/(16·5) = 1/20.
+        let (m, v) = beta_moments(2.0, 2.0);
+        assert!((m - 0.5).abs() < 1e-15 && (v - 0.05).abs() < 1e-15);
+        assert_eq!(uniform_moments(0.0, 2.0), (1.0, 1.0 / 3.0));
+        assert_eq!(poisson_moments(4.0), (4.0, 4.0));
+    }
+
+    #[test]
+    fn invalid_parameters_give_nan_moments() {
+        let (m, v) = gamma_moments(-1.0, 1.0);
+        assert!(m.is_nan() && v.is_nan());
+        assert!(uniform_moments(1.0, 1.0).0.is_nan());
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
