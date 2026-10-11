@@ -6,6 +6,10 @@ All notable changes to this crate are documented here. Format based on
 
 ## [Unreleased]
 
+- `Mat<U, V>` scalar `*` and `/`.
+- `Vec::norm` and `Vec::dot`. Both return a bare scalar: unit algebra for `U * U` is not modelled.
+- `Mat::solve` (`A x = b`, `x: Vec<V>`) and `Mat::inverse` (`Mat<V, U>`) for `f64`, with the dense backend's error on singular input.
+- By-reference `+`, `-` and `*` (`&Vec`, `&Mat`). These clone their operands.
 - **Storage backend swapped from `nalgebra` to `tpt-math-linalg-dense`.**
   `nalgebra` is Apache-2.0-only and disqualified as a wrap target by the
   workspace license policy (ADR-0007). `tpt-math-linalg-dense` is implemented

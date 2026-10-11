@@ -288,6 +288,139 @@ where
     }
 }
 
+macro_rules! impl_mat_scalar {
+    ($trait:ident, $fn:ident, $op:tt) => {
+        impl<U, V, T> $trait<T> for Mat<U, V, T>
+        where
+            T: Scalar + Clone,
+            DMatrix<T>: $trait<T, Output = DMatrix<T>>,
+        {
+            type Output = Mat<U, V, T>;
+            fn $fn(self, rhs: T) -> Mat<U, V, T> {
+                Mat::from_raw(self.raw $op rhs)
+            }
+        }
+    };
+}
+impl_mat_scalar!(Mul, mul, *);
+impl_mat_scalar!(Div, div, /);
+
+// By-reference operator forms. They clone the operands and delegate to the
+// owned impls, so they cost one copy per operand; the owned forms remain the
+// zero-copy path.
+macro_rules! impl_ref_binop {
+    ($type:ident, $trait:ident, $fn:ident, $op:tt) => {
+        impl<'a, U, T> $trait<&'a $type<U, T>> for &'a $type<U, T>
+        where
+            T: Scalar + Clone,
+            DVector<T>: $trait<Output = DVector<T>>,
+        {
+            type Output = $type<U, T>;
+            fn $fn(self, rhs: &'a $type<U, T>) -> $type<U, T> {
+                $type::from_raw(self.raw.clone() $op rhs.raw.clone())
+            }
+        }
+    };
+}
+impl_ref_binop!(Vec, Add, add, +);
+impl_ref_binop!(Vec, Sub, sub, -);
+
+impl<'a, U, V, T> Add<&'a Mat<U, V, T>> for &'a Mat<U, V, T>
+where
+    T: Scalar + Clone,
+    DMatrix<T>: Add<Output = DMatrix<T>>,
+{
+    type Output = Mat<U, V, T>;
+    fn add(self, rhs: &'a Mat<U, V, T>) -> Mat<U, V, T> {
+        Mat::from_raw(self.raw.clone() + rhs.raw.clone())
+    }
+}
+
+impl<'a, U, V, T> Sub<&'a Mat<U, V, T>> for &'a Mat<U, V, T>
+where
+    T: Scalar + Clone,
+    DMatrix<T>: Sub<Output = DMatrix<T>>,
+{
+    type Output = Mat<U, V, T>;
+    fn sub(self, rhs: &'a Mat<U, V, T>) -> Mat<U, V, T> {
+        Mat::from_raw(self.raw.clone() - rhs.raw.clone())
+    }
+}
+
+impl<'a, U, V, W, T> Mul<&'a Mat<V, W, T>> for &'a Mat<U, V, T>
+where
+    T: Scalar + Clone,
+    DMatrix<T>: Mul<DMatrix<T>, Output = DMatrix<T>>,
+{
+    type Output = Mat<U, W, T>;
+    fn mul(self, rhs: &'a Mat<V, W, T>) -> Mat<U, W, T> {
+        Mat::from_raw(self.raw.clone() * rhs.raw.clone())
+    }
+}
+
+impl<'a, U, V, T> Mul<&'a Vec<V, T>> for &'a Mat<U, V, T>
+where
+    T: Scalar + Clone,
+    DMatrix<T>: Mul<DVector<T>, Output = DVector<T>>,
+{
+    type Output = Vec<U, T>;
+    fn mul(self, rhs: &'a Vec<V, T>) -> Vec<U, T> {
+        Vec::from_raw(self.raw.clone() * rhs.raw.clone())
+    }
+}
+
+impl<U, T> Vec<U, T>
+where
+    T: Scalar + Clone + 'static,
+{
+    /// Euclidean (L2) norm.
+    ///
+    /// The result carries the unit `U` in its meaning, but is returned as a bare
+    /// scalar `T`: this crate does not model the unit algebra of `U * U`, so the
+    /// caller tags the result.
+    pub fn norm(&self) -> T {
+        self.raw.norm()
+    }
+
+    /// Dot product with a vector of the same unit.
+    ///
+    /// Returns a bare scalar `T` for the same reason as [`Vec::norm`]: the
+    /// product of two `U` quantities has unit `U²`, which is not modelled here.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the two vectors have different lengths.
+    pub fn dot(&self, other: &Vec<U, T>) -> T {
+        self.raw.dot(&other.raw)
+    }
+}
+
+impl<U, V> Mat<U, V, f64> {
+    /// Solve `A x = b` for `x` by LU factorisation, where `A` is `self`.
+    ///
+    /// `b` has the row unit `U` and the solution `x` has the column unit `V`,
+    /// so the solve is dimensionally consistent: `A: Mat<U, V>`, `x: Vec<V>`,
+    /// `b: Vec<U>`.
+    ///
+    /// # Errors
+    ///
+    /// Returns the dense backend's [`DenseError`](tpt_math_linalg_dense::DenseError)
+    /// for a non-square or singular matrix, or a length mismatch with `b`.
+    pub fn solve(&self, b: &Vec<U, f64>) -> Result<Vec<V, f64>, tpt_math_linalg_dense::DenseError> {
+        self.raw.solve(&b.raw).map(Vec::from_raw)
+    }
+
+    /// Inverse of a square matrix. Its rows carry the unit `V` and its columns
+    /// the unit `U`, mirroring [`Mat::transpose`].
+    ///
+    /// # Errors
+    ///
+    /// Returns the dense backend's error for a non-square or singular matrix.
+    pub fn inverse(&self) -> Result<Mat<V, U, f64>, tpt_math_linalg_dense::DenseError> {
+        self.raw.inverse().map(Mat::from_raw)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -384,6 +517,73 @@ mod tests {
         assert_eq!(a[2], 4.0);
         let empty = Vec::<Length>::from_raw(DVector::from_row_slice(&[]));
         assert!(empty.is_empty());
+    }
+
+    #[test]
+    fn mat_scalar_mul_div_keep_units() {
+        let m = Mat::<Length, Time>::from_raw(DMatrix::from_row_slice(1, 2, &[2.0_f64, 4.0]));
+        let doubled: Mat<Length, Time> = m.clone() * 2.0;
+        assert_eq!(doubled.raw(), &DMatrix::from_row_slice(1, 2, &[4.0, 8.0]));
+        let halved: Mat<Length, Time> = m / 2.0;
+        assert_eq!(halved.raw(), &DMatrix::from_row_slice(1, 2, &[1.0, 2.0]));
+    }
+
+    #[test]
+    fn by_reference_ops_match_owned_ops() {
+        let a = Vec::<Length>::from_raw(DVector::from_row_slice(&[1.0, 2.0]));
+        let b = Vec::<Length>::from_raw(DVector::from_row_slice(&[3.0, 5.0]));
+        assert_eq!(&a + &b, a.clone() + b.clone());
+        assert_eq!(&a - &b, a.clone() - b.clone());
+
+        let m = Mat::<Length, Time>::from_raw(DMatrix::from_row_slice(2, 2, &[1.0, 2.0, 3.0, 4.0]));
+        let n = Mat::<Length, Time>::from_raw(DMatrix::from_row_slice(2, 2, &[0.0, 1.0, 1.0, 0.0]));
+        assert_eq!(&m + &n, m.clone() + n.clone());
+        assert_eq!(&m - &n, m.clone() - n.clone());
+
+        let p = Mat::<Time, Length>::from_raw(DMatrix::from_row_slice(2, 2, &[1.0, 0.0, 0.0, 1.0]));
+        let prod: Mat<Length, Length> = &m * &p;
+        assert_eq!(prod, m.clone() * p.clone());
+
+        let v = Vec::<Time>::from_raw(DVector::from_row_slice(&[1.0, 1.0]));
+        let mv: Vec<Length> = &m * &v;
+        assert_eq!(mv, m * v);
+    }
+
+    #[test]
+    fn norm_and_dot() {
+        let a = Vec::<Length>::from_raw(DVector::from_row_slice(&[3.0_f64, 4.0]));
+        assert_eq!(a.norm(), 5.0);
+        let b = Vec::<Length>::from_raw(DVector::from_row_slice(&[1.0_f64, 2.0]));
+        assert_eq!(a.dot(&b), 11.0);
+    }
+
+    #[test]
+    fn solve_carries_row_and_column_units() {
+        // A: Length rows, Time columns; b: Length; x: Time.
+        let a =
+            Mat::<Length, Time>::from_raw(DMatrix::from_row_slice(2, 2, &[2.0_f64, 0.0, 0.0, 4.0]));
+        let b = Vec::<Length>::from_raw(DVector::from_row_slice(&[2.0, 8.0]));
+        let x: Vec<Time> = a.solve(&b).unwrap();
+        assert_eq!(x.raw(), &DVector::from_row_slice(&[1.0, 2.0]));
+    }
+
+    #[test]
+    fn solve_rejects_singular_matrix() {
+        let a =
+            Mat::<Length, Time>::from_raw(DMatrix::from_row_slice(2, 2, &[1.0_f64, 2.0, 2.0, 4.0]));
+        let b = Vec::<Length>::from_raw(DVector::from_row_slice(&[1.0, 1.0]));
+        assert!(a.solve(&b).is_err());
+    }
+
+    #[test]
+    fn inverse_swaps_unit_tags() {
+        let a =
+            Mat::<Length, Time>::from_raw(DMatrix::from_row_slice(2, 2, &[2.0_f64, 0.0, 0.0, 4.0]));
+        let inv: Mat<Time, Length> = a.inverse().unwrap();
+        assert_eq!(
+            inv.raw(),
+            &DMatrix::from_row_slice(2, 2, &[0.5, 0.0, 0.0, 0.25])
+        );
     }
 
     #[test]

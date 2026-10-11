@@ -1108,7 +1108,7 @@ tree.*
       Status: Done: gradient descent, nonlinear CG, Newton, L-BFGS, Nelder-Mead,
       finite-difference gradients (`numerical_gradient`), and a two-phase simplex
       LP (`linear_program::maximize`, Bland's rule).
-- [ ] Stats: quantiles, skew/kurtosis, covariance, pooled/paired t,
+- [x] Stats: quantiles, skew/kurtosis, covariance, pooled/paired t,
       Mann-Whitney, Wilcoxon, KS, ANOVA/F, chi-squared independence,
       bootstrap, multiple-comparison corrections
       Status: Done: quantiles (type 7), skewness, excess kurtosis, covariance,
@@ -1126,10 +1126,12 @@ tree.*
       Status: Partial: fixed-step RK4, adaptive Dormand–Prince 5(4) (`dopri5_integrate`),
       composite Simpson, fixed and adaptive Gauss–Legendre quadrature, and bisection
       and Brent root finding exist in `tpt-math-numeric`. Gauss–Kronrod is not.
-- [ ] IIR / biquad / Butterworth filters in `signal-filter`
-      Status: Partial: RBJ biquads for lowpass, highpass, bandpass (constant 0 dB
-      peak) and notch, plus Butterworth lowpass and highpass cascades. Butterworth
-      bandpass cascades are not.
+- [x] IIR / biquad / Butterworth filters in `signal-filter`
+      Status: Done: RBJ biquads for lowpass, highpass, bandpass (constant 0 dB
+      peak) and notch, plus Butterworth lowpass, highpass and bandpass cascades.
+      The bandpass is a high-pass stage cascaded with a low-pass stage, not an
+      LP→BP prototype transform, so its band edges are only approximately −3 dB
+      for narrow bands (documented).
 - [ ] Sparse LU/Cholesky, Jacobi/ILU/IC preconditioners, GMRES
       Status: Partial: restarted GMRES (`gmres`), Jacobi-preconditioned CG
       (`jacobi_preconditioned_cg`), sparse Cholesky (`SparseCholesky`, without
@@ -1145,8 +1147,11 @@ tree.*
       Status: Partial: `x/x` (taken as 1, undefined at 0), `x^0`, `x^1`, nested
       powers, fixpoint simplification and like-term collection are done. Additional
       functions are not.
-- [ ] `tpt-math-linalg` wrappers: `Mat * scalar`, `Vec` dot/norm, solve,
+- [x] `tpt-math-linalg` wrappers: `Mat * scalar`, `Vec` dot/norm, solve,
       by-reference operator forms
+      Status: Done: `Mat` scalar `*`/`/`, `Vec::norm`/`Vec::dot` (bare-scalar
+      results, units not modelled), `Mat::solve`/`Mat::inverse` (f64, unit-typed),
+      and `&`-operand forms for `+`/`-`/`*`. By-reference forms clone their operands.
 
 ### 7.4 Innovation (pick one or two)
 

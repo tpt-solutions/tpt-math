@@ -202,9 +202,70 @@ pub fn butterworth_highpass(order: usize, cutoff: f64) -> Option<Vec<Biquad>> {
         .collect()
 }
 
+/// Butterworth band-pass filter as a cascade of a high-pass and a low-pass
+/// Butterworth of the same even `order`.
+///
+/// The high-pass stage sits at `low` and the low-pass stage at `high` (both in
+/// cycles per sample). Each stage is a full Butterworth of `order`, so the
+/// stop-band rolls off on both sides at the rate of that order.
+///
+/// This is a cascade, not a band-pass prototype transform (LP→BP). Each stage's
+/// −3 dB point is at its own corner, so the gain at `low` is `1/√2` times the
+/// low-pass stage's gain there. That is about `1/√2` when `high` is well above
+/// `low`, and the band edges are not exactly −3 dB for narrow bands.
+///
+/// Returns `None` if `order` is zero or odd, or unless `0 < low < high < 0.5`.
+///
+/// # Examples
+///
+/// ```
+/// use tpt_math_signal_filter::butterworth_bandpass;
+///
+/// let sections = butterworth_bandpass(4, 0.05, 0.2).unwrap();
+/// let gain = |f: f64| sections.iter().map(|s| s.magnitude(f)).product::<f64>();
+/// assert!(gain(0.0) < 1e-9);
+/// assert!(gain(0.5) < 1e-9);
+/// assert!(gain(0.1) > 0.99);
+/// ```
+pub fn butterworth_bandpass(order: usize, low: f64, high: f64) -> Option<Vec<Biquad>> {
+    if !(low > 0.0 && low < high && high < 0.5) {
+        return None;
+    }
+    let mut sections = butterworth_highpass(order, low)?;
+    sections.extend(butterworth_lowpass(order, high)?);
+    Some(sections)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn butterworth_bandpass_has_minus_3db_at_each_edge() {
+        // Each edge sits in the other stage's passband, where that stage has
+        // gain ~1 (its corner is 4x away at order 4, so the error is < 1e-4).
+        let sections = butterworth_bandpass(4, 0.05, 0.2).unwrap();
+        let gain = |f: f64| sections.iter().map(|s| s.magnitude(f)).product::<f64>();
+        let target = core::f64::consts::FRAC_1_SQRT_2;
+        assert!(
+            (gain(0.05) - target).abs() < 1e-3,
+            "low edge {}",
+            gain(0.05)
+        );
+        assert!((gain(0.2) - target).abs() < 1e-3, "high edge {}", gain(0.2));
+    }
+
+    #[test]
+    fn butterworth_bandpass_rejects_dc_nyquist_and_bad_input() {
+        let sections = butterworth_bandpass(2, 0.1, 0.3).unwrap();
+        let gain = |f: f64| sections.iter().map(|s| s.magnitude(f)).product::<f64>();
+        assert!(gain(0.0) < 1e-9);
+        assert!(gain(0.5) < 1e-9);
+        assert!(butterworth_bandpass(3, 0.1, 0.3).is_none());
+        assert!(butterworth_bandpass(4, 0.3, 0.1).is_none());
+        assert!(butterworth_bandpass(4, 0.0, 0.3).is_none());
+        assert!(butterworth_bandpass(4, 0.1, 0.5).is_none());
+    }
 
     #[test]
     fn butterworth_highpass_is_minus_3db_and_flat_in_passband() {
