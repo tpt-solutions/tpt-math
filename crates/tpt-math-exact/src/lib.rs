@@ -172,8 +172,55 @@ macro_rules! impl_binop {
     };
 }
 
-impl_binop!(Add, add, add);
-impl_binop!(Sub, sub, sub);
+// Addition and subtraction need only two endpoint operations each. The
+// four-corner min/max used for products is unnecessary here: [a, b] + [c, d]
+// is [a + c, b + d] and [a, b] - [c, d] is [a - d, b - c].
+impl<T> core::ops::Add<&Interval<T>> for &Interval<T>
+where
+    T: Clone + Ord + core::ops::Add<Output = T>,
+{
+    type Output = Interval<T>;
+    fn add(self, rhs: &Interval<T>) -> Interval<T> {
+        Interval::new(
+            self.lo.clone() + rhs.lo.clone(),
+            self.hi.clone() + rhs.hi.clone(),
+        )
+    }
+}
+
+impl<T> core::ops::Add<Interval<T>> for Interval<T>
+where
+    T: Clone + Ord + core::ops::Add<Output = T>,
+{
+    type Output = Interval<T>;
+    fn add(self, rhs: Interval<T>) -> Interval<T> {
+        core::ops::Add::add(&self, &rhs)
+    }
+}
+
+impl<T> core::ops::Sub<&Interval<T>> for &Interval<T>
+where
+    T: Clone + Ord + core::ops::Sub<Output = T>,
+{
+    type Output = Interval<T>;
+    fn sub(self, rhs: &Interval<T>) -> Interval<T> {
+        Interval::new(
+            self.lo.clone() - rhs.hi.clone(),
+            self.hi.clone() - rhs.lo.clone(),
+        )
+    }
+}
+
+impl<T> core::ops::Sub<Interval<T>> for Interval<T>
+where
+    T: Clone + Ord + core::ops::Sub<Output = T>,
+{
+    type Output = Interval<T>;
+    fn sub(self, rhs: Interval<T>) -> Interval<T> {
+        core::ops::Sub::sub(&self, &rhs)
+    }
+}
+
 impl_binop!(Mul, mul, mul);
 
 #[cfg(test)]
@@ -186,6 +233,15 @@ mod tests {
     }
     fn iv(a: i64, b: i64) -> Interval<BigRational> {
         Interval::new(rat(a), rat(b))
+    }
+
+    #[test]
+    fn sub_endpoints_are_exact() {
+        // [1, 2] - [3, 5] = [1 - 5, 2 - 3] = [-4, -1].
+        let a = Interval::new(1i64, 2);
+        let b = Interval::new(3i64, 5);
+        assert_eq!(&a - &b, Interval::new(-4, -1));
+        assert_eq!(&a + &b, Interval::new(4, 7));
     }
 
     #[test]

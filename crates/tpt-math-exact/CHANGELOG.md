@@ -8,6 +8,7 @@ All notable changes to this crate are documented here. Format based on
 
 ### Changed
 
+- `Interval` addition and subtraction use two endpoint operations each (`[a+c, b+d]` and `[a-d, b-c]`) instead of the four-corner min/max used for products.
 - `Interval::new` panics on `lo > hi` in release builds as well as debug builds.
 
 ### Fixed
