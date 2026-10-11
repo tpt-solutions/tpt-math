@@ -244,18 +244,33 @@ impl<T: Scalar> CsrMatrix<T> {
         if x.len() != self.ncols {
             return Err(SparseError::DimensionMismatch);
         }
-        let nrows = self.nrows;
-        let col_idx = &self.col_idx;
-        let values = &self.values;
-        let row_ptr = &self.row_ptr;
-        let y = DVector::from_fn(nrows, |i| {
+        let mut y = vec![T::zero(); self.nrows];
+        self.matvec_into(x.as_slice(), &mut y)?;
+        Ok(DVector::from_vec(y))
+    }
+
+    /// Sparse matrix–vector product `y = A x` written into a caller-owned
+    /// buffer.
+    ///
+    /// Reusing `y` avoids a fresh allocation on every call, which matters in
+    /// loops that apply the same matrix repeatedly.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SparseError::DimensionMismatch`] if `x.len() != ncols()` or
+    /// `y.len() != nrows()`.
+    pub fn matvec_into(&self, x: &[T], y: &mut [T]) -> Result<(), SparseError> {
+        if x.len() != self.ncols || y.len() != self.nrows {
+            return Err(SparseError::DimensionMismatch);
+        }
+        for (i, yi) in y.iter_mut().enumerate() {
             let mut s = T::zero();
-            for k in row_ptr[i]..row_ptr[i + 1] {
-                s = s + values[k] * x[col_idx[k]];
+            for k in self.row_ptr[i]..self.row_ptr[i + 1] {
+                s = s + self.values[k] * x[self.col_idx[k]];
             }
-            s
-        });
-        Ok(y)
+            *yi = s;
+        }
+        Ok(())
     }
 }
 
@@ -616,6 +631,417 @@ pub fn bicgstab<T: Scalar + Copy + 'static>(
     })
 }
 
+/// Euclidean norm of a slice.
+#[cfg(feature = "alloc")]
+fn slice_norm<T: Scalar + Copy>(v: &[T]) -> T {
+    v.iter().fold(T::zero(), |acc, &x| acc + x * x).sqrt()
+}
+
+/// Dot product of two equal-length slices.
+#[cfg(feature = "alloc")]
+fn slice_dot<T: Scalar + Copy>(a: &[T], b: &[T]) -> T {
+    a.iter().zip(b).fold(T::zero(), |acc, (&x, &y)| acc + x * y)
+}
+
+/// Givens rotation `(c, s)` with `c·a + s·b = r` and `−s·a + c·b = 0`.
+#[cfg(feature = "alloc")]
+fn givens<T: Scalar + Copy>(a: T, b: T) -> (T, T) {
+    if b == T::zero() {
+        return (T::one(), T::zero());
+    }
+    if b.abs() > a.abs() {
+        let t = a / b;
+        let s = T::one() / (T::one() + t * t).sqrt();
+        (s * t, s)
+    } else {
+        let t = b / a;
+        let c = T::one() / (T::one() + t * t).sqrt();
+        (c, c * t)
+    }
+}
+
+/// Solve `A x = b` with restarted GMRES(`restart`) for a general square `A`.
+///
+/// Each cycle builds an Arnoldi basis of the Krylov subspace by modified
+/// Gram–Schmidt, and minimises the residual over that subspace with Givens
+/// rotations. The basis is discarded every `restart` steps. The method works for
+/// non-symmetric systems that [`conjugate_gradient`] cannot handle, at the cost
+/// of storing the whole basis for one cycle.
+///
+/// * `tol` — relative residual tolerance: stop when `‖r‖ ≤ tol·‖b‖` (absolute if
+///   `b = 0`).
+/// * `restart` — Krylov subspace dimension per cycle (clamped to at least 1).
+/// * `max_iter` — bound on the total number of Arnoldi steps across all cycles.
+///
+/// # Errors
+///
+/// Returns [`SparseError::DimensionMismatch`] if `a` is not square, or `b` or
+/// `x0` has the wrong length. Returns [`SparseError::NotConverged`] if the
+/// tolerance is not met within `max_iter` steps, and [`SparseError::Breakdown`]
+/// if the Hessenberg system becomes singular.
+///
+/// # Examples
+///
+/// ```
+/// use tpt_math_linalg_sparse::{gmres, CooMatrix};
+/// use tpt_math_linalg_dense::DVector;
+///
+/// // Non-symmetric tridiagonal system with exact solution (1, 2, 3).
+/// let mut coo = CooMatrix::<f64>::new(3, 3);
+/// for &(r, c, v) in &[(0, 0, 4.0), (0, 1, 1.0), (1, 0, 2.0), (1, 1, 5.0), (1, 2, 1.0), (2, 1, 1.0), (2, 2, 3.0)] {
+///     coo.push(r, c, v);
+/// }
+/// let a = coo.to_csr();
+/// let b = DVector::from_vec(vec![6.0, 15.0, 11.0]);
+/// let x = gmres(&a, &b, None, 1e-12, 3, 100).unwrap();
+/// assert!((x[0] - 1.0).abs() < 1e-9 && (x[2] - 3.0).abs() < 1e-9);
+/// ```
+#[cfg(feature = "alloc")]
+pub fn gmres<T: Scalar + Copy + 'static>(
+    a: &CsrMatrix<T>,
+    b: &DVector<T>,
+    x0: Option<DVector<T>>,
+    tol: T,
+    restart: usize,
+    max_iter: usize,
+) -> Result<DVector<T>, SparseError> {
+    if a.nrows() != a.ncols() || b.len() != a.nrows() {
+        return Err(SparseError::DimensionMismatch);
+    }
+    let n = b.len();
+    let m = restart.max(1);
+    let mut x: Vec<T> = match x0 {
+        Some(v) if v.len() == n => v.as_slice().to_vec(),
+        Some(_) => return Err(SparseError::DimensionMismatch),
+        None => vec![T::zero(); n],
+    };
+    let b_slice = b.as_slice();
+    let b_norm = slice_norm(b_slice);
+    let target = if b_norm > T::zero() {
+        tol * b_norm
+    } else {
+        tol
+    };
+
+    let mut iterations = 0usize;
+    let mut ax = vec![T::zero(); n];
+    loop {
+        a.matvec_into(&x, &mut ax)?;
+        let r: Vec<T> = (0..n).map(|i| b_slice[i] - ax[i]).collect();
+        let beta = slice_norm(&r);
+        if beta <= target {
+            return Ok(DVector::from_vec(x));
+        }
+        if iterations >= max_iter {
+            return Err(SparseError::NotConverged { iterations });
+        }
+
+        // Arnoldi cycle. `basis[j]` is the j-th orthonormal Krylov vector,
+        // `hess[j]` the j-th Hessenberg column after the Givens rotations.
+        let mut basis: Vec<Vec<T>> = vec![r.iter().map(|&v| v / beta).collect()];
+        let mut hess: Vec<Vec<T>> = Vec::with_capacity(m);
+        let mut rotations: Vec<(T, T)> = Vec::with_capacity(m);
+        let mut g = vec![T::zero(); m + 1];
+        g[0] = beta;
+        let mut k = 0;
+        while k < m && iterations < max_iter {
+            iterations += 1;
+            let mut w = vec![T::zero(); n];
+            a.matvec_into(&basis[k], &mut w)?;
+            let mut col = vec![T::zero(); k + 2];
+            for i in 0..=k {
+                let h_ik = slice_dot(&w, &basis[i]);
+                col[i] = h_ik;
+                for (wj, &vj) in w.iter_mut().zip(&basis[i]) {
+                    *wj = *wj - h_ik * vj;
+                }
+            }
+            let h_next = slice_norm(&w);
+            col[k + 1] = h_next;
+
+            // Apply the earlier rotations, then a new one for the subdiagonal.
+            for (i, &(c, s)) in rotations.iter().enumerate() {
+                let temp = c * col[i] + s * col[i + 1];
+                col[i + 1] = -s * col[i] + c * col[i + 1];
+                col[i] = temp;
+            }
+            let (c, s) = givens(col[k], col[k + 1]);
+            rotations.push((c, s));
+            col[k] = c * col[k] + s * col[k + 1];
+            col[k + 1] = T::zero();
+            let g_k = g[k];
+            g[k + 1] = -s * g_k;
+            g[k] = c * g_k;
+            hess.push(col);
+            k += 1;
+
+            // A zero subdiagonal means the subspace is invariant: the solution
+            // is exact within it, so stop the cycle here.
+            if g[k].abs() <= target || h_next == T::zero() {
+                break;
+            }
+            basis.push(w.iter().map(|&v| v / h_next).collect());
+        }
+
+        // Solve the upper-triangular system R y = g for the cycle.
+        let mut y = vec![T::zero(); k];
+        for i in (0..k).rev() {
+            let mut s = g[i];
+            for j in (i + 1)..k {
+                s = s - hess[j][i] * y[j];
+            }
+            let diag = hess[i][i];
+            if diag == T::zero() {
+                return Err(SparseError::Breakdown { iterations });
+            }
+            y[i] = s / diag;
+        }
+        for (j, &yj) in y.iter().enumerate() {
+            for (xi, &vi) in x.iter_mut().zip(&basis[j]) {
+                *xi = *xi + yj * vi;
+            }
+        }
+    }
+}
+
+/// Solve `A x = b` with conjugate gradients preconditioned by the Jacobi
+/// (diagonal) preconditioner `M = diag(A)`.
+///
+/// Each iteration applies `M⁻¹ r` by dividing the residual by the diagonal
+/// entries. This is cheap and helps most when the diagonal varies widely in
+/// scale, as with badly scaled stiffness matrices. For SPD `A` with a constant
+/// diagonal it does nothing useful, and plain [`conjugate_gradient`] is
+/// equivalent.
+///
+/// The tolerance and error conditions are those of [`conjugate_gradient`].
+///
+/// # Errors
+///
+/// As [`conjugate_gradient`], plus [`SparseError::Breakdown`] at iteration zero
+/// if a diagonal entry is zero, since the preconditioner is then undefined.
+///
+/// # Examples
+///
+/// ```
+/// use tpt_math_linalg_sparse::{jacobi_preconditioned_cg, CooMatrix};
+/// use tpt_math_linalg_dense::DVector;
+///
+/// // Diagonal spans four orders of magnitude.
+/// let mut coo = CooMatrix::<f64>::new(2, 2);
+/// coo.push(0, 0, 1.0);
+/// coo.push(1, 1, 1e4);
+/// let a = coo.to_csr();
+/// let b = DVector::from_vec(vec![2.0, 3e4]);
+/// let x = jacobi_preconditioned_cg(&a, &b, None, 1e-12, 10).unwrap();
+/// assert!((x[0] - 2.0).abs() < 1e-9 && (x[1] - 3.0).abs() < 1e-9);
+/// ```
+#[cfg(feature = "alloc")]
+pub fn jacobi_preconditioned_cg<T: Scalar + Copy + 'static>(
+    a: &CsrMatrix<T>,
+    b: &DVector<T>,
+    x0: Option<DVector<T>>,
+    tol: T,
+    max_iter: usize,
+) -> Result<DVector<T>, SparseError> {
+    if a.nrows() != a.ncols() || b.len() != a.nrows() {
+        return Err(SparseError::DimensionMismatch);
+    }
+    let n = b.len();
+
+    // Extract diag(A); a missing or zero diagonal entry makes M singular.
+    let mut diag = vec![T::zero(); n];
+    for (i, j, &v) in a.iter() {
+        if i == j {
+            diag[i] = v;
+        }
+    }
+    if diag.iter().any(|&d| d == T::zero()) {
+        return Err(SparseError::Breakdown { iterations: 0 });
+    }
+
+    let mut x: Vec<T> = match x0 {
+        Some(v) if v.len() == n => v.as_slice().to_vec(),
+        Some(_) => return Err(SparseError::DimensionMismatch),
+        None => vec![T::zero(); n],
+    };
+    let b_slice = b.as_slice();
+    let b_norm = slice_norm(b_slice);
+    let target = if b_norm > T::zero() {
+        tol * b_norm
+    } else {
+        tol
+    };
+
+    let mut ax = vec![T::zero(); n];
+    a.matvec_into(&x, &mut ax)?;
+    let mut r: Vec<T> = (0..n).map(|i| b_slice[i] - ax[i]).collect();
+    if slice_norm(&r) <= target {
+        return Ok(DVector::from_vec(x));
+    }
+    let mut z: Vec<T> = r.iter().zip(&diag).map(|(&ri, &di)| ri / di).collect();
+    let mut p = z.clone();
+    let mut rz = slice_dot(&r, &z);
+    let mut ap = vec![T::zero(); n];
+
+    for it in 0..max_iter {
+        a.matvec_into(&p, &mut ap)?;
+        let p_ap = slice_dot(&p, &ap);
+        if p_ap.is_nan() || p_ap <= T::zero() {
+            return Err(SparseError::Breakdown { iterations: it });
+        }
+        let alpha = rz / p_ap;
+        for (xi, &pi) in x.iter_mut().zip(&p) {
+            *xi = *xi + alpha * pi;
+        }
+        for (ri, &api) in r.iter_mut().zip(&ap) {
+            *ri = *ri - alpha * api;
+        }
+        if slice_norm(&r) <= target {
+            return Ok(DVector::from_vec(x));
+        }
+        for (zi, (&ri, &di)) in z.iter_mut().zip(r.iter().zip(&diag)) {
+            *zi = ri / di;
+        }
+        let rz_new = slice_dot(&r, &z);
+        if !rz_new.is_finite() {
+            return Err(SparseError::Breakdown { iterations: it });
+        }
+        let beta = rz_new / rz;
+        for (pi, &zi) in p.iter_mut().zip(&z) {
+            *pi = zi + beta * *pi;
+        }
+        rz = rz_new;
+    }
+    Err(SparseError::NotConverged {
+        iterations: max_iter,
+    })
+}
+
+#[cfg(test)]
+mod preconditioner_tests {
+    use super::*;
+
+    /// SPD tridiagonal with a diagonal spanning 1 to 10⁴.
+    fn scaled_tridiagonal(n: usize) -> CsrMatrix<f64> {
+        let mut coo = CooMatrix::<f64>::new(n, n);
+        for i in 0..n {
+            let d = 1.0 + 10_000.0 * (i as f64 / (n - 1) as f64);
+            coo.push(i, i, d);
+            if i + 1 < n {
+                coo.push(i, i + 1, 0.5);
+                coo.push(i + 1, i, 0.5);
+            }
+        }
+        coo.to_csr()
+    }
+
+    #[test]
+    fn solves_badly_scaled_spd_system() {
+        let n = 50;
+        let a = scaled_tridiagonal(n);
+        let x_true = DVector::from_fn(n, |i| (i as f64 * 0.3).cos());
+        let b = a.matvec(&x_true).unwrap();
+        let x = jacobi_preconditioned_cg(&a, &b, None, 1e-12, 500).unwrap();
+        let err = (x - x_true).norm();
+        assert!(err < 1e-8, "error {err}");
+    }
+
+    #[test]
+    fn zero_diagonal_is_a_breakdown() {
+        let mut coo = CooMatrix::<f64>::new(2, 2);
+        coo.push(0, 1, 1.0);
+        coo.push(1, 0, 1.0);
+        coo.push(1, 1, 2.0);
+        let a = coo.to_csr();
+        let b = DVector::from_vec(vec![1.0, 1.0]);
+        assert_eq!(
+            jacobi_preconditioned_cg(&a, &b, None, 1e-10, 10),
+            Err(SparseError::Breakdown { iterations: 0 })
+        );
+    }
+}
+
+#[cfg(test)]
+mod gmres_tests {
+    use super::*;
+
+    fn tridiagonal_3() -> CsrMatrix<f64> {
+        let mut coo = CooMatrix::<f64>::new(3, 3);
+        for &(r, c, v) in &[
+            (0, 0, 4.0),
+            (0, 1, 1.0),
+            (1, 0, 2.0),
+            (1, 1, 5.0),
+            (1, 2, 1.0),
+            (2, 1, 1.0),
+            (2, 2, 3.0),
+        ] {
+            coo.push(r, c, v);
+        }
+        coo.to_csr()
+    }
+
+    #[test]
+    fn solves_non_symmetric_system_in_one_cycle() {
+        let a = tridiagonal_3();
+        let b = DVector::from_vec(vec![6.0, 15.0, 11.0]);
+        let x = gmres(&a, &b, None, 1e-12, 3, 100).unwrap();
+        for (got, want) in x.as_slice().iter().zip([1.0, 2.0, 3.0]) {
+            assert!((got - want).abs() < 1e-9, "{:?}", x.as_slice());
+        }
+    }
+
+    #[test]
+    fn restarted_cycles_converge_on_diagonally_dominant_system() {
+        // n = 30 with a diagonal 4 and a non-symmetric off-diagonal pattern.
+        let n = 30;
+        let mut coo = CooMatrix::<f64>::new(n, n);
+        for i in 0..n {
+            coo.push(i, i, 4.0);
+            if i + 1 < n {
+                coo.push(i, i + 1, -1.5);
+            }
+            if i >= 1 {
+                coo.push(i, i - 1, -0.5);
+            }
+        }
+        let a = coo.to_csr();
+        let x_true = DVector::from_fn(n, |i| (i as f64 + 1.0).sin());
+        let b = a.matvec(&x_true).unwrap();
+        // Restart 4 forces many cycles, so the restart logic is exercised.
+        let x = gmres(&a, &b, None, 1e-12, 4, 500).unwrap();
+        let err = (x - x_true).norm();
+        assert!(err < 1e-8, "error {err}");
+    }
+
+    #[test]
+    fn reports_non_convergence() {
+        let a = tridiagonal_3();
+        let b = DVector::from_vec(vec![6.0, 15.0, 11.0]);
+        // One Arnoldi step cannot resolve a 3×3 system to 1e-14.
+        assert_eq!(
+            gmres(&a, &b, None, 1e-14, 1, 1),
+            Err(SparseError::NotConverged { iterations: 1 })
+        );
+    }
+
+    #[test]
+    fn rejects_dimension_mismatch() {
+        let a = tridiagonal_3();
+        let b = DVector::from_vec(vec![1.0, 2.0]);
+        assert_eq!(
+            gmres(&a, &b, None, 1e-10, 3, 10),
+            Err(SparseError::DimensionMismatch)
+        );
+        let b = DVector::from_vec(vec![1.0, 2.0, 3.0]);
+        let bad_guess = DVector::from_vec(vec![0.0]);
+        assert_eq!(
+            gmres(&a, &b, Some(bad_guess), 1e-10, 3, 10),
+            Err(SparseError::DimensionMismatch)
+        );
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -643,6 +1069,27 @@ mod tests {
         assert_eq!(
             conjugate_gradient(&a, &b, None, 1e-12, 10),
             Err(SparseError::Breakdown { iterations: 0 })
+        );
+    }
+
+    #[test]
+    fn matvec_into_matches_matvec_and_checks_lengths() {
+        let a = dense_2x2_csr();
+        let x = [1.0, 2.0];
+        let mut y = [0.0; 2];
+        a.matvec_into(&x, &mut y).unwrap();
+        // [4 1; 1 3] * [1; 2] = [6; 7]
+        assert_eq!(y, [6.0, 7.0]);
+        let reference = a.matvec(&DVector::from_vec(x.to_vec())).unwrap();
+        assert_eq!(reference.as_slice(), &y);
+        let mut short = [0.0; 1];
+        assert_eq!(
+            a.matvec_into(&x, &mut short),
+            Err(SparseError::DimensionMismatch)
+        );
+        assert_eq!(
+            a.matvec_into(&[1.0], &mut y),
+            Err(SparseError::DimensionMismatch)
         );
     }
 
