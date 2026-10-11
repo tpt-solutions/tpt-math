@@ -23,6 +23,7 @@ All notable changes to this crate are documented here. Format based on
 
 ### Added
 
+- `linear_program::maximize`: two-phase simplex for `max cᵀx` subject to `A x ≤ b, x ≥ 0`, with Bland's rule against cycling. Returns `LpSolution` with `Optimal`, `Infeasible` or `Unbounded` status. Minimise by negating `c`.
 - `minimize_nelder_mead` and `minimize_nelder_mead_with`: derivative-free simplex minimisation.
 - `numerical_gradient`: central finite-difference gradients.
 - `minimize_lbfgs` and `minimize_lbfgs_with`: limited-memory BFGS with the two-loop recursion and the strong-Wolfe line search.

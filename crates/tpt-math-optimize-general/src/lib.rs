@@ -63,6 +63,8 @@
 #![forbid(unsafe_code)]
 #![warn(missing_docs, missing_debug_implementations)]
 
+pub mod linear_program;
+
 pub use tpt_math_linalg;
 pub use tpt_math_linalg::tpt_math_linalg_dense;
 
