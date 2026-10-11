@@ -9,6 +9,7 @@ and this project adheres to SemVer.
 
 ### Added
 
+- `SparseCholesky`: sparse Cholesky factorisation `A = L Lᵀ` of a symmetric positive-definite matrix, with `factor`, `solve` and fill-in statistics. No fill-reducing ordering is applied. Indefinite input is reported as `Breakdown`.
 - `jacobi_preconditioned_cg`: conjugate gradients preconditioned by `diag(A)`. Errors on a zero diagonal entry.
 - `gmres`: restarted GMRES(m) for general (non-symmetric) square systems, with Arnoldi basis by modified Gram–Schmidt and Givens-rotation least squares. Takes an optional initial guess, a relative tolerance, the restart length and a total step budget.
 - `CsrMatrix::matvec_into(&[T], &mut [T])`: writes `A x` into a caller-owned buffer. `matvec` now delegates to it.

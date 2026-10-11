@@ -917,6 +917,195 @@ pub fn jacobi_preconditioned_cg<T: Scalar + Copy + 'static>(
     })
 }
 
+/// Sparse Cholesky factor `A = L Lᵀ` of a symmetric positive-definite matrix.
+///
+/// Stored by columns: column `j` holds the entries `L(i, j)` with `i ≥ j`,
+/// sorted by row, with the diagonal first. No fill-reducing ordering is applied,
+/// so fill-in can be larger than with a reordered factorisation. The method is
+/// exact up to rounding, and the factor is reused for any number of right-hand
+/// sides.
+#[cfg(feature = "alloc")]
+#[derive(Clone, Debug, PartialEq)]
+pub struct SparseCholesky {
+    n: usize,
+    columns: Vec<Vec<(usize, f64)>>,
+}
+
+#[cfg(feature = "alloc")]
+impl SparseCholesky {
+    /// Factorise a symmetric positive-definite CSR matrix.
+    ///
+    /// Only the lower triangle of `a` is read; symmetry is assumed, not checked.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SparseError::DimensionMismatch`] if `a` is not square, and
+    /// [`SparseError::Breakdown`] if a pivot is not positive, which means the
+    /// matrix is not positive definite.
+    pub fn factor(a: &CsrMatrix<f64>) -> Result<Self, SparseError> {
+        if a.nrows() != a.ncols() {
+            return Err(SparseError::DimensionMismatch);
+        }
+        let n = a.nrows();
+        let mut columns: Vec<Vec<(usize, f64)>> = Vec::with_capacity(n);
+        let mut work = vec![0.0; n];
+
+        for j in 0..n {
+            // Load column j of A (the lower part of row j, by symmetry).
+            for (row, col, &v) in a.iter() {
+                if row == j && col >= j {
+                    work[col] = v;
+                }
+            }
+            // Subtract the contributions of the earlier columns.
+            for column in &columns[..j] {
+                let Ok(pos) = column.binary_search_by_key(&j, |&(i, _)| i) else {
+                    continue;
+                };
+                let ljk = column[pos].1;
+                for &(i, lik) in &column[pos..] {
+                    work[i] -= lik * ljk;
+                }
+            }
+
+            let pivot = work[j];
+            if pivot.is_nan() || pivot <= 0.0 {
+                return Err(SparseError::Breakdown { iterations: j });
+            }
+            let diag = tpt_math_numeric::prelude::Float::sqrt(pivot);
+            let mut column = vec![(j, diag)];
+            for (i, &w) in work.iter().enumerate().skip(j + 1) {
+                if w != 0.0 {
+                    column.push((i, w / diag));
+                }
+            }
+            // Clear the workspace for the next column.
+            for w in work.iter_mut().skip(j) {
+                *w = 0.0;
+            }
+            columns.push(column);
+        }
+        Ok(SparseCholesky { n, columns })
+    }
+
+    /// Dimension of the factorised matrix.
+    pub fn dim(&self) -> usize {
+        self.n
+    }
+
+    /// Number of stored entries in `L`, including the diagonal. Comparing this
+    /// with the entries of `A` shows how much fill-in occurred.
+    pub fn nnz(&self) -> usize {
+        self.columns.iter().map(Vec::len).sum()
+    }
+
+    /// Solve `A x = b` with the stored factor.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SparseError::DimensionMismatch`] if `b` has the wrong length.
+    pub fn solve(&self, b: &DVector<f64>) -> Result<DVector<f64>, SparseError> {
+        if b.len() != self.n {
+            return Err(SparseError::DimensionMismatch);
+        }
+        let mut x: Vec<f64> = b.as_slice().to_vec();
+        // Forward substitution L y = b, column by column.
+        for j in 0..self.n {
+            let column = &self.columns[j];
+            x[j] /= column[0].1;
+            let xj = x[j];
+            for &(i, v) in &column[1..] {
+                x[i] -= v * xj;
+            }
+        }
+        // Back substitution Lᵀ x = y, using the same columns as rows of Lᵀ.
+        for j in (0..self.n).rev() {
+            let column = &self.columns[j];
+            let mut s = x[j];
+            for &(i, v) in &column[1..] {
+                s -= v * x[i];
+            }
+            x[j] = s / column[0].1;
+        }
+        Ok(DVector::from_vec(x))
+    }
+}
+
+#[cfg(test)]
+mod cholesky_tests {
+    use super::*;
+
+    /// 2D Laplacian (5-point stencil) on a `m × m` grid, which is SPD.
+    fn laplacian_2d(m: usize) -> CsrMatrix<f64> {
+        let n = m * m;
+        let mut coo = CooMatrix::<f64>::new(n, n);
+        for r in 0..m {
+            for c in 0..m {
+                let k = r * m + c;
+                coo.push(k, k, 4.0);
+                if c > 0 {
+                    coo.push(k, k - 1, -1.0);
+                }
+                if c + 1 < m {
+                    coo.push(k, k + 1, -1.0);
+                }
+                if r > 0 {
+                    coo.push(k, k - m, -1.0);
+                }
+                if r + 1 < m {
+                    coo.push(k, k + m, -1.0);
+                }
+            }
+        }
+        coo.to_csr()
+    }
+
+    #[test]
+    fn solves_2d_laplacian_and_matches_cg() {
+        let a = laplacian_2d(6);
+        let n = a.nrows();
+        let x_true = DVector::from_fn(n, |i| (i as f64 * 0.37).sin());
+        let b = a.matvec(&x_true).unwrap();
+        let factor = SparseCholesky::factor(&a).unwrap();
+        let x = factor.solve(&b).unwrap();
+        assert!((x.clone() - x_true.clone()).norm() < 1e-10);
+        let cg = conjugate_gradient(&a, &b, None, 1e-13, 1000).unwrap();
+        assert!((x - cg).norm() < 1e-8);
+    }
+
+    #[test]
+    fn factor_is_reusable_for_several_right_hand_sides() {
+        let a = laplacian_2d(4);
+        let factor = SparseCholesky::factor(&a).unwrap();
+        for seed in 1..4 {
+            let x_true = DVector::from_fn(a.nrows(), |i| ((i + seed) as f64).cos());
+            let b = a.matvec(&x_true).unwrap();
+            let x = factor.solve(&b).unwrap();
+            assert!((x - x_true).norm() < 1e-10);
+        }
+    }
+
+    #[test]
+    fn rejects_indefinite_matrix() {
+        let mut coo = CooMatrix::<f64>::new(2, 2);
+        coo.push(0, 0, 1.0);
+        coo.push(1, 1, -1.0);
+        assert_eq!(
+            SparseCholesky::factor(&coo.to_csr()),
+            Err(SparseError::Breakdown { iterations: 1 })
+        );
+    }
+
+    #[test]
+    fn rejects_wrong_rhs_length() {
+        let factor = SparseCholesky::factor(&laplacian_2d(2)).unwrap();
+        assert_eq!(
+            factor.solve(&DVector::from_vec(vec![1.0])),
+            Err(SparseError::DimensionMismatch)
+        );
+    }
+}
+
 #[cfg(test)]
 mod preconditioner_tests {
     use super::*;
