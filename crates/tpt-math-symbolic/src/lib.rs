@@ -178,7 +178,18 @@ impl<C: Coefficient> Symbolic<C> for Expr<C> {
     }
 
     fn simplify(self) -> Expr<C> {
-        simplify(self)
+        // Run single passes until the expression stops changing. A pass can expose
+        // new folding opportunities (e.g. `x^1` inside a product), so one pass is
+        // not always a fixpoint. The cap is a guard against a non-converging rule.
+        let mut current = self;
+        for _ in 0..MAX_SIMPLIFY_PASSES {
+            let next = simplify(current.clone());
+            if next == current {
+                return next;
+            }
+            current = next;
+        }
+        current
     }
 
     fn derivative(&self, var: &str) -> Expr<C> {
@@ -264,6 +275,9 @@ impl<C: Coefficient> std::ops::Mul<C> for Expr<C> {
     }
 }
 
+/// Upper bound on fixpoint passes in [`Symbolic::simplify`].
+const MAX_SIMPLIFY_PASSES: usize = 64;
+
 fn simplify<C: Coefficient>(e: Expr<C>) -> Expr<C> {
     match e {
         Expr::Const(c) => Expr::Const(c),
@@ -284,14 +298,23 @@ fn simplify<C: Coefficient>(e: Expr<C>) -> Expr<C> {
             match (&a, &b) {
                 (Expr::Const(c1), Expr::Const(c2)) => Expr::Const(c1.clone() / c2.clone()),
                 (_, Expr::Const(c)) if *c == C::one() => a,
+                // `x / x` is taken as 1. This is false at `x = 0` (undefined there),
+                // the usual CAS convention for cancelling identical factors.
+                _ if a == b => Expr::Const(C::one()),
                 _ => Expr::Div(Box::new(a), Box::new(b)),
             }
         }
         Expr::Pow(a, n) => {
             let a = simplify(*a);
-            match &a {
-                Expr::Const(c) => Expr::Const(c.clone().powi(n as i32)),
-                _ => Expr::Pow(Box::new(a), n),
+            match (a, n) {
+                (_, 0) => Expr::Const(C::one()),
+                (a, 1) => a,
+                (Expr::Const(c), n) => Expr::Const(c.powi(n as i32)),
+                (Expr::Pow(inner, m), n) => match m.checked_mul(n) {
+                    Some(p) => Expr::Pow(inner, p),
+                    None => Expr::Pow(Box::new(Expr::Pow(inner, m)), n),
+                },
+                (a, n) => Expr::Pow(Box::new(a), n),
             }
         }
         Expr::Func(name, a) => {
@@ -695,6 +718,35 @@ mod tests {
         // sin(0) -> 0
         let e = Expr64::func("sin", Expr64::from(0.0));
         assert_eq!(e.simplify(), Expr64::from(0.0));
+    }
+
+    #[test]
+    fn pow_zero_and_one_simplify() {
+        let x = Expr64::var("x");
+        assert_eq!(x.clone().pow(0).simplify(), Expr64::from(1.0));
+        assert_eq!(x.clone().pow(1).simplify(), x);
+    }
+
+    #[test]
+    fn identical_quotient_simplifies_to_one() {
+        // Documented domain caveat: x / x is taken as 1 (undefined at x = 0).
+        let x = Expr64::var("x");
+        assert_eq!((x.clone() / x).simplify(), Expr64::from(1.0));
+    }
+
+    #[test]
+    fn nested_powers_collapse() {
+        let x = Expr64::var("x");
+        assert_eq!(x.clone().pow(2).pow(3).simplify(), x.pow(6));
+    }
+
+    #[test]
+    fn simplify_reaches_fixpoint_after_exposing_pow_one() {
+        // (x^1) * 1 * 2 needs more than one pass to reach `2 * x`.
+        let x = Expr64::var("x");
+        let e = x.clone().pow(1) * Expr64::from(1.0) * Expr64::from(2.0);
+        assert_eq!(e.clone().simplify().simplify(), e.clone().simplify());
+        assert_eq!(e.simplify(), Expr64::from(2.0) * x);
     }
 
     #[test]

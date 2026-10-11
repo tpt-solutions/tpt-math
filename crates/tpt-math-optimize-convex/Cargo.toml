@@ -18,7 +18,7 @@ tpt-math-linalg = { workspace = true }
 tpt-math-linalg-dense = { workspace = true }
 
 [dev-dependencies]
-criterion = "0.5"
+criterion = { workspace = true }
 
 [[bench]]
 name = "optimize_convex_bench"
@@ -30,3 +30,7 @@ default = []
 
 [lints]
 workspace = true
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]

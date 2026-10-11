@@ -31,3 +31,7 @@ tpt-math-prob-dist = ["dep:tpt-math-prob-dist"]
 
 [lints]
 workspace = true
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]

@@ -16,7 +16,7 @@ categories = ["mathematics", "algorithms", "science"]
 [dependencies]
 num-bigint = { version = "0.5.1", default-features = false }
 num-rational = { version = "0.4.2", default-features = false, features = ["num-bigint"] }
-num-traits = { version = "0.2.19", default-features = false, features = ["libm"] }
+num-traits = { workspace = true }
 tpt-math-numeric = { workspace = true, default-features = false }
 
 [features]
@@ -29,8 +29,12 @@ alloc = ["tpt-math-numeric/alloc"]
 workspace = true
 
 [dev-dependencies]
-criterion = "0.5"
+criterion = { workspace = true }
 
 [[bench]]
 name = "exact_bench"
 harness = false
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]

@@ -193,6 +193,120 @@ pub fn two_sample_t_test(a: &[f64], b: &[f64]) -> (f64, f64) {
     try_two_sample_t_test(a, b).unwrap_or_else(|e| panic!("two_sample_t_test: {e}"))
 }
 
+/// Student's pooled-variance two-sample t-test of `H₀: μ_a = μ_b`.
+///
+/// Assumes both samples share a common variance. When that holds it is the
+/// more powerful choice; when it does not, prefer [`try_two_sample_t_test`]
+/// (Welch).
+///
+/// Returns `(statistic, p_value)` where
+///
+/// ```text
+/// s²_p = [(nₐ-1)s²ₐ + (n_b-1)s²_b] / (nₐ + n_b - 2)
+/// t    = (ā - b̄) / (s_p · √(1/nₐ + 1/n_b))
+/// df   = nₐ + n_b - 2
+/// p    = 2 · P(T_df > |t|)
+/// ```
+///
+/// # Errors
+///
+/// * [`StatsError::NotEnoughData`] — either sample has fewer than two
+///   observations.
+/// * [`StatsError::NotFinite`] — an observation is `NaN` or infinite.
+///
+/// # Examples
+///
+/// ```
+/// # use tpt_math_stats::try_pooled_t_test;
+/// // Equal variances and n = 3 each: df = 4, t = -3 / (1 · √(2/3)) = -3√(3/2).
+/// let (t, p) = try_pooled_t_test(&[1.0, 2.0, 3.0], &[4.0, 5.0, 6.0]).unwrap();
+/// assert!((t + 3.0 * 1.5f64.sqrt()).abs() < 1e-12);
+/// assert!(p < 0.05);
+/// ```
+pub fn try_pooled_t_test(a: &[f64], b: &[f64]) -> Result<(f64, f64), StatsError> {
+    check_min_len("a", a, 2)?;
+    check_min_len("b", b, 2)?;
+    check_all_finite("a", a)?;
+    check_all_finite("b", b)?;
+
+    let (na, nb) = (a.len() as f64, b.len() as f64);
+    let difference = mean_unchecked(a) - mean_unchecked(b);
+
+    let pooled_variance =
+        ((na - 1.0) * variance_unchecked(a) + (nb - 1.0) * variance_unchecked(b)) / (na + nb - 2.0);
+    let standard_error = (pooled_variance * (1.0 / na + 1.0 / nb)).sqrt();
+
+    if standard_error == 0.0 {
+        return Ok(degenerate_t_result(difference));
+    }
+
+    let statistic = difference / standard_error;
+    let p_value = two_sided_t_p_value(statistic, na + nb - 2.0)?;
+    Ok((statistic, p_value))
+}
+
+/// Student's pooled-variance two-sample t-test of `H₀: μ_a = μ_b`.
+///
+/// # Panics
+///
+/// Panics on the conditions listed for [`try_pooled_t_test`].
+///
+/// # Examples
+///
+/// ```
+/// # use tpt_math_stats::pooled_t_test;
+/// let (t, p) = pooled_t_test(&[1.0, 2.0, 3.0], &[4.0, 5.0, 6.0]);
+/// assert!(t < 0.0 && p < 0.05);
+/// ```
+pub fn pooled_t_test(a: &[f64], b: &[f64]) -> (f64, f64) {
+    try_pooled_t_test(a, b).unwrap_or_else(|e| panic!("pooled_t_test: {e}"))
+}
+
+/// Paired t-test of `H₀: mean(a - b) = 0`.
+///
+/// Reduces the paired samples to their differences `dᵢ = aᵢ - bᵢ` and runs a
+/// one-sample t-test of those differences against zero, so `df = n - 1`.
+///
+/// # Errors
+///
+/// * [`StatsError::LengthMismatch`] — `a` and `b` have different lengths.
+/// * [`StatsError::NotEnoughData`] — fewer than two pairs.
+/// * [`StatsError::NotFinite`] — an observation is `NaN` or infinite.
+///
+/// # Examples
+///
+/// ```
+/// # use tpt_math_stats::try_paired_t_test;
+/// // Differences are 1, 1, 1: zero variance, so the degenerate convention applies.
+/// let (t, p) = try_paired_t_test(&[2.0, 3.0, 4.0], &[1.0, 2.0, 3.0]).unwrap();
+/// assert!(t.is_infinite() && t > 0.0);
+/// assert_eq!(p, 0.0);
+/// ```
+pub fn try_paired_t_test(a: &[f64], b: &[f64]) -> Result<(f64, f64), StatsError> {
+    check_equal_len(a.len(), b.len())?;
+    let differences: Vec<f64> = a.iter().zip(b).map(|(x, y)| x - y).collect();
+    try_one_sample_t_test(&differences, 0.0)
+}
+
+/// Paired t-test of `H₀: mean(a - b) = 0`.
+///
+/// # Panics
+///
+/// Panics on the conditions listed for [`try_paired_t_test`].
+///
+/// # Examples
+///
+/// ```
+/// # use tpt_math_stats::paired_t_test;
+/// let before = [5.0, 6.0, 7.0, 8.0];
+/// let after = [4.1, 5.2, 5.9, 7.3];
+/// let (t, p) = paired_t_test(&before, &after);
+/// assert!(t > 0.0 && p < 0.05);
+/// ```
+pub fn paired_t_test(a: &[f64], b: &[f64]) -> (f64, f64) {
+    try_paired_t_test(a, b).unwrap_or_else(|e| panic!("paired_t_test: {e}"))
+}
+
 /// Pearson's chi-squared goodness-of-fit test.
 ///
 /// Returns `(statistic, p_value)` where

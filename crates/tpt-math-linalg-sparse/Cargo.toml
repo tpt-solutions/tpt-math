@@ -26,3 +26,7 @@ alloc = ["tpt-math-numeric/alloc", "tpt-math-linalg-dense/alloc"]
 
 [lints]
 workspace = true
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]

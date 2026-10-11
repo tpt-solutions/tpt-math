@@ -1050,10 +1050,10 @@ tree.*
       absolute 1e-12); overflow-safe norms (scaled / hypot); complex
       `Div`/`inv`/`sqrt` stability (Smith's algorithm)
       Status: Partial: complex `Div`/`inv`/`norm` are overflow-safe (Smith, scaled
-      hypot). A relative dense LU threshold was tried and reverted: the
-      convex IPM factors KKT systems whose pivots are legitimately small, so
-      the threshold needs a per-caller decision. Dense `norm` is not yet
-      overflow-safe.
+      hypot), and dense `norm` now scales by the largest magnitude (tests cover
+      entries near 1e200 and 1e-200). A relative dense LU threshold was tried and
+      reverted: the convex IPM factors KKT systems whose pivots are legitimately
+      small, so the threshold needs a per-caller decision.
 - [x] `tpt-math-prob-bayes` MCMC: validate initial log-density (NaN / -inf
       leaves chain stuck); `tpt-math-stats` `pearson_correlation`
       `sxx*syy` overflow; `tpt-math-exact` `Interval::new` only
@@ -1098,7 +1098,7 @@ tree.*
 - [ ] Stats: quantiles, skew/kurtosis, covariance, pooled/paired t,
       Mann-Whitney, Wilcoxon, KS, ANOVA/F, chi-squared independence,
       bootstrap, multiple-comparison corrections
-      Status: Partial: quantiles (type 7), skewness and excess kurtosis are done. Covariance, pooled/paired t, and the rank and goodness-of-fit tests are not.
+      Status: Partial: quantiles (type 7), skewness, excess kurtosis, covariance, and pooled/paired t-tests are done. The rank tests, KS, ANOVA/F, chi-squared independence, bootstrap and multiple-comparison corrections are not.
 - [ ] Sampling: HMC, multivariate/adaptive Metropolis, R-hat/ESS
       diagnostics, self-normalised importance sampling + ESS
 - [ ] ODE solvers (RK4/RK45), quadrature, root finding
@@ -1106,8 +1106,10 @@ tree.*
 - [ ] Sparse LU/Cholesky, Jacobi/ILU/IC preconditioners, GMRES
 - [x] `autodiff-fwd`: sqrt, powi/powf, tan, tanh, atan, abs, `Dual op scalar`
 - [ ] `prob-dist`: pdf / cdf / quantile / moments (currently sampling-only)
-- [ ] `symbolic`: like-term collection, `x/x`, `x^0`, `x^1`, fixpoint
-      simplification, more functions
+- [ ] `symbolic`: like-term collection, more functions
+      Status: Partial: `x/x` (taken as 1, undefined at 0), `x^0`, `x^1`, nested
+      powers and fixpoint simplification are done. Like-term collection and
+      additional functions are not.
 - [ ] `tpt-math-linalg` wrappers: `Mat * scalar`, `Vec` dot/norm, solve,
       by-reference operator forms
 
@@ -1130,8 +1132,8 @@ tree.*
       Status: Done: the six `pkg_*.log` files and `history/todo 1260819.md` were deleted from the working tree. Not committed.
 - [x] Fix the header of this file (MSRV says 1.75, workspace is 1.84;
       "publishing out of scope" contradicts "since published")
-- [ ] Commit `Cargo.lock` (workspace has binaries); remove from `.gitignore`
-      Status: Partial: `Cargo.lock` is no longer ignored. It is not committed yet.
+- [x] Commit `Cargo.lock` (workspace has binaries); remove from `.gitignore`
+      Status: Done: `Cargo.lock` is tracked and is no longer ignored.
 - [ ] CI MSRV job pinned to 1.84; resolve `simd` feature needing Rust 1.85+
       and the out-of-repo `tpt-simd-blas` path dependency that breaks
       `--all-features` and `cargo package`
@@ -1150,9 +1152,15 @@ tree.*
 - [ ] `[package.metadata.docs.rs]` (`all-features`, `docsrs` cfg) in each
       crate; feature tables in READMEs; examples for geometry/spatial,
       graph, signal, sparse/complex linalg, `no_std`
+      Status: Partial: the docs.rs table is in all 31 crates. `tpt-math-linalg-dense` uses `features = ["alloc"]` instead of `all-features`, because its optional `simd` feature depends on the out-of-repo `tpt-simd-blas` path. The feature tables in READMEs and the examples are not done.
 - [ ] Move hard-coded external dep versions (`num-traits`, `uom`, `rand`,
       `criterion`) into `[workspace.dependencies]`; make `default-features`
       consistent
+      Status: Partial: `criterion`, `num-traits`, `rand`, `rand_distr`, `rustfft`
+      and `uom` are now inherited from `[workspace.dependencies]`. `symbolic`
+      still pins `num-traits = "0.2"` with default features, which differs from
+      the workspace entry. Changing it would alter its feature set, so it was
+      left alone.
 - [ ] `deny.toml`: set `[graph]` targets, tighten `wildcards`, enforce
       `multiple-versions`; document the `registry.toml` external dependency
       in CONTRIBUTING.md

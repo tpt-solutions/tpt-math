@@ -14,8 +14,8 @@ keywords = ["units", "dimensional-analysis", "types", "no-std", "physics"]
 categories = ["mathematics", "science", "no-std"]
 
 [dependencies]
-uom = { version = "0.38.0", default-features = false, features = ["si", "f32", "f64", "autoconvert"] }
-num-traits = { version = "0.2.19", default-features = false, features = ["libm"] }
+uom = { workspace = true }
+num-traits = { workspace = true }
 
 [features]
 default = ["std"]
@@ -25,3 +25,7 @@ alloc = []
 
 [lints]
 workspace = true
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]

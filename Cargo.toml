@@ -79,6 +79,14 @@ tpt-math-signal-filter = { version = "0.1.0", path = "crates/tpt-math-signal-fil
 tpt-math-signal = { version = "0.1.0", path = "crates/tpt-math-signal" }
 tpt-math-interpolate = { version = "0.1.0", path = "crates/tpt-math-interpolate" }
 
+# External dependency versions, pinned once and inherited by member crates.
+criterion = "0.5"
+num-traits = { version = "0.2.19", default-features = false, features = ["libm"] }
+rand = { version = "0.9", default-features = false }
+rand_distr = { version = "0.5.1", default-features = false }
+rustfft = "6.4.1"
+uom = { version = "0.38.0", default-features = false, features = ["si", "f32", "f64", "autoconvert"] }
+
 [workspace.lints.rust]
 unsafe_op_in_unsafe_fn = "warn"
 unsafe_code = "forbid"

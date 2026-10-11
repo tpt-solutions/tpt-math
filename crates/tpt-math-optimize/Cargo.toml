@@ -25,3 +25,7 @@ tpt-math-optimize-convex = ["dep:tpt-math-optimize-convex"]
 
 [lints]
 workspace = true
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]

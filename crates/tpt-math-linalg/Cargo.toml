@@ -28,8 +28,12 @@ alloc = ["tpt-math-linalg-dense/alloc", "tpt-math-units/alloc", "tpt-math-numeri
 workspace = true
 
 [dev-dependencies]
-criterion = "0.5"
+criterion = { workspace = true }
 
 [[bench]]
 name = "linalg_bench"
 harness = false
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]

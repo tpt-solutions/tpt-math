@@ -190,3 +190,30 @@ fn distributions_are_reachable_from_the_public_api() {
     assert!(ChiSquared::new(3.0).is_ok());
     assert!(StudentsT::new(0.0, 1.0, 3.0).is_ok());
 }
+
+#[test]
+fn pooled_t_matches_welch_statistic_for_equal_sizes() {
+    // With equal group sizes the pooled and Welch standard errors coincide,
+    // so the statistics agree even though the degrees of freedom differ.
+    let a = [1.0, 2.5, 3.0, 4.2, 5.1];
+    let b = [2.0, 3.1, 4.4, 6.0, 6.8];
+    let (tp, _) = tpt_math_stats::try_pooled_t_test(&a, &b).unwrap();
+    let (tw, _) = tpt_math_stats::try_two_sample_t_test(&a, &b).unwrap();
+    assert!((tp - tw).abs() < 1e-12);
+}
+
+#[test]
+fn paired_t_equals_one_sample_t_on_differences() {
+    let before = [140.0, 132.0, 151.0, 128.0, 145.0];
+    let after = [135.0, 130.0, 147.0, 126.0, 139.0];
+    let diffs: Vec<f64> = before.iter().zip(&after).map(|(x, y)| x - y).collect();
+    let paired = tpt_math_stats::try_paired_t_test(&before, &after).unwrap();
+    let one = tpt_math_stats::try_one_sample_t_test(&diffs, 0.0).unwrap();
+    assert!((paired.0 - one.0).abs() < 1e-12);
+    assert!((paired.1 - one.1).abs() < 1e-12);
+}
+
+#[test]
+fn paired_t_rejects_unequal_lengths() {
+    assert!(tpt_math_stats::try_paired_t_test(&[1.0, 2.0], &[1.0]).is_err());
+}

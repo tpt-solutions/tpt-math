@@ -321,8 +321,26 @@ impl<T: Scalar + 'static> DVector<T> {
 
 impl<T: Scalar> DVector<T> {
     fn norm_generic(&self) -> T {
-        let s = self.iter().fold(T::zero(), |acc, x| acc + (*x) * (*x));
-        s.sqrt()
+        // Scale by the largest magnitude so squaring cannot overflow or underflow
+        // (a plain sum of squares overflows for entries near `sqrt(T::MAX)`).
+        let scale = self.iter().fold(T::zero(), |acc, x| {
+            let a = x.abs();
+            if a > acc {
+                a
+            } else {
+                acc
+            }
+        });
+        if scale == T::zero() || !scale.is_finite() {
+            // All-zero: norm is zero. Non-finite: let inf/NaN propagate as before.
+            let s = self.iter().fold(T::zero(), |acc, x| acc + (*x) * (*x));
+            return s.sqrt();
+        }
+        let s = self.iter().fold(T::zero(), |acc, x| {
+            let r = *x / scale;
+            acc + r * r
+        });
+        scale * s.sqrt()
     }
 
     fn dot_generic(&self, other: &DVector<T>) -> T {
@@ -1519,6 +1537,23 @@ mod simd_tests {
     #[should_panic(expected = "length")]
     fn dot_length_mismatch_panics() {
         let _ = DVector::from_vec(vec![1.0_f64, 2.0, 3.0]).dot(&DVector::from_vec(vec![1.0_f64]));
+    }
+
+    #[test]
+    fn norm_does_not_overflow_for_large_entries() {
+        // Naive sum of squares would be +inf here; the true norm is 1e200 * sqrt(2).
+        let v = DVector::from_vec(vec![1e200_f64, 1e200]);
+        let n = v.norm_generic();
+        assert!(n.is_finite());
+        assert!((n / (1e200 * 2.0_f64.sqrt()) - 1.0).abs() < 1e-14);
+    }
+
+    #[test]
+    fn norm_does_not_underflow_for_tiny_entries() {
+        let v = DVector::from_vec(vec![1e-200_f64, 1e-200]);
+        let n = v.norm_generic();
+        assert!(n > 0.0);
+        assert!((n / (1e-200 * 2.0_f64.sqrt()) - 1.0).abs() < 1e-14);
     }
 
     #[test]

@@ -16,8 +16,8 @@ categories = ["mathematics", "science", "algorithms"]
 [dependencies]
 # `rand` 0.9 is the `rand_core`/`RngCore` version that `rand_distr` 0.5 is built
 # against; the adapter in this crate must implement *that* `RngCore`.
-rand = { version = "0.9", default-features = false }
-rand_distr = { version = "0.5.1", default-features = false }
+rand = { workspace = true }
+rand_distr = { workspace = true }
 tpt-math-prob-core = { workspace = true, default-features = false }
 
 [features]
@@ -28,3 +28,7 @@ alloc = ["rand/alloc", "rand_distr/alloc", "tpt-math-prob-core/alloc"]
 
 [lints]
 workspace = true
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]

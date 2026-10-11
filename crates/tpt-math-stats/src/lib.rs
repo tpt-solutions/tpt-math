@@ -118,8 +118,9 @@ pub use descriptive::{
 pub use dist::{ChiSquared, ContinuousCDF, Normal, StudentsT};
 pub use error::StatsError;
 pub use hypothesis::{
-    chi_squared_goodness_of_fit, one_sample_t_test, try_chi_squared_goodness_of_fit,
-    try_one_sample_t_test, try_two_sample_t_test, two_sample_t_test,
+    chi_squared_goodness_of_fit, one_sample_t_test, paired_t_test, pooled_t_test,
+    try_chi_squared_goodness_of_fit, try_one_sample_t_test, try_paired_t_test, try_pooled_t_test,
+    try_two_sample_t_test, two_sample_t_test,
 };
 pub use regression::{
     covariance, linear_regression, pearson_correlation, try_covariance, try_linear_regression,

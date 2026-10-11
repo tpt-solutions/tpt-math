@@ -34,7 +34,7 @@ simd = ["alloc", "dep:tpt-simd-blas"]
 simd-runtime = ["simd", "tpt-simd-blas/runtime-dispatch"]
 
 [dev-dependencies]
-criterion = "0.5"
+criterion = { workspace = true }
 
 [[bench]]
 name = "linalg_dense_bench"
@@ -42,3 +42,7 @@ harness = false
 
 [lints]
 workspace = true
+
+[package.metadata.docs.rs]
+features = ["alloc"]
+rustdoc-args = ["--cfg", "docsrs"]

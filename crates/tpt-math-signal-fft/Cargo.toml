@@ -14,7 +14,7 @@ keywords = ["fft", "dft", "fourier", "signal-processing", "spectral"]
 categories = ["mathematics", "science", "algorithms"]
 
 [dependencies]
-rustfft = "6.4.1"
+rustfft = { workspace = true }
 tpt-math-numeric = { workspace = true, features = ["std"] }
 
 [features]
@@ -25,8 +25,12 @@ default = []
 workspace = true
 
 [dev-dependencies]
-criterion = "0.5"
+criterion = { workspace = true }
 
 [[bench]]
 name = "signal_fft_bench"
 harness = false
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
