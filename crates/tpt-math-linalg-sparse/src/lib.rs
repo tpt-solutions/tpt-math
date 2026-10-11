@@ -705,6 +705,36 @@ pub fn gmres<T: Scalar + Copy + 'static>(
     restart: usize,
     max_iter: usize,
 ) -> Result<DVector<T>, SparseError> {
+    gmres_right_preconditioned(a, b, x0, tol, restart, max_iter, |v: &[T]| {
+        Ok::<Vec<T>, SparseError>(v.to_vec())
+    })
+}
+
+/// Right-preconditioned restarted GMRES.
+///
+/// Solves `A x = b` through the preconditioned operator `A M⁻¹`, where
+/// `precond` applies `M⁻¹` to a vector. Right preconditioning leaves the
+/// residual unchanged, so the tolerance and budget have the same meaning as in
+/// [`gmres`]. A good `M` makes `A M⁻¹` close to the identity, which cuts the
+/// number of Arnoldi steps.
+///
+/// # Errors
+///
+/// As [`gmres`], plus any error returned by `precond`.
+#[cfg(feature = "alloc")]
+pub fn gmres_right_preconditioned<T, P>(
+    a: &CsrMatrix<T>,
+    b: &DVector<T>,
+    x0: Option<DVector<T>>,
+    tol: T,
+    restart: usize,
+    max_iter: usize,
+    precond: P,
+) -> Result<DVector<T>, SparseError>
+where
+    T: Scalar + Copy + 'static,
+    P: Fn(&[T]) -> Result<Vec<T>, SparseError>,
+{
     if a.nrows() != a.ncols() || b.len() != a.nrows() {
         return Err(SparseError::DimensionMismatch);
     }
@@ -736,8 +766,9 @@ pub fn gmres<T: Scalar + Copy + 'static>(
             return Err(SparseError::NotConverged { iterations });
         }
 
-        // Arnoldi cycle. `basis[j]` is the j-th orthonormal Krylov vector,
-        // `hess[j]` the j-th Hessenberg column after the Givens rotations.
+        // Arnoldi cycle on the preconditioned operator A M⁻¹. `basis[j]` is the
+        // j-th orthonormal Krylov vector, `hess[j]` the j-th Hessenberg column
+        // after the Givens rotations.
         let mut basis: Vec<Vec<T>> = vec![r.iter().map(|&v| v / beta).collect()];
         let mut hess: Vec<Vec<T>> = Vec::with_capacity(m);
         let mut rotations: Vec<(T, T)> = Vec::with_capacity(m);
@@ -746,8 +777,9 @@ pub fn gmres<T: Scalar + Copy + 'static>(
         let mut k = 0;
         while k < m && iterations < max_iter {
             iterations += 1;
+            let z = precond(&basis[k])?;
             let mut w = vec![T::zero(); n];
-            a.matvec_into(&basis[k], &mut w)?;
+            a.matvec_into(&z, &mut w)?;
             let mut col = vec![T::zero(); k + 2];
             for i in 0..=k {
                 let h_ik = slice_dot(&w, &basis[i]);
@@ -796,12 +828,43 @@ pub fn gmres<T: Scalar + Copy + 'static>(
             }
             y[i] = s / diag;
         }
+        // The cycle's correction is M⁻¹ (Σ yⱼ vⱼ) because of right preconditioning.
+        let mut combination = vec![T::zero(); n];
         for (j, &yj) in y.iter().enumerate() {
-            for (xi, &vi) in x.iter_mut().zip(&basis[j]) {
-                *xi = *xi + yj * vi;
+            for (ci, &vi) in combination.iter_mut().zip(&basis[j]) {
+                *ci = *ci + yj * vi;
             }
         }
+        let correction = precond(&combination)?;
+        for (xi, &si) in x.iter_mut().zip(&correction) {
+            *xi = *xi + si;
+        }
     }
+}
+
+/// GMRES preconditioned by the ILU(0) factors of `a` itself.
+///
+/// Factorises `a` once, then runs [`gmres_right_preconditioned`]. This is the
+/// usual pairing for sparse non-symmetric systems. It is cheap per iteration and
+/// often cuts the iteration count a lot.
+///
+/// # Errors
+///
+/// As [`Ilu0::factor`] and [`gmres`].
+#[cfg(feature = "alloc")]
+pub fn gmres_ilu0(
+    a: &CsrMatrix<f64>,
+    b: &DVector<f64>,
+    x0: Option<DVector<f64>>,
+    tol: f64,
+    restart: usize,
+    max_iter: usize,
+) -> Result<DVector<f64>, SparseError> {
+    let ilu = Ilu0::factor(a)?;
+    gmres_right_preconditioned(a, b, x0, tol, restart, max_iter, |v: &[f64]| {
+        ilu.apply(&DVector::from_vec(v.to_vec()))
+            .map(|d| d.as_slice().to_vec())
+    })
 }
 
 /// Solve `A x = b` with conjugate gradients preconditioned by the Jacobi
@@ -1400,6 +1463,43 @@ mod gmres_tests {
             gmres(&a, &b, None, 1e-14, 1, 1),
             Err(SparseError::NotConverged { iterations: 1 })
         );
+    }
+
+    #[test]
+    fn ilu_preconditioning_converges_where_plain_gmres_runs_out_of_budget() {
+        // 2D Laplacian on a 10×10 grid (n = 100).
+        let m = 10;
+        let n = m * m;
+        let mut coo = CooMatrix::<f64>::new(n, n);
+        for r in 0..m {
+            for c in 0..m {
+                let k = r * m + c;
+                coo.push(k, k, 4.0);
+                if c > 0 {
+                    coo.push(k, k - 1, -1.0);
+                }
+                if c + 1 < m {
+                    coo.push(k, k + 1, -1.0);
+                }
+                if r > 0 {
+                    coo.push(k, k - m, -1.0);
+                }
+                if r + 1 < m {
+                    coo.push(k, k + m, -1.0);
+                }
+            }
+        }
+        let a = coo.to_csr();
+        let b = DVector::from_fn(n, |i| if i % 3 == 0 { 1.0 } else { -0.5 });
+        // Measured: plain GMRES needs 26 steps for this tolerance and ILU(0)
+        // needs 14. A budget of 20 separates the two.
+        assert!(matches!(
+            gmres(&a, &b, None, 1e-10, 40, 20),
+            Err(SparseError::NotConverged { .. })
+        ));
+        let x = gmres_ilu0(&a, &b, None, 1e-10, 40, 20).unwrap();
+        let residual = (b.clone() - a.matvec(&x).unwrap()).norm();
+        assert!(residual < 1e-8 * b.norm(), "residual {residual}");
     }
 
     #[test]

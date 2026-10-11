@@ -9,6 +9,8 @@ and this project adheres to SemVer.
 
 ### Added
 
+- `gmres_right_preconditioned`: restarted GMRES with a caller-supplied right preconditioner `M⁻¹`. `gmres` is now this function with the identity preconditioner, so its behaviour is unchanged.
+- `gmres_ilu0`: GMRES preconditioned by the ILU(0) factors of the matrix itself.
 - `Ilu0`: incomplete LU factorisation with zero fill-in (`factor`, `apply`), usable as a preconditioner. Exact when the factors have no fill-in.
 - `SparseCholesky`: sparse Cholesky factorisation `A = L Lᵀ` of a symmetric positive-definite matrix, with `factor`, `solve` and fill-in statistics. No fill-reducing ordering is applied. Indefinite input is reported as `Breakdown`.
 - `jacobi_preconditioned_cg`: conjugate gradients preconditioned by `diag(A)`. Errors on a zero diagonal entry.
