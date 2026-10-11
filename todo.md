@@ -1014,14 +1014,17 @@ tree.*
 - [x] `tpt-math-graph` `astar`: infinite loop when all open f are inf/NaN;
       O(V²) open-set scan → binary heap. Validate negative weights in
       Dijkstra/A*. Max-flow absolute eps drops small capacities
-- [ ] Special functions (`tpt-math-stats/special.rs`,
+- [x] Special functions (`tpt-math-stats/special.rs`,
       `tpt-math-prob-bayes/special.rs`): `erf = 1 - erfc` cancellation;
       `Normal::cdf`/`gamma_q` lose tails; `lgamma` NaN for negative args;
       fixed `MAXIT=400` silently unconverged; `ln(1-x)` → `ln_1p`. Dedupe the
       two copies into one shared implementation
-      Status: Not started: the two `special.rs` copies still diverge. Deduplicating
-      needs a decision on where the shared module lives (new crate vs. an
-      existing one), so it was left for a follow-up.
+      Status: Done: the two copies are now one `tpt-math-prob-core::special`
+      module, re-exported by both crates under their existing names. Decision:
+      it lives in `tpt-math-prob-core` because both consumers already depend on
+      it, and `tpt-math-numeric` stays free of transcendental code. `erf`/`erfc`
+      use the incomplete gamma, `Normal::cdf` uses `erfc` in both tails, `gamma`
+      keeps its sign, and non-convergence returns `NaN`.
 - [x] `tpt-math-geometry`: `slerp`/`Rotation3::powf` `acos` not clamped
       (NaN); `Rotation::from_matrix` accepts det = -1; `UnitQuaternion`
       product never renormalises. `tpt-math-spatial` `Screw::log` uses
@@ -1078,6 +1081,10 @@ tree.*
       Status: Partial: reusable `Lu` and the j-k-i matmul are done (`tpt-math-linalg-dense`). In-place operators are not. Dense storage is already a flat column-major `Vec`.
 - [ ] Sparse: `matvec_into`, in-place axpy in CG/BiCGSTAB, residual norm
       computed once per iteration, counting-sort transpose/convert
+      Status: Partial: `CsrMatrix::matvec_into` is done, and the residual norm is
+      already computed once per iteration. In-place axpy and counting-sort
+      conversion are not. `DVector` has no `IndexMut`, so the solver updates still
+      allocate.
 - [x] `Kriging::predict`: factor once in `new` (currently O(n³) per call)
 - [x] HMM Viterbi: precompute log transition/emission matrices
 - [ ] `tpt-math-exact` intervals: add/sub in 2 ops, not 12 BigRational clones
@@ -1089,23 +1096,47 @@ tree.*
 
 ### 7.3 Missing features
 
-- [ ] Dense QR, least squares, symmetric eigen, SVD, real Cholesky,
-      det / rank / cond, matrix exp (none exist in the workspace)
-      Status: Partial: Householder QR and `least_squares` are done. Symmetric eigen, SVD, real Cholesky, det/rank/cond and matrix exp are not.
-- [ ] Optimisation: L-BFGS, Nelder-Mead, damped Newton + line search,
+- [x] Dense QR, least squares, symmetric eigen, SVD, real Cholesky,
+      det / rank / cond, matrix exp
+      Status: Done: Householder QR, least squares, real Cholesky, symmetric eigen,
+      det, thin one-sided Jacobi SVD, `rank`, `cond` and scaling-and-squaring
+      `matrix_exp` in `tpt-math-linalg-dense`.
+- [x] Optimisation: L-BFGS, Nelder-Mead, damped Newton + line search,
       simplex LP, finite-difference gradients
-      Status: Partial: Nelder-Mead and finite-difference gradients are done. L-BFGS, damped Newton with line search, and simplex LP are not.
+      Status: Done: gradient descent, nonlinear CG, Newton, L-BFGS, Nelder-Mead,
+      finite-difference gradients (`numerical_gradient`), and a two-phase simplex
+      LP (`linear_program::maximize`, Bland's rule).
 - [ ] Stats: quantiles, skew/kurtosis, covariance, pooled/paired t,
       Mann-Whitney, Wilcoxon, KS, ANOVA/F, chi-squared independence,
       bootstrap, multiple-comparison corrections
-      Status: Partial: quantiles (type 7), skewness, excess kurtosis, covariance, and pooled/paired t-tests are done. The rank tests, KS, ANOVA/F, chi-squared independence, bootstrap and multiple-comparison corrections are not.
+      Status: Done: quantiles (type 7), skewness, excess kurtosis, covariance,
+      one/two-sample/pooled/paired t-tests, chi-squared goodness-of-fit and
+      independence, one-way ANOVA, Mann-Whitney, Wilcoxon signed-rank,
+      two-sample KS, Bonferroni/Holm/Benjamini-Hochberg corrections, and a
+      percentile bootstrap CI (`try_bootstrap_ci`).
 - [ ] Sampling: HMC, multivariate/adaptive Metropolis, R-hat/ESS
       diagnostics, self-normalised importance sampling + ESS
+      Status: Partial: `Metropolis` and HMC (`run_hmc`, unit mass) samplers exist in
+      `tpt-math-prob-bayes`, with split-R̂, effective sample size and self-normalised
+      importance sampling (`diagnostics`). Adaptive and multivariate Metropolis are not.
 - [ ] ODE solvers (RK4/RK45), quadrature, root finding
+      Status: Partial: fixed-step RK4, adaptive Dormand–Prince 5(4) (`dopri5_integrate`),
+      composite Simpson quadrature, and bisection and Brent root finding exist in
+      `tpt-math-numeric`. Higher-order quadrature (e.g. Gauss–Kronrod) is not.
 - [ ] IIR / biquad / Butterworth filters in `signal-filter`
+      Status: Partial: RBJ biquads for lowpass, highpass, bandpass (constant 0 dB
+      peak) and notch, plus a Butterworth lowpass cascade. Butterworth highpass and
+      bandpass cascades are not.
 - [ ] Sparse LU/Cholesky, Jacobi/ILU/IC preconditioners, GMRES
+      Status: Partial: restarted GMRES (`gmres`) and Jacobi-preconditioned CG
+      (`jacobi_preconditioned_cg`) are done. Sparse LU/Cholesky and the ILU/IC
+      preconditioners are not.
 - [x] `autodiff-fwd`: sqrt, powi/powf, tan, tanh, atan, abs, `Dual op scalar`
 - [ ] `prob-dist`: pdf / cdf / quantile / moments (currently sampling-only)
+      Status: Partial: `density` gives pdf/pmf, cdf and quantile for Normal,
+      Exponential, Gamma, Beta, Uniform and Poisson (requires `std`). Moments,
+      the remaining families (Student-t, Cauchy, chi-squared, ...) and
+      distribution-specific quantiles for Gamma/Beta/Poisson are not.
 - [ ] `symbolic`: like-term collection, more functions
       Status: Partial: `x/x` (taken as 1, undefined at 0), `x^0`, `x^1`, nested
       powers and fixpoint simplification are done. Like-term collection and
@@ -1115,9 +1146,12 @@ tree.*
 
 ### 7.4 Innovation (pick one or two)
 
-- [ ] Cross-crate differential testing harness (proptest): exact vs f64
+- [x] Cross-crate differential testing harness (proptest): exact vs f64
       solvers; autodiff-fwd vs autodiff-rev vs symbolic vs finite
       differences
+      Status: Done as a deterministic grid-based harness in
+      `tpt-math-autodiff/tests/differential.rs` (no new proptest dependency).
+      It found and fixed a `num-bigint` version split in `tpt-math-exact`.
 - [ ] Interval / error-bounded solvers built on `tpt-math-exact::Interval`
       (for `tpt-formal`)
 - [ ] Units-aware optimise / ODE / autodiff via `units-dyn` + generic scalars
