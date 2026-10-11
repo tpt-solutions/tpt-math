@@ -56,7 +56,9 @@
 use core::fmt;
 
 mod beta;
+pub mod diagnostics;
 mod gamma;
+pub mod hmc;
 mod likelihood;
 mod mcmc;
 mod normal;

@@ -6,7 +6,14 @@ All notable changes to this crate are documented here. Format based on
 
 ## [Unreleased]
 
+### Added
+
+- `hmc` module: `run_hmc`, Hamiltonian Monte Carlo with a leapfrog integrator, unit mass matrix and a caller-supplied gradient.
+- `diagnostics` module: `split_r_hat` (split-R̂ across chains), `effective_sample_size` (Geyer initial positive sequence) and `importance_estimate` (self-normalised importance sampling with its ESS).
+
 ### Changed
+
+- `special` is re-exported from `tpt-math-prob-core::special`, replacing the local copy. The public paths are unchanged. `erf`, `erfc` and `standard_normal_cdf` now keep relative precision in the tails and near zero.
 
 - The MCMC run methods (`run`, `run_with_burn_in`, `run_thinned`) panic when the starting state has a NaN log-density, instead of returning a chain that never moves.
 
