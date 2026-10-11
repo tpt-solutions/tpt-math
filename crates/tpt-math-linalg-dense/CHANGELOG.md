@@ -13,10 +13,13 @@ and this project adheres to SemVer.
 
 ### Fixed
 
+- `alloc`-only (`no_std`) builds compile again: the f64 square roots in the QR, Cholesky, eigen and SVD code go through `num-traits`, which uses `libm` without `std`. `matrix_exp` scales by repeated halving instead of `powi`.
 - `Index<(i, j)>` checks each axis, so a row index past `nrows` no longer aliases another element.
 
 ### Added
 
+- `DMatrix::svd` (thin one-sided Jacobi SVD), `singular_values`, `rank` (numerical rank with the `max(m, n) · σ_max · ε` tolerance), `cond` (2-norm condition number; `∞` when rank-deficient).
+- `DMatrix::matrix_exp`: matrix exponential by scaling and squaring with a Taylor series. Errors on non-square input.
 - `Lu`: a reusable LU factorisation (`Lu::new`, `solve`, `dim`) for many right-hand sides.
 - `Qr` (Householder) and `DMatrix::least_squares` for overdetermined least-squares problems.
 - `DMatrix::det` (from LU), `DMatrix::cholesky` (real `A = L Lᵀ`), and `DMatrix::symmetric_eigen` (cyclic Jacobi; ascending eigenvalues, orthonormal eigenvectors as columns).

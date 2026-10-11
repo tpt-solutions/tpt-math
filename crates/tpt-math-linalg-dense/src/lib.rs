@@ -909,11 +909,8 @@ impl Qr {
             .collect();
         let mut reflectors = Vec::with_capacity(n);
         for k in 0..n {
-            let norm = w[k..m]
-                .iter()
-                .map(|row| row[k] * row[k])
-                .sum::<f64>()
-                .sqrt();
+            let norm = w[k..m].iter().map(|row| row[k] * row[k]).sum::<f64>();
+            let norm = sqrt_f64(norm);
             if norm == 0.0 {
                 continue;
             }
@@ -1050,7 +1047,7 @@ impl DMatrix<f64> {
                     what: "cholesky (not positive definite)",
                 });
             }
-            l[j][j] = d.sqrt();
+            l[j][j] = sqrt_f64(d);
             for i in (j + 1)..n {
                 let s = self[(i, j)] - (0..j).map(|k| l[i][k] * l[j][k]).sum::<f64>();
                 l[i][j] = s / l[j][j];
@@ -1108,9 +1105,9 @@ impl DMatrix<f64> {
                     }
                     // Rotation angle that annihilates a[p][q].
                     let theta = (a[q][q] - a[p][p]) / (2.0 * a[p][q]);
-                    let t = theta.signum() / (theta.abs() + (theta * theta + 1.0).sqrt());
+                    let t = theta.signum() / (theta.abs() + sqrt_f64(theta * theta + 1.0));
                     let t = if theta == 0.0 { 1.0 } else { t };
-                    let c = 1.0 / (t * t + 1.0).sqrt();
+                    let c = 1.0 / sqrt_f64(t * t + 1.0);
                     let s = t * c;
                     // A ← Pᵀ A P, with P the Givens rotation in the (p, q) plane.
                     for k in 0..n {
@@ -1146,6 +1143,227 @@ impl DMatrix<f64> {
     /// As [`Qr::new`] and [`Qr::solve_least_squares`].
     pub fn least_squares(&self, b: &DVector<f64>) -> Result<DVector<f64>, DenseError> {
         Qr::new(self)?.solve_least_squares(b)
+    }
+}
+
+/// Square root for `f64` that also works without `std`. The inherent
+/// `f64::sqrt` is unavailable there, so this goes through `num-traits`, which
+/// uses `libm` in that configuration.
+#[cfg(feature = "alloc")]
+fn sqrt_f64(x: f64) -> f64 {
+    tpt_math_numeric::prelude::Float::sqrt(x)
+}
+
+/// The factors `(U, σ, V)` of a thin singular value decomposition.
+#[cfg(feature = "alloc")]
+pub type SvdFactors = (DMatrix<f64>, DVector<f64>, DMatrix<f64>);
+
+/// Sweep budget for the one-sided Jacobi SVD. Each sweep is a full pass over
+/// all column pairs; convergence is quadratic, so this is far more than needed.
+#[cfg(feature = "alloc")]
+const SVD_MAX_SWEEPS: usize = 60;
+
+/// Taylor terms for [`DMatrix::matrix_exp`]. After scaling the norm is at most
+/// 1/2, so 30 terms leave a truncation error near `0.5^30 / 30!`.
+#[cfg(feature = "alloc")]
+const EXP_TAYLOR_TERMS: usize = 30;
+
+/// Rotates columns `p` and `q` of `cols` by the plane rotation `(c, s)`.
+#[cfg(feature = "alloc")]
+fn rotate_columns(cols: &mut [Vec<f64>], p: usize, q: usize, c: f64, s: f64) {
+    let (lo, hi) = cols.split_at_mut(q);
+    for (x, y) in lo[p].iter_mut().zip(hi[0].iter_mut()) {
+        let (up, uq) = (*x, *y);
+        *x = c * up - s * uq;
+        *y = s * up + c * uq;
+    }
+}
+
+/// Dense matrix product for square operands of equal size.
+#[cfg(feature = "alloc")]
+fn matmul_square(a: &DMatrix<f64>, b: &DMatrix<f64>) -> DMatrix<f64> {
+    let n = a.nrows();
+    DMatrix::from_fn(n, n, |i, j| (0..n).map(|k| a[(i, k)] * b[(k, j)]).sum())
+}
+
+#[cfg(feature = "alloc")]
+impl DMatrix<f64> {
+    /// Thin singular value decomposition `A = U · diag(σ) · Vᵀ`.
+    ///
+    /// For an `m × n` matrix with `k = min(m, n)`, returns `U` (`m × k`), the
+    /// singular values `σ` (length `k`, sorted in descending order) and `V`
+    /// (`n × k`), whose columns are orthonormal. Columns of `U` belonging to
+    /// zero singular values are zero.
+    ///
+    /// Uses one-sided Jacobi rotations, which give high relative accuracy for
+    /// small singular values. Works for any shape.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use tpt_math_linalg_dense::DMatrix;
+    ///
+    /// let a = DMatrix::from_row_slice(2, 2, &[3.0, 0.0, 0.0, -4.0]);
+    /// let (_, s, _) = a.svd().unwrap();
+    /// assert!((s[0] - 4.0).abs() < 1e-12 && (s[1] - 3.0).abs() < 1e-12);
+    /// ```
+    pub fn svd(&self) -> Result<SvdFactors, DenseError> {
+        let (m, n) = (self.nrows(), self.ncols());
+        if m < n {
+            // A = (Aᵀ)ᵀ: decompose the transpose and swap the factors.
+            let (u, s, v) = self.transpose().svd()?;
+            return Ok((v, s, u));
+        }
+
+        // Work column-wise: rotate pairs of columns of U = A until they are
+        // mutually orthogonal, accumulating the rotations in V.
+        let mut u: Vec<Vec<f64>> = (0..n)
+            .map(|j| (0..m).map(|i| self[(i, j)]).collect())
+            .collect();
+        let mut v: Vec<Vec<f64>> = (0..n)
+            .map(|j| (0..n).map(|i| if i == j { 1.0 } else { 0.0 }).collect())
+            .collect();
+        for _ in 0..SVD_MAX_SWEEPS {
+            let mut rotated = false;
+            for p in 0..n {
+                for q in (p + 1)..n {
+                    let alpha: f64 = u[p].iter().map(|x| x * x).sum();
+                    let beta: f64 = u[q].iter().map(|x| x * x).sum();
+                    let gamma: f64 = u[p].iter().zip(&u[q]).map(|(x, y)| x * y).sum();
+                    if gamma == 0.0 || gamma.abs() <= f64::EPSILON * sqrt_f64(alpha * beta) {
+                        continue;
+                    }
+                    rotated = true;
+                    let zeta = (beta - alpha) / (2.0 * gamma);
+                    let t = zeta.signum() / (zeta.abs() + sqrt_f64(1.0 + zeta * zeta));
+                    let c = 1.0 / sqrt_f64(1.0 + t * t);
+                    let s = c * t;
+                    rotate_columns(&mut u, p, q, c, s);
+                    rotate_columns(&mut v, p, q, c, s);
+                }
+            }
+            if !rotated {
+                break;
+            }
+        }
+
+        // The column norms of the orthogonalised U are the singular values.
+        let sigma: Vec<f64> = u
+            .iter()
+            .map(|col| {
+                let sum: f64 = col.iter().map(|x| x * x).sum();
+                sqrt_f64(sum)
+            })
+            .collect();
+        let mut order: Vec<usize> = (0..n).collect();
+        order.sort_by(|&a, &b| {
+            sigma[b]
+                .partial_cmp(&sigma[a])
+                .unwrap_or(core::cmp::Ordering::Equal)
+        });
+
+        let u_out = DMatrix::from_fn(m, n, |i, j| {
+            let col = order[j];
+            if sigma[col] > 0.0 {
+                u[col][i] / sigma[col]
+            } else {
+                0.0
+            }
+        });
+        let s_out = DVector::from_fn(n, |j| sigma[order[j]]);
+        let v_out = DMatrix::from_fn(n, n, |i, j| v[order[j]][i]);
+        Ok((u_out, s_out, v_out))
+    }
+
+    /// The singular values, sorted in descending order.
+    ///
+    /// # Errors
+    ///
+    /// As [`DMatrix::svd`].
+    pub fn singular_values(&self) -> Result<DVector<f64>, DenseError> {
+        Ok(self.svd()?.1)
+    }
+
+    /// Numerical rank: the number of singular values above
+    /// `max(m, n) · σ_max · ε`, the usual tolerance for floating-point input.
+    ///
+    /// # Errors
+    ///
+    /// As [`DMatrix::svd`].
+    pub fn rank(&self) -> Result<usize, DenseError> {
+        let s = self.singular_values()?;
+        let tol = self.rank_tolerance(&s);
+        Ok(s.iter().filter(|&&x| x > tol).count())
+    }
+
+    /// The 2-norm condition number `σ_max / σ_min`.
+    ///
+    /// Returns `∞` when the matrix is rank-deficient (`σ_min` is within the
+    /// [`DMatrix::rank`] tolerance) and `1` for an empty matrix.
+    ///
+    /// # Errors
+    ///
+    /// As [`DMatrix::svd`].
+    pub fn cond(&self) -> Result<f64, DenseError> {
+        let s = self.singular_values()?;
+        if s.is_empty() {
+            return Ok(1.0);
+        }
+        let s_min = s[s.len() - 1];
+        if s_min <= self.rank_tolerance(&s) {
+            return Ok(f64::INFINITY);
+        }
+        Ok(s[0] / s_min)
+    }
+
+    fn rank_tolerance(&self, s: &DVector<f64>) -> f64 {
+        let sigma_max = s.iter().copied().fold(0.0, f64::max);
+        self.nrows().max(self.ncols()) as f64 * sigma_max * f64::EPSILON
+    }
+
+    /// The matrix exponential `e^A`, by scaling and squaring.
+    ///
+    /// `A` is scaled by `2^-s` until its infinity norm is at most `1/2`, the
+    /// Taylor series is summed on the scaled matrix, and the result is squared
+    /// `s` times.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`DenseError::DimensionMismatch`] if the matrix is not square.
+    pub fn matrix_exp(&self) -> Result<DMatrix<f64>, DenseError> {
+        let n = self.nrows();
+        if self.ncols() != n {
+            return Err(DenseError::DimensionMismatch {
+                what: format!("matrix_exp needs a square matrix, got {n}x{}", self.ncols()),
+            });
+        }
+        let norm = (0..n)
+            .map(|i| (0..n).map(|j| self[(i, j)].abs()).sum::<f64>())
+            .fold(0.0, f64::max);
+        let mut squarings = 0i32;
+        let mut scaled_norm = norm;
+        while scaled_norm > 0.5 {
+            scaled_norm *= 0.5;
+            squarings += 1;
+        }
+        let mut scale = 1.0;
+        for _ in 0..squarings {
+            scale *= 0.5;
+        }
+        let a = DMatrix::from_fn(n, n, |i, j| self[(i, j)] * scale);
+
+        let identity = DMatrix::from_fn(n, n, |i, j| if i == j { 1.0 } else { 0.0 });
+        let mut term = identity.clone();
+        let mut sum = identity;
+        for k in 1..=EXP_TAYLOR_TERMS {
+            term = matmul_square(&term, &a);
+            term = DMatrix::from_fn(n, n, |i, j| term[(i, j)] / k as f64);
+            sum = DMatrix::from_fn(n, n, |i, j| sum[(i, j)] + term[(i, j)]);
+        }
+        for _ in 0..squarings {
+            sum = matmul_square(&sum, &sum);
+        }
+        Ok(sum)
     }
 }
 
@@ -1574,5 +1792,103 @@ mod simd_tests {
     #[should_panic(expected = "length")]
     fn from_row_slice_length_mismatch_panics() {
         let _ = DMatrix::from_row_slice(2, 2, &[1.0_f64, 2.0, 3.0, 4.0, 5.0]);
+    }
+}
+
+#[cfg(all(test, feature = "alloc"))]
+mod decomposition_tests {
+    use super::*;
+
+    fn assert_close(a: &DMatrix<f64>, b: &DMatrix<f64>, tol: f64) {
+        assert_eq!((a.nrows(), a.ncols()), (b.nrows(), b.ncols()));
+        for i in 0..a.nrows() {
+            for j in 0..a.ncols() {
+                assert!(
+                    (a[(i, j)] - b[(i, j)]).abs() <= tol,
+                    "({i},{j}): {} vs {}",
+                    a[(i, j)],
+                    b[(i, j)]
+                );
+            }
+        }
+    }
+
+    /// `U · diag(σ) · Vᵀ`.
+    fn reconstruct(u: &DMatrix<f64>, s: &DVector<f64>, v: &DMatrix<f64>) -> DMatrix<f64> {
+        DMatrix::from_fn(u.nrows(), v.nrows(), |i, j| {
+            (0..s.len()).map(|k| u[(i, k)] * s[k] * v[(j, k)]).sum()
+        })
+    }
+
+    #[test]
+    fn svd_reconstructs_tall_and_wide_matrices() {
+        let tall = DMatrix::from_row_slice(3, 2, &[1.0, 2.0, 3.0, 4.0, 5.0, 6.0]);
+        let (u, s, v) = tall.svd().unwrap();
+        assert_close(&reconstruct(&u, &s, &v), &tall, 1e-12);
+        let wide = tall.transpose();
+        let (u, s, v) = wide.svd().unwrap();
+        assert_close(&reconstruct(&u, &s, &v), &wide, 1e-12);
+    }
+
+    #[test]
+    fn singular_values_are_sorted_and_exact_for_diagonal() {
+        let d = DMatrix::from_row_slice(2, 2, &[3.0, 0.0, 0.0, -4.0]);
+        let s = d.singular_values().unwrap();
+        assert!((s[0] - 4.0).abs() < 1e-12);
+        assert!((s[1] - 3.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn rank_detects_dependent_rows() {
+        let a = DMatrix::from_row_slice(2, 2, &[1.0, 2.0, 2.0, 4.0]);
+        assert_eq!(a.rank().unwrap(), 1);
+        let eye = DMatrix::from_row_slice(3, 3, &[1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0]);
+        assert_eq!(eye.rank().unwrap(), 3);
+        assert_eq!(DMatrix::zeros(2, 2).rank().unwrap(), 0);
+    }
+
+    #[test]
+    fn condition_number_of_diagonal_and_singular() {
+        let a = DMatrix::from_row_slice(2, 2, &[10.0, 0.0, 0.0, 1.0]);
+        assert!((a.cond().unwrap() - 10.0).abs() < 1e-12);
+        let singular = DMatrix::from_row_slice(2, 2, &[1.0, 2.0, 2.0, 4.0]);
+        assert!(singular.cond().unwrap().is_infinite());
+    }
+
+    #[test]
+    fn matrix_exponential_known_values() {
+        let zero = DMatrix::zeros(2, 2);
+        let eye = DMatrix::from_row_slice(2, 2, &[1.0, 0.0, 0.0, 1.0]);
+        assert_close(&zero.matrix_exp().unwrap(), &eye, 1e-14);
+
+        let e = core::f64::consts::E;
+        let d = DMatrix::from_row_slice(2, 2, &[1.0, 0.0, 0.0, 2.0]);
+        let want = DMatrix::from_row_slice(2, 2, &[e, 0.0, 0.0, e * e]);
+        assert_close(&d.matrix_exp().unwrap(), &want, 1e-12);
+
+        // Nilpotent: exp([[0, 1], [0, 0]]) = [[1, 1], [0, 1]].
+        let nilpotent = DMatrix::from_row_slice(2, 2, &[0.0, 1.0, 0.0, 0.0]);
+        let want = DMatrix::from_row_slice(2, 2, &[1.0, 1.0, 0.0, 1.0]);
+        assert_close(&nilpotent.matrix_exp().unwrap(), &want, 1e-14);
+
+        // Generator of rotations: exp([[0, -t], [t, 0]]) is a rotation by t.
+        let t = 1.0_f64;
+        let gen = DMatrix::from_row_slice(2, 2, &[0.0, -t, t, 0.0]);
+        let want = DMatrix::from_row_slice(2, 2, &[t.cos(), -t.sin(), t.sin(), t.cos()]);
+        assert_close(&gen.matrix_exp().unwrap(), &want, 1e-12);
+
+        // Large entries exercise the scaling-and-squaring path.
+        let big = DMatrix::from_row_slice(2, 2, &[10.0, 0.0, 0.0, -10.0]);
+        let got = big.matrix_exp().unwrap();
+        let want = 10f64.exp();
+        assert!(((got[(0, 0)] - want) / want).abs() < 1e-12);
+    }
+
+    #[test]
+    fn matrix_exp_requires_square() {
+        assert!(matches!(
+            DMatrix::zeros(2, 3).matrix_exp(),
+            Err(DenseError::DimensionMismatch { .. })
+        ));
     }
 }
