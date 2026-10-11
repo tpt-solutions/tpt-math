@@ -1132,9 +1132,9 @@ tree.*
       bandpass cascades are not.
 - [ ] Sparse LU/Cholesky, Jacobi/ILU/IC preconditioners, GMRES
       Status: Partial: restarted GMRES (`gmres`), Jacobi-preconditioned CG
-      (`jacobi_preconditioned_cg`) and sparse Cholesky (`SparseCholesky`, without
-      fill-reducing ordering) are done. Sparse LU and the ILU/IC preconditioners are
-      not.
+      (`jacobi_preconditioned_cg`), sparse Cholesky (`SparseCholesky`, without
+      fill-reducing ordering) and ILU(0) (`Ilu0`) are done. Sparse LU and IC(0) are
+      not, and ILU is not yet wired into an iterative solver.
 - [x] `autodiff-fwd`: sqrt, powi/powf, tan, tanh, atan, abs, `Dual op scalar`
 - [ ] `prob-dist`: pdf / cdf / quantile / moments (currently sampling-only)
       Status: Partial: `density` gives pdf/pmf, cdf and moments for Normal,
