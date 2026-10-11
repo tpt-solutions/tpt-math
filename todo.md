@@ -1131,9 +1131,10 @@ tree.*
       peak) and notch, plus Butterworth lowpass and highpass cascades. Butterworth
       bandpass cascades are not.
 - [ ] Sparse LU/Cholesky, Jacobi/ILU/IC preconditioners, GMRES
-      Status: Partial: restarted GMRES (`gmres`) and Jacobi-preconditioned CG
-      (`jacobi_preconditioned_cg`) are done. Sparse LU/Cholesky and the ILU/IC
-      preconditioners are not.
+      Status: Partial: restarted GMRES (`gmres`), Jacobi-preconditioned CG
+      (`jacobi_preconditioned_cg`) and sparse Cholesky (`SparseCholesky`, without
+      fill-reducing ordering) are done. Sparse LU and the ILU/IC preconditioners are
+      not.
 - [x] `autodiff-fwd`: sqrt, powi/powf, tan, tanh, atan, abs, `Dual op scalar`
 - [ ] `prob-dist`: pdf / cdf / quantile / moments (currently sampling-only)
       Status: Partial: `density` gives pdf/pmf, cdf and moments for Normal,
