@@ -86,6 +86,7 @@ where
     ) -> Vec<f64> {
         let mut state = init;
         let mut log_state = (self.log_target)(init);
+        assert_start_density(init, log_state);
         for _ in 0..burn_in {
             let (next, log_next) = self.step_cached(rng, state, log_state);
             state = next;
@@ -120,6 +121,7 @@ where
         assert!(thin > 0, "thinning interval must be non-zero");
         let mut state = init;
         let mut log_state = (self.log_target)(init);
+        assert_start_density(init, log_state);
         for _ in 0..burn_in {
             let (next, log_next) = self.step_cached(rng, state, log_state);
             state = next;
@@ -212,6 +214,19 @@ where
     pub fn with_gaussian_proposal(log_target: F, step_std: f64) -> Self {
         Metropolis::new(log_target, Gaussian::new(0.0, step_std))
     }
+}
+
+/// A NaN log-density at the starting state makes every comparison false, so the
+/// chain would silently stay at its start forever. Reject it up front.
+///
+/// # Panics
+///
+/// Panics if `log_start` is NaN.
+fn assert_start_density(start: f64, log_start: f64) {
+    assert!(
+        !log_start.is_nan(),
+        "initial state {start} has a NaN log-density; the chain could never move"
+    );
 }
 
 /// The Metropolis accept/reject rule for a symmetric proposal.
@@ -386,6 +401,14 @@ mod tests {
         assert_eq!(sampler.proposal().mean(), 0.0);
         let (_target, proposal) = sampler.into_parts();
         assert_eq!(proposal.std(), 4.0);
+    }
+
+    #[test]
+    #[should_panic(expected = "NaN log-density")]
+    fn nan_initial_density_is_rejected() {
+        let mut rng = SplitMix64::seed_from_u64(3);
+        let mut chain = Metropolis::with_gaussian_proposal(|_x: f64| f64::NAN, 1.0);
+        let _ = chain.run(&mut rng, 0.0, 10);
     }
 
     #[test]

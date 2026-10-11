@@ -126,6 +126,9 @@ pub struct QpSolution {
 /// See [`solve_qp_internal`] for the full form including inequality
 /// constraints.
 ///
+/// A solution accepted at reduced accuracy ([`QpStatus::AlmostSolved`]) is
+/// returned as `Ok`. Use [`solve_qp_internal`] to read the status.
+///
 /// # Errors
 ///
 /// Returns [`ConvexError`] on dimension mismatch, non-finite input, or if the
@@ -544,6 +547,11 @@ fn interior_point(
     let max_iter = 200;
     let tau = 0.99;
     let huge = 1e14;
+    // Data scales used to make the residual tolerances relative (the "1 +"
+    // keeps them meaningful when the data are all zero).
+    let max_abs_p = p.iter().flatten().fold(0.0_f64, |acc, v| acc.max(v.abs()));
+    let scale_p = 1.0 + norm(b_eq) + norm(b);
+    let scale_d = 1.0 + norm(q) + max_abs_p;
 
     let mut x = vec![0.0; n];
     let mut y = vec![0.0; m_eq];
@@ -571,10 +579,18 @@ fn interior_point(
 
         let prim = norm(&r_pri_eq) + norm(&r_pri2);
         let dual = norm(&r_dual);
-        if prim < tol && dual < tol && (m_c == 0 || mu < tol) {
+        // Residual tolerances scale with the problem data so that a uniformly
+        // scaled QP converges the same way as the original.
+        // The complementarity gap m·mu is compared with the objective magnitude.
+        let obj_scale = 1.0 + qp_objective(p, q, &x).abs();
+        let gap = m_c as f64 * mu;
+        if prim < tol * scale_p && dual < tol * scale_d && (m_c == 0 || gap < tol * obj_scale) {
             return Ok((x, QpStatus::Solved));
         }
-        if prim < tol * 10.0 && dual < tol * 10.0 && (m_c == 0 || mu < tol * 10.0) {
+        if prim < tol * 10.0 * scale_p
+            && dual < tol * 10.0 * scale_d
+            && (m_c == 0 || gap < tol * 10.0 * obj_scale)
+        {
             return Ok((x, QpStatus::AlmostSolved));
         }
 
@@ -890,5 +906,22 @@ mod tests {
                 "infeasible x = {xi}"
             );
         }
+    }
+
+    #[test]
+    fn badly_scaled_problem_reports_solved_status() {
+        // min 1e6 (x - 1)² + 1e6 (y + 2)² with bounds. The data are large, so
+        // absolute residual tolerances were never met with the scaled problem.
+        let p = DMatrix::from_row_slice(2, 2, &[2e6, 0.0, 0.0, 2e6]);
+        let q = dv(&[-2e6, 4e6]);
+        let a_ineq = DMatrix::<f64>::zeros(0, 2);
+        let b_ineq = DVector::<f64>::zeros(0);
+        let a_eq = DMatrix::<f64>::zeros(0, 2);
+        let b_eq = DVector::<f64>::zeros(0);
+        let bounds = [(-10.0, 10.0), (-10.0, 10.0)];
+        let sol = solve_qp_internal(&p, &q, &a_eq, &b_eq, &a_ineq, &b_ineq, &bounds).unwrap();
+        assert_eq!(sol.status, QpStatus::Solved);
+        assert!((sol.x[0] - 1.0).abs() < 1e-6, "x = {}", sol.x[0]);
+        assert!((sol.x[1] + 2.0).abs() < 1e-6, "y = {}", sol.x[1]);
     }
 }

@@ -389,11 +389,17 @@ impl<T: Scalar> Pchip<T> {
                 d[i] = (three * (h[i - 1] + h[i])) / (w1 / delta[i - 1] + w2 / delta[i]);
             }
         }
-        // Endpoint derivatives (one-sided Hermite / quadratic estimate).
-        d[0] = ((two * h[0] + h[1]) * delta[0] - h[0] * delta[1]) / (h[0] + h[1]);
-        let nm = n - 1;
-        d[nm] = ((two * h[nm - 1] + h[nm - 2]) * delta[nm - 1] - h[nm - 1] * delta[nm - 2])
-            / (h[nm - 1] + h[nm - 2]);
+        // Endpoint derivatives (one-sided Hermite / quadratic estimate). With
+        // only two nodes there is a single secant, so both ends take its slope.
+        if n == 2 {
+            d[0] = delta[0];
+            d[1] = delta[0];
+        } else {
+            d[0] = ((two * h[0] + h[1]) * delta[0] - h[0] * delta[1]) / (h[0] + h[1]);
+            let nm = n - 1;
+            d[nm] = ((two * h[nm - 1] + h[nm - 2]) * delta[nm - 1] - h[nm - 1] * delta[nm - 2])
+                / (h[nm - 1] + h[nm - 2]);
+        }
 
         // Fritsch–Carlson monotonicity enforcement: on each interval, limit the
         // derivatives so the Hermite cubic cannot overshoot. This guarantees a
@@ -433,6 +439,14 @@ impl<T: Scalar> Pchip<T> {
         let two = one + one;
         let three = two + one;
         let n = self.x.len();
+
+        // Outside the node range, continue along the endpoint tangent.
+        if x < self.x[0] {
+            return self.y[0] + self.d[0] * (x - self.x[0]);
+        }
+        if x > self.x[n - 1] {
+            return self.y[n - 1] + self.d[n - 1] * (x - self.x[n - 1]);
+        }
 
         // Locate the bracketing interval by binary search.
         let k = if x <= self.x[0] {
@@ -657,6 +671,29 @@ mod tests {
             assert!(cur >= prev - 1e-12, "non-monotone at x={xv}");
             prev = cur;
         }
+    }
+
+    #[test]
+    fn pchip_two_nodes_is_linear() {
+        // Two nodes used to panic (out-of-bounds `h[1]` in the endpoint rule).
+        let x = DVector::from_vec(vec![0.0_f64, 2.0]);
+        let y = DVector::from_vec(vec![1.0_f64, 5.0]);
+        let pchip = Pchip::new(x, y).unwrap();
+        assert_relative_eq!(pchip.eval(1.0), 3.0, epsilon = 1e-12);
+        assert_relative_eq!(pchip.eval(0.5), 2.0, epsilon = 1e-12);
+    }
+
+    #[test]
+    fn pchip_extrapolates_linearly() {
+        // Outside the node range the interpolant continues along the endpoint
+        // tangent, as documented on `eval`.
+        let x = DVector::from_vec(vec![0.0_f64, 1.0, 2.0, 3.0]);
+        let y = DVector::from_vec(vec![0.0_f64, 1.0, 8.0, 27.0]);
+        let pchip = Pchip::new(x, y).unwrap();
+        let d0 = pchip.eval(1e-6) / 1e-6; // slope at the left endpoint
+        let dn = (pchip.eval(3.0) - pchip.eval(3.0 - 1e-6)) / 1e-6;
+        assert_relative_eq!(pchip.eval(-1.0), pchip.eval(0.0) - d0, epsilon = 1e-4);
+        assert_relative_eq!(pchip.eval(4.0), pchip.eval(3.0) + dn, epsilon = 1e-4);
     }
 
     #[test]

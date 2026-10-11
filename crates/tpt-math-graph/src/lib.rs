@@ -38,9 +38,10 @@
 
 extern crate alloc;
 
-use alloc::collections::{BTreeMap, VecDeque};
+use alloc::collections::{BTreeMap, BinaryHeap, VecDeque};
 use alloc::vec;
 use alloc::vec::Vec;
+use core::cmp::Ordering;
 
 use petgraph::graph::IndexType;
 use petgraph::visit::EdgeRef;
@@ -63,6 +64,9 @@ pub enum GraphError {
     SourceEqualsSink,
     /// A topological sort was requested on a graph that contains a cycle.
     Cycle,
+    /// An edge weight (or, for [`max_flow`], a capacity) is negative, NaN or,
+    /// for capacities, infinite. Dijkstra and A* require non-negative weights.
+    InvalidWeight,
 }
 
 // ===========================================================================
@@ -101,6 +105,9 @@ where
     if source == sink {
         return Err(GraphError::SourceEqualsSink);
     }
+    if graph.edge_weights().any(|c| !c.is_finite() || *c < 0.0) {
+        return Err(GraphError::InvalidWeight);
+    }
     let n = graph.node_count();
     let m = graph.edge_count();
     let mut res: Vec<Vec<ResEdge>> = (0..n).map(|_| Vec::new()).collect();
@@ -132,7 +139,11 @@ where
 
     let s = source.index();
     let t = sink.index();
-    let eps = 1e-12;
+    // Residual capacities are considered present while they exceed a tiny
+    // tolerance *relative to the largest capacity*, so small-but-real
+    // capacities are kept while rounding residue is still ignored.
+    let max_cap = caps.iter().fold(0.0_f64, |acc, &c| acc.max(c));
+    let eps = max_cap * f64::EPSILON;
     let mut total = 0.0_f64;
 
     loop {
@@ -195,8 +206,50 @@ where
 // Convenience shortest-path wrappers (in-house, on petgraph Graph)
 // ===========================================================================
 
+/// Open-set entry for Dijkstra and A*, ordered so that [`BinaryHeap`] pops the
+/// smallest `f` first. Only non-NaN keys are ever inserted.
+#[derive(Clone, Copy, PartialEq)]
+struct OpenNode {
+    f: f64,
+    node: usize,
+}
+
+impl Eq for OpenNode {}
+
+impl PartialOrd for OpenNode {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for OpenNode {
+    fn cmp(&self, other: &Self) -> Ordering {
+        other
+            .f
+            .total_cmp(&self.f)
+            .then_with(|| other.node.cmp(&self.node))
+    }
+}
+
+/// Reject negative and NaN edge weights, which Dijkstra and A* cannot handle.
+fn check_non_negative<N, Ix>(graph: &Graph<N, f64, Directed, Ix>) -> Result<(), GraphError>
+where
+    Ix: IndexType,
+{
+    if graph.edge_weights().any(|w| w.is_nan() || *w < 0.0) {
+        Err(GraphError::InvalidWeight)
+    } else {
+        Ok(())
+    }
+}
+
 /// Shortest-path distance from `source` to `target` via Dijkstra, using edge
 /// weights as non-negative costs. Returns `None` if `target` is unreachable.
+///
+/// # Panics
+///
+/// Panics if any edge weight is negative or NaN. Use [`try_dijkstra`] to get
+/// an error instead.
 pub fn dijkstra<N, Ix>(
     graph: &Graph<N, f64, Directed, Ix>,
     source: NodeIndex<Ix>,
@@ -205,9 +258,25 @@ pub fn dijkstra<N, Ix>(
 where
     Ix: IndexType,
 {
-    // Reuse petgraph's Dijkstra when on `std`; in `no_std` we run our own
-    // binary-heap-free Dijkstra (small graphs, simple priority by repeated
-    // scan) so the algorithm stays allocator-only.
+    try_dijkstra(graph, source, target).unwrap_or_else(|e| panic!("dijkstra failed: {e:?}"))
+}
+
+/// Fallible [`dijkstra`].
+///
+/// # Errors
+///
+/// Returns [`GraphError::InvalidWeight`] if any edge weight is negative or NaN.
+pub fn try_dijkstra<N, Ix>(
+    graph: &Graph<N, f64, Directed, Ix>,
+    source: NodeIndex<Ix>,
+    target: Option<NodeIndex<Ix>>,
+) -> Result<BTreeMap<usize, f64>, GraphError>
+where
+    Ix: IndexType,
+{
+    check_non_negative(graph)?;
+    // Reuse petgraph's Dijkstra when on `std`; in `no_std` run the same
+    // algorithm over our own binary heap so it stays allocator-only.
     #[cfg(feature = "std")]
     {
         let _ = target;
@@ -217,90 +286,100 @@ where
         for (k, v) in dist {
             out.insert(k.index(), v);
         }
-        out
+        Ok(out)
     }
     #[cfg(not(feature = "std"))]
     {
-        let n = graph.node_count();
         let mut dist: BTreeMap<usize, f64> = BTreeMap::new();
         dist.insert(source.index(), 0.0);
-        // Simple Dijkstra with a linear-scan "priority queue".
         let mut visited: BTreeMap<usize, bool> = BTreeMap::new();
-        for _ in 0..n {
-            // Pick the unvisited node with the smallest distance.
-            let mut u = usize::MAX;
-            let mut best = f64::INFINITY;
-            for (node, d) in dist.iter() {
-                if !visited.get(node).copied().unwrap_or(false) && *d < best {
-                    best = *d;
-                    u = *node;
-                }
-            }
-            if u == usize::MAX {
-                break;
+        let mut heap = BinaryHeap::new();
+        heap.push(OpenNode {
+            f: 0.0,
+            node: source.index(),
+        });
+        while let Some(OpenNode { f: d, node: u }) = heap.pop() {
+            if visited.contains_key(&u) {
+                continue; // settled earlier with a distance no larger than `d`
             }
             visited.insert(u, true);
-            if let Some(tg) = target {
-                if u == tg.index() {
-                    break;
-                }
+            if target.is_some_and(|tg| tg.index() == u) {
+                break;
             }
             for e in graph.edges_directed(NodeIndex::<Ix>::new(u), Direction::Outgoing) {
                 let v = e.target().index();
-                let w = *e.weight();
-                let nd = best + w;
-                let cur = dist.get(&v).copied().unwrap_or(f64::INFINITY);
-                if nd < cur {
+                let nd = d + *e.weight();
+                if nd < dist.get(&v).copied().unwrap_or(f64::INFINITY) {
                     dist.insert(v, nd);
+                    heap.push(OpenNode { f: nd, node: v });
                 }
             }
         }
-        // Keep only reachable entries.
-        let mut out = BTreeMap::new();
-        for (k, v) in dist.iter() {
-            if v.is_finite() {
-                out.insert(*k, *v);
-            }
-        }
-        out
+        Ok(dist)
     }
 }
 
 /// A* shortest path from `start` to the first node satisfying `is_goal`,
 /// using edge weights as costs and `heuristic` as the admissible estimate.
 /// Returns `(cost, path)` or `None` if no path exists.
+///
+/// # Panics
+///
+/// Panics if any edge weight is negative or NaN. Use [`try_astar`] to get an
+/// error instead.
 pub fn astar<N, Ix, F, H>(
     graph: &Graph<N, f64, Directed, Ix>,
     start: NodeIndex<Ix>,
     is_goal: F,
     heuristic: H,
-) -> Option<(f64, Vec<NodeIndex<Ix>>)>
+) -> Option<AStarPath<Ix>>
 where
     Ix: IndexType,
     F: Fn(NodeIndex<Ix>) -> bool,
     H: Fn(NodeIndex<Ix>) -> f64,
 {
+    try_astar(graph, start, is_goal, heuristic).unwrap_or_else(|e| panic!("astar failed: {e:?}"))
+}
+
+/// The cost and node sequence of a shortest path found by A*.
+pub type AStarPath<Ix> = (f64, Vec<NodeIndex<Ix>>);
+
+/// Fallible [`astar`].
+///
+/// # Errors
+///
+/// Returns [`GraphError::InvalidWeight`] if any edge weight is negative or NaN.
+pub fn try_astar<N, Ix, F, H>(
+    graph: &Graph<N, f64, Directed, Ix>,
+    start: NodeIndex<Ix>,
+    is_goal: F,
+    heuristic: H,
+) -> Result<Option<AStarPath<Ix>>, GraphError>
+where
+    Ix: IndexType,
+    F: Fn(NodeIndex<Ix>) -> bool,
+    H: Fn(NodeIndex<Ix>) -> f64,
+{
+    check_non_negative(graph)?;
     let s = start.index();
     let mut g_score: BTreeMap<usize, f64> = BTreeMap::new();
     g_score.insert(s, 0.0);
     let mut came_from: BTreeMap<usize, usize> = BTreeMap::new();
-    let mut open: BTreeMap<usize, f64> = BTreeMap::new();
-    open.insert(s, heuristic(start));
+    let mut open: BinaryHeap<OpenNode> = BinaryHeap::new();
+    let h0 = heuristic(start);
+    if !h0.is_nan() {
+        open.push(OpenNode { f: h0, node: s });
+    }
 
-    while !open.is_empty() {
-        // Pop the open node with lowest f = g + h.
-        let mut u = usize::MAX;
-        let mut best_f = f64::INFINITY;
-        for (node, f) in open.iter() {
-            if *f < best_f {
-                best_f = *f;
-                u = *node;
-            }
-        }
-        open.remove(&u);
-
+    // Each push follows a strict improvement of some g-score, so the search
+    // terminates on a finite graph whatever the heuristic returns.
+    while let Some(OpenNode { f, node: u }) = open.pop() {
         let gu = *g_score.get(&u).unwrap_or(&f64::INFINITY);
         let node_u = NodeIndex::<Ix>::new(u);
+        // Skip stale entries: a cheaper route to `u` was found after this push.
+        if f > gu + heuristic(node_u) {
+            continue;
+        }
         if is_goal(node_u) {
             // Reconstruct path.
             let mut path = Vec::new();
@@ -311,23 +390,24 @@ where
                 cur = p;
             }
             path.reverse();
-            return Some((gu, path));
+            return Ok(Some((gu, path)));
         }
 
         for e in graph.edges_directed(node_u, Direction::Outgoing) {
             let v = e.target().index();
-            let w = *e.weight();
-            let tentative = gu + w;
+            let tentative = gu + *e.weight();
             let vg = g_score.get(&v).copied().unwrap_or(f64::INFINITY);
             if tentative < vg {
                 came_from.insert(v, u);
                 g_score.insert(v, tentative);
                 let f = tentative + heuristic(NodeIndex::new(v));
-                open.insert(v, f);
+                if !f.is_nan() {
+                    open.push(OpenNode { f, node: v });
+                }
             }
         }
     }
-    None
+    Ok(None)
 }
 
 // ===========================================================================
@@ -453,5 +533,85 @@ mod tests {
         let mut g: Graph<&str, f64> = Graph::new();
         let s = g.add_node("s");
         assert_eq!(max_flow(&g, s, s), Err(GraphError::SourceEqualsSink));
+    }
+
+    #[test]
+    fn max_flow_keeps_small_capacities() {
+        // A fixed 1e-12 cutoff used to discard this edge entirely.
+        let mut g: Graph<&str, f64> = Graph::new();
+        let s = g.add_node("s");
+        let t = g.add_node("t");
+        g.add_edge(s, t, 1e-14);
+        let mf = max_flow(&g, s, t).unwrap();
+        assert!((mf.value - 1e-14).abs() < 1e-20, "got {}", mf.value);
+    }
+
+    #[test]
+    fn max_flow_rejects_invalid_capacity() {
+        let mut g: Graph<&str, f64> = Graph::new();
+        let s = g.add_node("s");
+        let t = g.add_node("t");
+        g.add_edge(s, t, -1.0);
+        assert_eq!(max_flow(&g, s, t), Err(GraphError::InvalidWeight));
+    }
+
+    #[test]
+    fn astar_terminates_when_heuristic_is_infinite() {
+        // Every open node has f = inf. The old scan never removed anything and
+        // looped forever; the search must now finish. The goal is reachable,
+        // so it is still found with the true cost.
+        let (g, a, _b, c) = small_dag();
+        let (cost, _) = astar(&g, a, |n| n == c, |_| f64::INFINITY).unwrap();
+        assert!((cost - 1.0).abs() < 1e-12);
+
+        // The original hang: the goal is unreachable and every f is infinite.
+        let mut g2: Graph<&str, f64> = Graph::new();
+        let s = g2.add_node("s");
+        let isolated = g2.add_node("isolated");
+        g2.add_edge(s, s, 1.0);
+        assert!(astar(&g2, s, |n| n == isolated, |_| f64::INFINITY).is_none());
+    }
+
+    #[test]
+    fn astar_terminates_when_heuristic_is_nan() {
+        let (g, a, _b, c) = small_dag();
+        assert!(astar(&g, a, |n| n == c, |_| f64::NAN).is_none());
+    }
+
+    #[test]
+    fn astar_reopens_nodes_reached_by_a_cheaper_route() {
+        // a -> c costs 10 directly, but a -> b -> c costs 2. Whichever route
+        // reaches c first, the reported cost must be the cheaper one.
+        let mut g: Graph<&str, f64> = Graph::new();
+        let a = g.add_node("a");
+        let b = g.add_node("b");
+        let c = g.add_node("c");
+        g.add_edge(a, c, 10.0);
+        g.add_edge(a, b, 1.0);
+        g.add_edge(b, c, 1.0);
+        let (cost, path) = astar(&g, a, |n| n == c, |_| 0.0).unwrap();
+        assert!((cost - 2.0).abs() < 1e-12);
+        assert_eq!(path, vec![a, b, c]);
+    }
+
+    #[test]
+    fn try_dijkstra_rejects_negative_weight() {
+        let mut g: Graph<&str, f64> = Graph::new();
+        let a = g.add_node("a");
+        let b = g.add_node("b");
+        g.add_edge(a, b, -1.0);
+        assert_eq!(try_dijkstra(&g, a, None), Err(GraphError::InvalidWeight));
+    }
+
+    #[test]
+    fn try_astar_rejects_nan_weight() {
+        let mut g: Graph<&str, f64> = Graph::new();
+        let a = g.add_node("a");
+        let b = g.add_node("b");
+        g.add_edge(a, b, f64::NAN);
+        assert_eq!(
+            try_astar(&g, a, |n| n == b, |_| 0.0),
+            Err(GraphError::InvalidWeight)
+        );
     }
 }

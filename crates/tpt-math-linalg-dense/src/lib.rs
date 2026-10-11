@@ -114,15 +114,34 @@ impl<T> DMatrix<T> {
 
     /// Build from a `Vec` laid out **column-major**: element `(i, j)` is
     /// `data[i + j * nrows]`.
+    /// # Panics
+    ///
+    /// Panics if `data.len() != nrows * ncols`.
     pub fn from_vec(nrows: usize, ncols: usize, data: Vec<T>) -> Self {
+        assert_eq!(
+            data.len(),
+            nrows * ncols,
+            "data length {} does not match a {nrows}x{ncols} matrix",
+            data.len()
+        );
         DMatrix { nrows, ncols, data }
     }
 
     /// Build from a slice laid out **row-major**.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `data.len() != nrows * ncols`.
     pub fn from_row_slice(nrows: usize, ncols: usize, data: &[T]) -> Self
     where
         T: Clone,
     {
+        assert_eq!(
+            data.len(),
+            nrows * ncols,
+            "data length {} does not match a {nrows}x{ncols} matrix",
+            data.len()
+        );
         DMatrix {
             nrows,
             ncols,
@@ -242,6 +261,14 @@ impl<T> Index<(usize, usize)> for DMatrix<T> {
     ///
     /// Panics if `(i, j)` is out of bounds.
     fn index(&self, (i, j): (usize, usize)) -> &T {
+        // Checked per axis: a row index past `nrows` would otherwise alias
+        // another element in column-major storage.
+        assert!(
+            i < self.nrows && j < self.ncols,
+            "index ({i}, {j}) out of bounds for a {}x{} matrix",
+            self.nrows,
+            self.ncols
+        );
         &self.data[self.offset(i, j)]
     }
 }
@@ -299,6 +326,11 @@ impl<T: Scalar> DVector<T> {
     }
 
     fn dot_generic(&self, other: &DVector<T>) -> T {
+        assert_eq!(
+            self.len(),
+            other.len(),
+            "dot product requires equal lengths"
+        );
         self.iter()
             .zip(other.iter())
             .fold(T::zero(), |acc, (a, b)| acc + (*a) * (*b))
@@ -580,6 +612,11 @@ impl<T: Scalar + 'static> Mul<DVector<T>> for DMatrix<T> {
 
 #[cfg(feature = "alloc")]
 fn mul_matrix_generic<T: Scalar>(a: &DMatrix<T>, b: &DMatrix<T>) -> DMatrix<T> {
+    assert_eq!(
+        a.ncols, b.nrows,
+        "inner dimensions do not match: {}x{} * {}x{}",
+        a.nrows, a.ncols, b.nrows, b.ncols
+    );
     let m = a.nrows;
     let k = a.ncols;
     let n = b.ncols;
@@ -594,6 +631,13 @@ fn mul_matrix_generic<T: Scalar>(a: &DMatrix<T>, b: &DMatrix<T>) -> DMatrix<T> {
 
 #[cfg(feature = "alloc")]
 fn mul_vector_generic<T: Scalar>(a: &DMatrix<T>, x: &DVector<T>) -> DVector<T> {
+    assert_eq!(
+        a.ncols,
+        x.len(),
+        "matrix has {} columns but vector has length {}",
+        a.ncols,
+        x.len()
+    );
     let m = a.nrows;
     let k = a.ncols;
     DVector::from_fn(m, |i| {
@@ -996,5 +1040,43 @@ mod simd_tests {
     #[should_panic(expected = "inner dimensions")]
     fn matmul_dimension_mismatch_panics() {
         let _ = DMatrix::<f64>::zeros(2, 3) * DMatrix::<f64>::zeros(4, 2);
+    }
+
+    #[test]
+    #[should_panic(expected = "inner dimensions")]
+    fn generic_matmul_dimension_mismatch_panics() {
+        let _ = mul_matrix_generic(&DMatrix::<f64>::zeros(2, 3), &DMatrix::<f64>::zeros(4, 2));
+    }
+
+    #[test]
+    #[should_panic(expected = "columns")]
+    fn generic_matvec_dimension_mismatch_panics() {
+        let _ = mul_vector_generic(&DMatrix::<f64>::zeros(2, 3), &DVector::zeros(2));
+    }
+
+    #[test]
+    #[should_panic(expected = "length")]
+    fn dot_length_mismatch_panics() {
+        let _ = DVector::from_vec(vec![1.0_f64, 2.0, 3.0]).dot(&DVector::from_vec(vec![1.0_f64]));
+    }
+
+    #[test]
+    #[should_panic(expected = "out of bounds")]
+    fn index_row_out_of_bounds_panics() {
+        // (3, 0) would alias (0, 1) in column-major storage without a check.
+        let m = DMatrix::<f64>::zeros(3, 2);
+        let _ = m[(3, 0)];
+    }
+
+    #[test]
+    #[should_panic(expected = "length")]
+    fn from_vec_length_mismatch_panics() {
+        let _ = DMatrix::from_vec(2, 2, vec![1.0_f64, 2.0, 3.0]);
+    }
+
+    #[test]
+    #[should_panic(expected = "length")]
+    fn from_row_slice_length_mismatch_panics() {
+        let _ = DMatrix::from_row_slice(2, 2, &[1.0_f64, 2.0, 3.0, 4.0, 5.0]);
     }
 }

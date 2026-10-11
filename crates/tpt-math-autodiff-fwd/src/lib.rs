@@ -188,6 +188,47 @@ mod tests {
     use super::*;
 
     #[test]
+    fn sqrt_powi_powf_derivatives() {
+        let x = Dual::<f64>::variable(4.0, 0);
+        // d/dx sqrt(x) = 1/(2 sqrt x) = 0.25 at x = 4.
+        assert!((x.sqrt().du(0) - 0.25).abs() < 1e-12);
+        // d/dx x^3 = 3x^2 = 48 at x = 4.
+        assert!((x.powi(3).du(0) - 48.0).abs() < 1e-12);
+        // d/dx x^2.5 = 2.5 x^1.5 = 20 at x = 4.
+        assert!((x.powf(2.5).du(0) - 20.0).abs() < 1e-9);
+        // The zero exponent is constant, so its derivative is 0 (not 0·0⁻¹).
+        let z = Dual::<f64>::variable(0.0, 0);
+        assert_eq!(z.powi(0).du(0), 0.0);
+    }
+
+    #[test]
+    fn tan_tanh_atan_abs_derivatives() {
+        let x = Dual::<f64>::variable(0.5, 0);
+        let t = 0.5_f64.tan();
+        assert!((x.tan().du(0) - (1.0 + t * t)).abs() < 1e-12);
+        let y = Dual::<f64>::variable(0.3, 0);
+        let th = 0.3_f64.tanh();
+        assert!((y.tanh().du(0) - (1.0 - th * th)).abs() < 1e-12);
+        let a = Dual::<f64>::variable(1.0, 0);
+        // d/dx atan(x) = 1/(1 + x²) = 0.5 at x = 1.
+        assert!((a.atan().du(0) - 0.5).abs() < 1e-12);
+        let n = Dual::<f64>::variable(-2.0, 0);
+        assert_eq!(n.abs().re(), 2.0);
+        assert_eq!(n.abs().du(0), -1.0);
+    }
+
+    #[test]
+    fn dual_with_scalar_operators() {
+        let x = Dual::<f64>::variable(2.0, 0);
+        assert_eq!((x * 3.0).du(0), 3.0);
+        assert_eq!((x + 1.0).re(), 3.0);
+        assert_eq!((x + 1.0).du(0), 1.0);
+        assert_eq!((x - 1.0).re(), 1.0);
+        assert_eq!((x / 4.0).du(0), 0.25);
+        assert_eq!((x / 4.0).re(), 0.5);
+    }
+
+    #[test]
     fn polynomial_derivative() {
         let x = Dual::<f64>::variable(3.0, 0);
         let y = x * x * x + x * Dual::constant(2.0);

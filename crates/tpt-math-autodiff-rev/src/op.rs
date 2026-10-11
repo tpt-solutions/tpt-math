@@ -117,9 +117,13 @@ impl Op {
             Op::Sqrt(a) => Partials::unary(a, 0.5 / value),
             // `saturating_sub` only matters for the degenerate `i32::MIN`
             // exponent, where the derivative under/overflows regardless.
+            // A zero exponent has no dependence on `a`; without the special case
+            // `0 * a^-1` is `0 * inf = NaN` at `a = 0`.
+            Op::Powi(a, 0) => Partials::unary(a, 0.0),
             Op::Powi(a, n) => {
                 Partials::unary(a, f64::from(n) * values[a].powi(n.saturating_sub(1)))
             }
+            Op::Powf(a, 0.0) => Partials::unary(a, 0.0),
             Op::Powf(a, p) => Partials::unary(a, p * values[a].powf(p - 1.0)),
         }
     }
@@ -316,6 +320,16 @@ mod tests {
             Op::Powf(0, 0.5).diff(x.sqrt(), &values).as_slice()[0].1,
             0.5 / x.sqrt()
         ));
+    }
+
+    #[test]
+    fn zero_exponent_at_zero_has_zero_derivative() {
+        // d/dx x⁰ = 0 everywhere, but 0 · 0⁻¹ used to evaluate to NaN at x = 0.
+        let values = [0.0_f64];
+        let d_powi = Op::Powi(0, 0).diff(1.0, &values).as_slice()[0].1;
+        assert_eq!(d_powi, 0.0);
+        let d_powf = Op::Powf(0, 0.0).diff(1.0, &values).as_slice()[0].1;
+        assert_eq!(d_powf, 0.0);
     }
 
     #[test]

@@ -304,6 +304,36 @@ impl<T: Scalar, const D: usize> Rotation<T, D> {
                 data[i][j] = cols[j][i];
             }
         }
+        // Reject reflections: a proper rotation has determinant +1, an improper
+        // orthogonal matrix has -1. Gaussian elimination gives the determinant;
+        // every pivot of an orthonormal matrix is non-zero, so no breakdown.
+        let mut a = data;
+        let mut det = T::one();
+        for c in 0..D {
+            let mut p = c;
+            for r in (c + 1)..D {
+                if a[r][c].abs() > a[p][c].abs() {
+                    p = r;
+                }
+            }
+            if a[p][c] == T::zero() {
+                return None;
+            }
+            if p != c {
+                a.swap(p, c);
+                det = -det;
+            }
+            det = det * a[c][c];
+            for r in (c + 1)..D {
+                let f = a[r][c] / a[c][c];
+                for k in c..D {
+                    a[r][k] = a[r][k] - f * a[c][k];
+                }
+            }
+        }
+        if det < T::zero() {
+            return None;
+        }
         Some(Rotation {
             matrix: Matrix::new(data),
         })
@@ -412,15 +442,18 @@ impl<T: Scalar> Rotation<T, 3> {
         // angle. `cos(theta) = (trace - 1) / 2`.
         let tr = self.matrix.data[0][0] + self.matrix.data[1][1] + self.matrix.data[2][2];
         let cos_t = (tr - T::one()) / (T::one() + T::one());
-        let angle = cos_t.acos();
-        if angle < T::from(1e-12).unwrap_or(T::zero()) {
-            return *self;
-        }
-        // Axis from the skew-symmetric part.
+        // Axis from the skew-symmetric part, whose norm is 2 sin(theta).
         let x = self.matrix.data[2][1] - self.matrix.data[1][2];
         let y = self.matrix.data[0][2] - self.matrix.data[2][0];
         let z = self.matrix.data[1][0] - self.matrix.data[0][1];
         let axis = Vector3::new([x, y, z]);
+        // atan2 is well-conditioned for every angle, unlike acos near 0 and pi,
+        // and never leaves its domain when the trace rounds past ±1.
+        let sin_t = (x * x + y * y + z * z).sqrt() / (T::one() + T::one());
+        let angle = sin_t.atan2(cos_t);
+        if angle < T::from(1e-12).unwrap_or(T::zero()) {
+            return *self;
+        }
         Rotation3::from_axis_angle(&axis, angle * t)
     }
 }
@@ -605,7 +638,8 @@ impl<T: Scalar> Quaternion<T> {
             );
             return UnitQuaternion::from_quaternion(r);
         }
-        let theta0 = dot.acos();
+        // `dot` is in [0, 1 - eps] here; the clamp guards against rounding.
+        let theta0 = dot.min(one).acos();
         let theta = theta0 * t;
         let sin0 = theta0.sin();
         let (w1, w2) = if sin0 == T::zero() {
@@ -755,9 +789,9 @@ impl<T: Scalar> UnitQuaternion<T> {
 impl<T: Scalar> Mul<UnitQuaternion<T>> for UnitQuaternion<T> {
     type Output = UnitQuaternion<T>;
     fn mul(self, rhs: UnitQuaternion<T>) -> UnitQuaternion<T> {
-        UnitQuaternion {
-            quaternion: self.quaternion.multiply(&rhs.quaternion),
-        }
+        // Renormalise: rounding in the Hamilton product otherwise accumulates
+        // as the quaternion is repeatedly composed.
+        UnitQuaternion::from_quaternion(self.quaternion.multiply(&rhs.quaternion))
     }
 }
 
@@ -1368,5 +1402,49 @@ mod tests {
             .dot(&expected.quaternion().coords)
             .abs();
         assert!(close(dot, 1.0, 1e-10), "slerp midpoint");
+    }
+
+    #[test]
+    fn from_matrix_rejects_reflection() {
+        // det = -1: an improper orthogonal matrix is a reflection, not a rotation.
+        let reflection = Matrix3::from_array(&[1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, -1.0]);
+        assert!(Rotation3::from_matrix(reflection).is_none());
+        let identity = Matrix3::from_array(&[1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0]);
+        assert!(Rotation3::from_matrix(identity).is_some());
+    }
+
+    #[test]
+    fn powf_is_finite_when_trace_rounds_past_acos_domain() {
+        // A trace a few ulps above 3 makes cos θ slightly greater than 1. The
+        // unclamped acos then returned NaN and poisoned the axis.
+        let eps = 3e-15;
+        let m = Matrix3::from_array(&[
+            1.0 + eps,
+            0.0,
+            0.0,
+            0.0,
+            1.0 + eps,
+            0.0,
+            0.0,
+            0.0,
+            1.0 + eps,
+        ]);
+        let half = Rotation3::from_matrix_unchecked(m).powf(0.5);
+        assert!(half
+            .matrix()
+            .data
+            .iter()
+            .flatten()
+            .all(|v: &f64| v.is_finite()));
+    }
+
+    #[test]
+    fn unit_quaternion_product_stays_unit() {
+        let q = UnitQuaternion::<f64>::from_axis_angle(&Vector3::new([1.0, 2.0, 3.0]), 0.7);
+        let mut r = q;
+        for _ in 0..10_000 {
+            r = r * q;
+        }
+        assert!(close(r.quaternion().norm(), 1.0, 1e-12));
     }
 }

@@ -5,6 +5,12 @@ All notable changes to this crate will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to SemVer.
 
+## [Unreleased]
+
+### Changed
+
+- `Screw::log` computes the angle as `atan2(sin θ, cos θ)` from the skew part, which stays in domain under rounding.
+
 ## [0.1.0] - 2026-08-19
 
 ### Added

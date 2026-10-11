@@ -15,6 +15,11 @@ All notable changes to this crate are documented here. Format based on
   `QpStatus` enum (replacing clarabel's `SolverStatus`). Infeasible/unbounded
   problems are reported as `ConvexError::Solver`.
 
+### Changed
+
+- Residual tolerances scale with the problem data, so a uniformly scaled QP converges like the original. The complementarity gap is compared with the objective magnitude.
+- `solve_qp` documents that a solution accepted as `QpStatus::AlmostSolved` is returned as `Ok`. Use `solve_qp_internal` to read the status.
+
 ## [0.1.0]
 
 - Initial workspace release.

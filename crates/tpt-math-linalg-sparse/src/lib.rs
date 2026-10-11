@@ -63,6 +63,12 @@ pub enum SparseError {
         /// Number of iterations performed before giving up.
         iterations: usize,
     },
+    /// The method hit a numerical breakdown (a zero or negative inner product
+    /// such as `pᵀAp` for CG, or a non-finite value) and cannot continue.
+    Breakdown {
+        /// Iteration at which the breakdown occurred.
+        iterations: usize,
+    },
 }
 
 impl core::fmt::Display for SparseError {
@@ -76,6 +82,9 @@ impl core::fmt::Display for SparseError {
                     f,
                     "iterative solver did not converge in {iterations} iterations"
                 )
+            }
+            SparseError::Breakdown { iterations } => {
+                write!(f, "iterative solver broke down at iteration {iterations}")
             }
         }
     }
@@ -160,7 +169,7 @@ impl<T: Scalar + Copy> CooMatrix<T> {
 
     /// Convert to compressed-sparse-row form, summing any duplicate entries.
     pub fn to_csr(&self) -> CsrMatrix<T> {
-        to_csr_impl(self.nrows, &self.rows, &self.cols, &self.vals)
+        to_csr_impl(self.nrows, self.ncols, &self.rows, &self.cols, &self.vals)
     }
 
     /// Convert to compressed-sparse-column form, summing any duplicate entries.
@@ -313,7 +322,7 @@ impl<T: Scalar + Copy> CscMatrix<T> {
         let rows: Vec<usize> = self.iter().map(|(_, c, _)| c).collect();
         let cols: Vec<usize> = self.iter().map(|(r, _, _)| r).collect();
         let vals: Vec<T> = self.iter().map(|(_, _, v)| *v).collect();
-        to_csr_impl(self.ncols, &rows, &cols, &vals)
+        to_csr_impl(self.ncols, self.nrows, &rows, &cols, &vals)
     }
 }
 
@@ -374,6 +383,7 @@ fn merge_triplets<T: Scalar + Copy>(
 
 fn to_csr_impl<T: Scalar + Copy>(
     nrows: usize,
+    ncols: usize,
     rows: &[usize],
     cols: &[usize],
     vals: &[T],
@@ -395,11 +405,7 @@ fn to_csr_impl<T: Scalar + Copy>(
     }
     CsrMatrix {
         nrows,
-        ncols: if cols.is_empty() {
-            0
-        } else {
-            cols.iter().copied().max().map(|m| m + 1).unwrap_or(0)
-        },
+        ncols,
         row_ptr,
         col_idx,
         values,
@@ -488,7 +494,14 @@ pub fn conjugate_gradient<T: Scalar + Copy + 'static>(
     let n = b.len();
     let mut x = x0.unwrap_or_else(|| DVector::zeros(n));
     let mut r = b.clone() - a.matvec(&x)?;
-    if r.norm() <= tol {
+    // Relative tolerance: stop when ‖r‖ ≤ tol·‖b‖ (absolute tol if b = 0).
+    let b_norm = b.norm();
+    let target = if b_norm > T::zero() {
+        tol * b_norm
+    } else {
+        tol
+    };
+    if r.norm() <= target {
         return Ok(x);
     }
     let mut p = r.clone();
@@ -496,16 +509,21 @@ pub fn conjugate_gradient<T: Scalar + Copy + 'static>(
     for it in 0..max_iter {
         let ap = a.matvec(&p)?;
         let p_ap = p.dot(&ap);
-        if p_ap.abs() <= T::zero() {
-            return Err(SparseError::NotConverged { iterations: it });
+        // For SPD A, pᵀAp > 0 until convergence; anything else (including NaN)
+        // means the method cannot continue.
+        if p_ap.is_nan() || p_ap <= T::zero() {
+            return Err(SparseError::Breakdown { iterations: it });
         }
         let alpha = rs_old / p_ap;
         x = x.clone() + p.clone() * alpha;
         r = r.clone() - ap * alpha;
-        if r.norm() <= tol {
+        if r.norm() <= target {
             return Ok(x);
         }
         let rs_new = r.dot(&r);
+        if !rs_new.is_finite() {
+            return Err(SparseError::Breakdown { iterations: it });
+        }
         let beta = rs_new / rs_old;
         p = r.clone() + p * beta;
         rs_old = rs_new;
@@ -541,7 +559,14 @@ pub fn bicgstab<T: Scalar + Copy + 'static>(
     let n = b.len();
     let mut x = x0.unwrap_or_else(|| DVector::zeros(n));
     let mut r = b.clone() - a.matvec(&x)?;
-    if r.norm() <= tol {
+    // Relative tolerance: stop when ‖r‖ ≤ tol·‖b‖ (absolute tol if b = 0).
+    let b_norm = b.norm();
+    let target = if b_norm > T::zero() {
+        tol * b_norm
+    } else {
+        tol
+    };
+    if r.norm() <= target {
         return Ok(x);
     }
     let r0 = r.clone();
@@ -552,29 +577,36 @@ pub fn bicgstab<T: Scalar + Copy + 'static>(
     let mut omega = T::one();
     for it in 0..max_iter {
         let rho_new = r0.dot(&r);
-        if rho_new.abs() <= T::zero() {
-            return Err(SparseError::NotConverged { iterations: it });
+        if rho_new == T::zero() || !rho_new.is_finite() {
+            return Err(SparseError::Breakdown { iterations: it });
         }
         let beta = (rho_new / rho) * (alpha / omega);
         p = r.clone() + (p - v.clone() * omega) * beta;
         let ap = a.matvec(&p)?;
         v = ap.clone();
         let r0_ap = r0.dot(&ap);
-        if r0_ap.abs() <= T::zero() {
-            return Err(SparseError::NotConverged { iterations: it });
+        if r0_ap == T::zero() || !r0_ap.is_finite() {
+            return Err(SparseError::Breakdown { iterations: it });
         }
         alpha = rho_new / r0_ap;
         let s = r.clone() - ap * alpha;
+        // Half-step exit: if s is already small enough, x + alpha·p is the answer.
+        if s.norm() <= target {
+            x = x.clone() + p.clone() * alpha;
+            return Ok(x);
+        }
         let t = a.matvec(&s)?;
         let t_sq = t.dot(&t);
-        omega = if t_sq.abs() <= T::zero() {
-            T::one()
-        } else {
-            t.dot(&s) / t_sq
-        };
+        if t_sq == T::zero() {
+            return Err(SparseError::Breakdown { iterations: it });
+        }
+        omega = t.dot(&s) / t_sq;
+        if omega == T::zero() || !omega.is_finite() {
+            return Err(SparseError::Breakdown { iterations: it });
+        }
         x = x.clone() + p.clone() * alpha + s.clone() * omega;
         r = s.clone() - t.clone() * omega;
-        if r.norm() <= tol {
+        if r.norm() <= target {
             return Ok(x);
         }
         rho = rho_new;
@@ -587,6 +619,32 @@ pub fn bicgstab<T: Scalar + Copy + 'static>(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn cg_tolerance_is_relative_to_rhs() {
+        // ‖b‖ ≈ 2e-12 is already below the absolute tol 1e-10, so the old
+        // absolute test returned x0 = 0 without solving anything.
+        let a = dense_2x2_csr();
+        let b = DVector::from_vec(vec![1e-12, 2e-12]);
+        let x = conjugate_gradient(&a, &b, None, 1e-10, 100).unwrap();
+        let resid = b.clone() - a.matvec(&x).unwrap();
+        assert!(resid.norm() <= 1e-10 * b.norm());
+        assert!(x.norm() > 0.0);
+    }
+
+    #[test]
+    fn cg_reports_breakdown_on_indefinite_matrix() {
+        // diag(1, -1) with b = (1, 1): pᵀAp = 1 - 1 = 0 on the first step.
+        let mut coo = CooMatrix::<f64>::new(2, 2);
+        coo.push(0, 0, 1.0);
+        coo.push(1, 1, -1.0);
+        let a = coo.to_csr();
+        let b = DVector::from_vec(vec![1.0, 1.0]);
+        assert_eq!(
+            conjugate_gradient(&a, &b, None, 1e-12, 10),
+            Err(SparseError::Breakdown { iterations: 0 })
+        );
+    }
 
     fn dense_2x2_csr() -> CsrMatrix<f64> {
         let mut coo = CooMatrix::<f64>::new(2, 2);
@@ -666,6 +724,20 @@ mod tests {
         // Residual check.
         let r = b - a.matvec(&x).unwrap();
         assert!(r.norm() < 1e-10);
+    }
+
+    #[test]
+    fn to_csr_preserves_declared_dimensions() {
+        // Empty matrix and trailing empty columns keep their declared shape.
+        let empty = CooMatrix::<f64>::new(3, 3).to_csr();
+        assert_eq!((empty.nrows(), empty.ncols()), (3, 3));
+        let mut coo = CooMatrix::<f64>::new(2, 5);
+        coo.push(0, 1, 2.0);
+        let a = coo.to_csr();
+        assert_eq!(a.ncols(), 5);
+        let x = DVector::from_vec(vec![1.0_f64; 5]);
+        assert_eq!(a.matvec(&x).unwrap().len(), 2);
+        assert_eq!(a.transpose().nrows(), 5);
     }
 
     #[test]

@@ -979,3 +979,175 @@ tree.*
       Div-by-one/Func-of-const/Pow-of-const/double-neg/`eval` `None`
       cases and `cos`/`ln`/quotient/`pow(0)` derivatives)
 
+---
+
+## Phase 7 — Platform Review (2026-10-12)
+
+> Findings from a read-only audit of numerics, prob/stats/optimize and
+> tooling. Items marked **(V)** were spot-checked against the code; the rest
+> come from the audit and need a failing regression test before the fix.
+> Delivery rule: test-first — every bug fix lands with a test that fails
+> before the fix. Plan: `.claude/plans/review-platform-for-bugs-abundant-pike.md`.
+
+### 7.1 Correctness bugs
+
+- [x] **(V)** `tpt-math-linalg-sparse` `to_csr_impl`: `ncols` inferred as
+      `max(col)+1`, so empty / trailing-empty-column matrices get the wrong
+      shape and break matvec/CG. Pass `ncols` through (CSR, CSC, transposes)
+- [x] **(V)** `tpt-math-interpolate` `Pchip::new` panics for n=2 (`h[1]`
+      OOB); `Pchip::eval` does not extrapolate linearly despite the docs
+- [x] **(V)** `tpt-math-optimize-general` line search (~603-621): after the
+      first iteration `a_hi == a_lo`, so `zoom` gets a degenerate bracket and
+      `cubic_min` returns NaN. Use `zoom(a_lo, a)`; add a finiteness guard on
+      the step and a stagnation exit (alpha = 0 spins to `max_iters`)
+- [x] **(V)** `tpt-math-linalg-dense` / `-complex` `Index<(i,j)>` has no row
+      bound check; generic matmul/matvec have no dimension asserts (silent
+      wrong results); `from_vec`/`from_row_slice` length checks
+- [x] **(V)** `tpt-math-symbolic` `apply_func`: unknown function names
+      evaluate as the identity; `to_f64` parses `"3/4"` as 0.0. Return
+      `None`/error for unknown functions, convert rationals properly
+- [x] `tpt-math-linalg-complex` eigenvalue QR (838-962): Q accumulated as Qᴴ
+      (not a similarity transform), phase-less Householder, no Hessenberg
+      reduction, silent deflation at `max_iter`, only n=2 tested. Rewrite
+      with Hessenberg + Wilkinson-shifted QR, `Err` on non-convergence,
+      add n>=3 tests
+- [x] `tpt-math-linalg-fixed` `from_columns` wrong for R != C (OOB)
+- [x] `tpt-math-graph` `astar`: infinite loop when all open f are inf/NaN;
+      O(V²) open-set scan → binary heap. Validate negative weights in
+      Dijkstra/A*. Max-flow absolute eps drops small capacities
+- [ ] Special functions (`tpt-math-stats/special.rs`,
+      `tpt-math-prob-bayes/special.rs`): `erf = 1 - erfc` cancellation;
+      `Normal::cdf`/`gamma_q` lose tails; `lgamma` NaN for negative args;
+      fixed `MAXIT=400` silently unconverged; `ln(1-x)` → `ln_1p`. Dedupe the
+      two copies into one shared implementation
+      Status: Not started: the two `special.rs` copies still diverge. Deduplicating
+      needs a decision on where the shared module lives (new crate vs. an
+      existing one), so it was left for a follow-up.
+- [x] `tpt-math-geometry`: `slerp`/`Rotation3::powf` `acos` not clamped
+      (NaN); `Rotation::from_matrix` accepts det = -1; `UnitQuaternion`
+      product never renormalises. `tpt-math-spatial` `Screw::log` uses
+      `acos` (use `atan2`); near-π axis extraction precision
+      Status: Done: `powf` and `Screw::log` use `atan2`, `from_matrix` rejects det =
+      -1, and the quaternion product renormalises. The near-π axis precision
+      in `Screw::log` was guarded in Phase G and was not re-audited here.
+- [x] `tpt-math-linalg-sparse` CG/BiCGSTAB: absolute (not relative)
+      tolerance; no NaN / negative-curvature / `omega == 0` breakdown
+      detection; no half-step `‖s‖` check
+- [ ] `tpt-math-optimize-convex`: `AlmostSolved` returned at 10×tol and
+      dropped by `solve_qp`; absolute tolerances, no scaling; separate
+      primal/dual step lengths for P ≠ 0
+      Status: Partial: tolerances are now scaled by the problem data, and the
+      complementarity gap is objective-relative. `AlmostSolved` is still
+      returned as `Ok` by `solve_qp` (now documented), not as an error.
+      Primal/dual step lengths were already separate.
+- [ ] `tpt-math-autodiff-rev`: `Powi(a,0)` at 0 → NaN; extra `Const` node
+      per scalar op doubles tape growth; no subgradient handling at 0
+      Status: Partial: the `Powi(a, 0)` and `Powf(a, 0)` NaN at 0 is fixed. The extra
+      `Const` node per scalar op and the subgradient handling at 0 are not
+      done.
+- [x] `tpt-math-prob-monte-carlo`: naive one-pass variance (cancellation);
+      unused `buf` allocation in importance sampling
+- [ ] Relative singularity thresholds in dense/complex/fixed LU (currently
+      absolute 1e-12); overflow-safe norms (scaled / hypot); complex
+      `Div`/`inv`/`sqrt` stability (Smith's algorithm)
+      Status: Partial: complex `Div`/`inv`/`norm` are overflow-safe (Smith, scaled
+      hypot). A relative dense LU threshold was tried and reverted: the
+      convex IPM factors KKT systems whose pivots are legitimately small, so
+      the threshold needs a per-caller decision. Dense `norm` is not yet
+      overflow-safe.
+- [x] `tpt-math-prob-bayes` MCMC: validate initial log-density (NaN / -inf
+      leaves chain stuck); `tpt-math-stats` `pearson_correlation`
+      `sxx*syy` overflow; `tpt-math-exact` `Interval::new` only
+      `debug_assert`s `lo <= hi`
+      Status: Done: a NaN starting log-density now panics in the run loops (a `-inf`
+      start is not stuck, since any finite candidate is accepted).
+      `pearson_correlation` rescales only when the raw sums overflow, so
+      exact fits still return exactly ±1. `Interval::new` checks in release
+      builds.
+- [x] `tpt-math-prob-markov`: power-iteration stationary distribution can
+      oscillate for periodic chains and ignores the residual — use a direct
+      solve
+      Status: Done: `stationary`/`try_stationary` fall back to a direct Gaussian
+      solve when power iteration has not settled; reducible chains still
+      report `NotConverged`.
+
+### 7.2 Performance
+
+- [ ] Dense: j-k-i matmul (contiguous columns); reusable `Lu` struct
+      (factor once, solve many RHS); flat storage instead of `Vec<Vec<_>>`;
+      in-place `+=` / `axpy` / `*_into` operators
+- [ ] Sparse: `matvec_into`, in-place axpy in CG/BiCGSTAB, residual norm
+      computed once per iteration, counting-sort transpose/convert
+- [ ] `Kriging::predict`: factor once in `new` (currently O(n³) per call)
+- [ ] HMM Viterbi: precompute log transition/emission matrices
+- [ ] `tpt-math-exact` intervals: add/sub in 2 ops, not 12 BigRational clones
+- [ ] `tpt-math-signal-filter`: FFT overlap-add for long FIR kernels; real-FFT
+      path in `signal-fft`
+- [ ] Optional `rayon` feature: Monte Carlo, FIR, GEMM
+- [ ] Criterion benches for every numeric crate (only 5 have any); scheduled
+      regression run in CI
+
+### 7.3 Missing features
+
+- [ ] Dense QR, least squares, symmetric eigen, SVD, real Cholesky,
+      det / rank / cond, matrix exp (none exist in the workspace)
+- [ ] Optimisation: L-BFGS, Nelder-Mead, damped Newton + line search,
+      simplex LP, finite-difference gradients
+- [ ] Stats: quantiles, skew/kurtosis, covariance, pooled/paired t,
+      Mann-Whitney, Wilcoxon, KS, ANOVA/F, chi-squared independence,
+      bootstrap, multiple-comparison corrections
+- [ ] Sampling: HMC, multivariate/adaptive Metropolis, R-hat/ESS
+      diagnostics, self-normalised importance sampling + ESS
+- [ ] ODE solvers (RK4/RK45), quadrature, root finding
+- [ ] IIR / biquad / Butterworth filters in `signal-filter`
+- [ ] Sparse LU/Cholesky, Jacobi/ILU/IC preconditioners, GMRES
+- [ ] `autodiff-fwd`: sqrt, powi/powf, tan, tanh, atan, abs, `Dual op scalar`
+- [ ] `prob-dist`: pdf / cdf / quantile / moments (currently sampling-only)
+- [ ] `symbolic`: like-term collection, `x/x`, `x^0`, `x^1`, fixpoint
+      simplification, more functions
+- [ ] `tpt-math-linalg` wrappers: `Mat * scalar`, `Vec` dot/norm, solve,
+      by-reference operator forms
+
+### 7.4 Innovation (pick one or two)
+
+- [ ] Cross-crate differential testing harness (proptest): exact vs f64
+      solvers; autodiff-fwd vs autodiff-rev vs symbolic vs finite
+      differences
+- [ ] Interval / error-bounded solvers built on `tpt-math-exact::Interval`
+      (for `tpt-formal`)
+- [ ] Units-aware optimise / ODE / autodiff via `units-dyn` + generic scalars
+- [ ] Common `SolveReport { status, iters, residual }` across sparse, convex
+      and general solvers
+- [ ] Top-level `tpt-math` facade crate with `prelude` and short feature names
+
+### 7.5 Repo hygiene, CI and automation
+
+- [ ] Delete tracked `pkg_tpt-math-*.log` (6 files) and stale
+      `history/todo 1260819.md`; add `pkg_*.log` to `.gitignore`
+- [ ] Fix the header of this file (MSRV says 1.75, workspace is 1.84;
+      "publishing out of scope" contradicts "since published")
+- [ ] Commit `Cargo.lock` (workspace has binaries); remove from `.gitignore`
+- [ ] CI MSRV job pinned to 1.84; resolve `simd` feature needing Rust 1.85+
+      and the out-of-repo `tpt-simd-blas` path dependency that breaks
+      `--all-features` and `cargo package`
+- [ ] README: `tpt-math-geometry` listed twice; `no_std` column disagrees
+      with `NO_STD_CRATES` in `xtask` (8 crates) — extend the CI list or
+      correct the README; add an xtask check that validates the README
+      tables and the no-std list against `cargo metadata`
+- [ ] CI additions: rust-cache, `concurrency` cancel, `cargo doc` with
+      `-D warnings`, cargo-semver-checks, coverage (llvm-cov), scheduled
+      `cargo deny` / audit, wasm32 build, cargo-hack feature powerset for
+      all crates, benches for every crate with a bench
+- [ ] Make `xtask check` equal CI; add `just ci`
+- [ ] Automation: release-plz (31-crate ordered publishing), Dependabot
+      (group `tpt-*`), proptest, cargo-fuzz (symbolic, exact), typos, taplo
+- [ ] `[package.metadata.docs.rs]` (`all-features`, `docsrs` cfg) in each
+      crate; feature tables in READMEs; examples for geometry/spatial,
+      graph, signal, sparse/complex linalg, `no_std`
+- [ ] Move hard-coded external dep versions (`num-traits`, `uom`, `rand`,
+      `criterion`) into `[workspace.dependencies]`; make `default-features`
+      consistent
+- [ ] `deny.toml`: set `[graph]` targets, tighten `wildcards`, enforce
+      `multiple-versions`; document the `registry.toml` external dependency
+      in CONTRIBUTING.md
+

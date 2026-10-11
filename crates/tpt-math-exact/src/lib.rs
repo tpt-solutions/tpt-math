@@ -50,9 +50,14 @@ impl<T> Interval<T>
 where
     T: Clone + PartialOrd,
 {
-    /// Construct an interval. Panics in debug builds if `lo > hi`.
+    /// Construct an interval.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `lo > hi`, in release as well as debug builds: an inverted
+    /// interval would silently make every enclosure claim wrong.
     pub fn new(lo: T, hi: T) -> Self {
-        debug_assert!(
+        assert!(
             !(lo.clone().partial_cmp(&hi) == Some(core::cmp::Ordering::Greater)),
             "interval lower bound must not exceed upper bound"
         );

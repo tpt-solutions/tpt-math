@@ -526,25 +526,23 @@ impl<T: Scalar + Copy> Screw<T> {
     ///   branch — the off-diagonal axis formula divides by `sin(theta)`, which
     ///   vanishes at `theta = 0`.
     /// * **`theta ≈ π` (180° rotation).** The same off-diagonal formula divides
-    ///   by `sin(theta)`, which also vanishes at `theta = π`. The trace formula
-    ///   `cos(theta) = (tr − 1) / 2` is clamped to `[-1, 1]` (float rounding
-    ///   near these limits can otherwise push `acos`'s argument out of domain
-    ///   and silently yield `NaN`), and the axis is extracted from `(R + I) =
-    ///   2·(w wᵀ)` instead of the off-diagonal differences in the `theta ≈ π`
+    ///   by `sin(theta)`, which also vanishes at `theta = π`. The angle is taken
+    ///   as `atan2(sin θ, cos θ)` with `cos θ = (tr − 1) / 2` and `sin θ = |skew|
+    ///   / 2`, which stays in domain under rounding (unlike `acos`, which can
+    ///   yield `NaN` near these limits), and the axis is extracted from `(R + I)
+    ///   = 2·(w wᵀ)` instead of the off-diagonal differences in the `theta ≈ π`
     ///   regime.
     pub fn log(iso: &Isometry3<T>) -> Screw<T> {
         let m = iso.rotation.matrix().data;
         let tr = m[0][0] + m[1][1] + m[2][2];
-        // cos(theta) = (trace - 1) / 2. Clamp to [-1, 1]: float rounding near
-        // theta = 0 or theta = pi can push this fraction microscopically past
-        // acos()'s domain, silently yielding NaN.
-        let mut cos_t = (tr - T::one()) / two();
-        if cos_t > T::one() {
-            cos_t = T::one();
-        } else if cos_t < -T::one() {
-            cos_t = -T::one();
-        }
-        let theta = cos_t.acos();
+        // cos(theta) = (trace - 1) / 2 and sin(theta) = |skew| / 2, where the
+        // skew part (R - Rᵀ) has norm 2 sin(theta). theta = atan2(sin, cos) is
+        // well-conditioned everywhere and cannot leave its domain, unlike
+        // acos near 0 and pi where rounding pushes the argument out of range.
+        let cos_t = (tr - T::one()) / two();
+        let skew = Vector3::new([m[2][1] - m[1][2], m[0][2] - m[2][0], m[1][0] - m[0][1]]);
+        let sin_t = skew.dot(&skew).sqrt() / two();
+        let theta = sin_t.atan2(cos_t);
         let eps = c::<T>(1e-12);
         if theta < eps {
             return Screw::new(
@@ -583,14 +581,13 @@ impl<T: Scalar + Copy> Screw<T> {
             let norm = norm.sqrt();
             let norm = if norm == T::zero() { T::one() } else { norm };
             let ax = Vector3::new([col[0] / norm, col[1] / norm, col[2] / norm]);
-            let skew = Vector3::new([m[2][1] - m[1][2], m[0][2] - m[2][0], m[1][0] - m[0][1]]);
             if ax.dot(&skew) < T::zero() {
                 -ax
             } else {
                 ax
             }
         } else {
-            let s = theta.sin();
+            let s = sin_t;
             Vector3::new([
                 (m[2][1] - m[1][2]) / (two_ * s),
                 (m[0][2] - m[2][0]) / (two_ * s),

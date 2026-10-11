@@ -256,6 +256,9 @@ where
         // Steepest descent: full negative gradient, scaled by the line search.
         let dir = -state.grad().clone();
         let alpha = line_search(state.cost_fn(), state.grad_fn(), &state.param, &dir);
+        if alpha == 0.0 {
+            return Ok(state.finish(iters, false, "LineSearchStalled"));
+        }
         state.step(&(dir * alpha));
         iters += 1;
     }
@@ -373,6 +376,17 @@ where
         };
 
         let alpha = line_search(state.cost_fn(), state.grad_fn(), &state.param, &dir);
+        if alpha == 0.0 {
+            // A conjugate direction stalled: restart from steepest descent once.
+            // If steepest descent itself stalled, there is no progress left.
+            if prev_grad.is_none() {
+                return Ok(state.finish(iters, false, "LineSearchStalled"));
+            }
+            prev_grad = None;
+            direction = None;
+            iters += 1;
+            continue;
+        }
         state.step(&(dir.clone() * alpha));
         prev_grad = Some(state.grad().clone());
         direction = Some(dir);
@@ -586,6 +600,22 @@ where
     F: Fn(&DVector<f64>) -> f64,
     G: Fn(&DVector<f64>) -> DVector<f64>,
 {
+    let phi0 = cost(x);
+    let alpha = line_search_bracket(cost, grad, x, d);
+    // Return 0 ("no progress") unless the step is finite, positive and actually
+    // decreases the cost; callers treat 0 as a stall.
+    if alpha.is_finite() && alpha > 0.0 && cost(&(x.clone() + d.clone() * alpha)) < phi0 {
+        alpha
+    } else {
+        0.0
+    }
+}
+
+fn line_search_bracket<F, G>(cost: &F, grad: &G, x: &DVector<f64>, d: &DVector<f64>) -> f64
+where
+    F: Fn(&DVector<f64>) -> f64,
+    G: Fn(&DVector<f64>) -> DVector<f64>,
+{
     let c1 = 1e-4;
     let c2 = 0.1;
     let dphi0 = grad(x).dot(d);
@@ -597,14 +627,15 @@ where
     let mut a_lo = 0.0;
     let mut phi_lo = phi0;
     let mut dphi_lo = dphi0;
-    let mut a_hi = 1.0;
-    let mut a = a_hi;
+    let mut a = 1.0;
 
     for _ in 0..40 {
         let xa = x.clone() + d.clone() * a;
         let phi_a = cost(&xa);
+        // The bracket is [a_lo, a]: a_lo is the last point that satisfied
+        // sufficient decrease, and `a` is the trial that just failed.
         if phi_a > phi0 + c1 * a * dphi0 || (a_lo != 0.0 && phi_a >= phi_lo) {
-            return zoom(cost, grad, x, d, a_lo, a_hi, phi_lo, dphi_lo, phi_a);
+            return zoom(cost, grad, x, d, a_lo, a, phi_lo, dphi_lo, phi_a);
         }
         let dphi_a = grad(&xa).dot(d);
         if dphi_a.abs() <= -c2 * dphi0 {
@@ -616,7 +647,6 @@ where
         a_lo = a;
         phi_lo = phi_a;
         dphi_lo = dphi_a;
-        a_hi = a;
         a *= 2.0;
     }
     a
@@ -648,7 +678,9 @@ where
     for _ in 0..40 {
         let mut dphi_hi = grad(&(x.clone() + d.clone() * a_hi)).dot(d);
         let mut a = cubic_min(a_lo, phi_lo, dphi_lo, a_hi, phi_hi, dphi_hi);
-        if a <= a_lo || a >= a_hi {
+        // Bisect unless the trial lies strictly inside the (possibly reversed)
+        // bracket; the negated form also catches a NaN from `cubic_min`.
+        if !(a > a_lo.min(a_hi) && a < a_lo.max(a_hi)) {
             a = 0.5 * (a_lo + a_hi);
         }
         let xa = x.clone() + d.clone() * a;
@@ -728,6 +760,39 @@ mod tests {
                 actual[i]
             );
         }
+    }
+
+    #[test]
+    fn line_search_expansion_then_overshoot_stays_finite() {
+        // g(a) = -a + 0.1 a⁸ along d = 1 from x = 0: the first trial a = 1
+        // satisfies sufficient decrease but not the curvature condition, and
+        // a = 2 overshoots. The zoom must bracket on [1, 2], not on [1, 1].
+        let cost = |p: &DVector<f64>| -p[0] + 0.1 * p[0].powi(8);
+        let grad = |p: &DVector<f64>| DVector::from_vec(vec![-1.0 + 0.8 * p[0].powi(7)]);
+        let x = DVector::from_vec(vec![0.0]);
+        let d = DVector::from_vec(vec![1.0]);
+        let a = line_search(&cost, &grad, &x, &d);
+        assert!(a.is_finite() && a > 0.0, "step was {a}");
+        assert!(cost(&(x.clone() + d.clone() * a)) < cost(&x));
+        let dphi = grad(&(x + d * a))[0];
+        assert!(dphi.abs() <= 0.1 * 1.0, "curvature violated: {dphi}");
+    }
+
+    #[test]
+    fn gradient_descent_stops_when_line_search_stalls() {
+        // The cost rises along the descent direction -grad = +1 (inconsistent
+        // gradient), so no step decreases it. The solver must stop instead of
+        // spinning to `max_iters`.
+        let s = minimize_gradient_descent_with(
+            |p: &DVector<f64>| p[0],
+            |_: &DVector<f64>| DVector::from_vec(vec![-1.0]),
+            DVector::from_vec(vec![1.0]),
+            &Options::new(1_000_000),
+        )
+        .unwrap();
+        assert!(!s.converged);
+        assert!(s.iters < 1_000_000);
+        assert_eq!(s.termination, "LineSearchStalled");
     }
 
     #[test]

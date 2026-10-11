@@ -432,11 +432,10 @@ impl MarkovChain {
     /// [`DEFAULT_STATIONARY_MAX_ITER`]; see
     /// [`stationary_with`](Self::stationary_with) to choose your own.
     ///
-    /// The iterate is returned even if it has not converged. Convergence to
-    /// *the* stationary distribution is guaranteed for an irreducible,
-    /// aperiodic chain; a periodic chain oscillates forever, so use
-    /// [`lazy`](Self::lazy) first, and a reducible chain converges to a
-    /// stationary distribution that depends on the (uniform) starting vector.
+    /// If power iteration has not settled, the distribution is solved for
+    /// directly, which also handles periodic chains where iteration oscillates.
+    /// For a reducible chain (no unique stationary distribution) the iterate is
+    /// returned instead, and depends on the (uniform) starting vector.
     /// Use [`try_stationary`](Self::try_stationary) to detect non-convergence.
     ///
     /// # Examples
@@ -459,7 +458,11 @@ impl MarkovChain {
     /// Iteration stops as soon as the L1 distance between successive iterates
     /// is at most `tol`, or after `max_iter` iterations, whichever comes first.
     pub fn stationary_with(&self, tol: f64, max_iter: usize) -> Vec<f64> {
-        self.power_iterate(tol, max_iter).0
+        let (pi, _, residual) = self.power_iterate(tol, max_iter);
+        if residual <= tol {
+            return pi;
+        }
+        self.direct_stationary().unwrap_or(pi)
     }
 
     /// Checked form of [`stationary_with`](Self::stationary_with).
@@ -475,32 +478,35 @@ impl MarkovChain {
     /// ```
     /// use tpt_math_prob_markov::{MarkovChain, MarkovError};
     ///
-    /// // A period-2 chain: the iterate oscillates forever instead of settling.
+    /// // A period-2 chain: power iteration oscillates, but the direct solve
+    /// // still finds the stationary distribution.
     /// let periodic = MarkovChain::from_rows(vec![
     ///     vec![0.0, 0.5, 0.5],
     ///     vec![1.0, 0.0, 0.0],
     ///     vec![1.0, 0.0, 0.0],
     /// ])
     /// .unwrap();
-    /// assert!(matches!(
-    ///     periodic.try_stationary(1e-12, 1_000),
-    ///     Err(MarkovError::NotConverged { .. })
-    /// ));
-    ///
-    /// // The lazy chain has the same stationary distribution and converges.
-    /// let pi = periodic.lazy().try_stationary(1e-12, 10_000).unwrap();
+    /// let pi = periodic.try_stationary(1e-12, 1_000).unwrap();
     /// assert!((pi[0] - 0.5).abs() < 1e-9);
+    /// assert!((pi[1] - 0.25).abs() < 1e-9);
+    ///
+    /// // A reducible chain has no unique stationary distribution.
+    /// let reducible = MarkovChain::identity(2);
+    /// assert!(reducible.try_stationary(1e-12, 1_000).is_ok());
     /// ```
     pub fn try_stationary(&self, tol: f64, max_iter: usize) -> Result<Vec<f64>, MarkovError> {
         self.validate()?;
         let (pi, iterations, residual) = self.power_iterate(tol, max_iter);
-        if residual > tol {
-            return Err(MarkovError::NotConverged {
-                iterations,
-                residual,
-            });
+        if residual <= tol {
+            return Ok(pi);
         }
-        Ok(pi)
+        // Power iteration oscillates on periodic chains and can stall. The
+        // direct solve is exact for an irreducible chain; a reducible chain
+        // makes the system singular, and then the iteration's failure stands.
+        self.direct_stationary().ok_or(MarkovError::NotConverged {
+            iterations,
+            residual,
+        })
     }
 
     /// Sample the next state given that the chain is currently in `current`.
@@ -607,6 +613,60 @@ impl MarkovChain {
             }
         }
         Ok(())
+    }
+
+    /// Solve `pi P = pi` with `sum(pi) = 1` by Gaussian elimination with partial
+    /// pivoting. Returns `None` if the system is singular (for example a
+    /// reducible chain, which has no unique stationary distribution).
+    fn direct_stationary(&self) -> Option<Vec<f64>> {
+        let n = self.states;
+        if n == 0 {
+            return Some(Vec::new());
+        }
+        // Equation k: sum_i pi_i (P[i][k] - delta_ik) = 0. The last equation is
+        // replaced by the normalisation sum_i pi_i = 1, which makes the system
+        // non-singular for an irreducible chain.
+        let mut a = vec![vec![0.0_f64; n + 1]; n];
+        for (k, row) in a.iter_mut().enumerate() {
+            for (i, entry) in row.iter_mut().take(n).enumerate() {
+                *entry = self.transition_prob(i, k) - if i == k { 1.0 } else { 0.0 };
+            }
+        }
+        for entry in a[n - 1].iter_mut().take(n) {
+            *entry = 1.0;
+        }
+        a[n - 1][n] = 1.0;
+
+        // Gauss-Jordan elimination with partial pivoting.
+        for c in 0..n {
+            let pivot = (c..n).max_by(|&r, &t| a[r][c].abs().total_cmp(&a[t][c].abs()))?;
+            if a[pivot][c].abs() < 1e-300 {
+                return None;
+            }
+            a.swap(pivot, c);
+            for r in 0..n {
+                if r != c {
+                    let factor = a[r][c] / a[c][c];
+                    if factor != 0.0 {
+                        let pivot_row: Vec<f64> = a[c][c..=n].to_vec();
+                        for (offset, &p) in pivot_row.iter().enumerate() {
+                            a[r][c + offset] -= factor * p;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Clamp rounding-level negatives and renormalise.
+        let mut pi: Vec<f64> = (0..n).map(|i| (a[i][n] / a[i][i]).max(0.0)).collect();
+        let sum: f64 = pi.iter().sum();
+        if !(sum.is_finite() && sum > 0.0) {
+            return None;
+        }
+        for p in pi.iter_mut() {
+            *p /= sum;
+        }
+        Some(pi)
     }
 
     /// Power iteration returning `(iterate, iterations_performed, residual)`.
@@ -785,6 +845,24 @@ mod tests {
     }
 
     #[test]
+    fn stationary_of_a_periodic_chain_is_found_directly() {
+        // Bipartite (period-2) chain: 0 <-> 1 <-> 2 with P[1][0] = P[1][2] = 1/2.
+        // Its stationary distribution is (1/4, 1/2, 1/4). Power iteration from
+        // the uniform start cycles between (1/3, 1/3, 1/3) and (1/6, 2/3, 1/6)
+        // forever, so the old result was not stationary at all.
+        let chain = MarkovChain::from_rows(vec![
+            vec![0.0, 1.0, 0.0],
+            vec![0.5, 0.0, 0.5],
+            vec![0.0, 1.0, 0.0],
+        ])
+        .unwrap();
+        let pi = chain.stationary();
+        assert!((pi[0] - 0.25).abs() < 1e-9, "pi = {pi:?}");
+        assert!((pi[1] - 0.5).abs() < 1e-9, "pi = {pi:?}");
+        assert!((pi[2] - 0.25).abs() < 1e-9, "pi = {pi:?}");
+    }
+
+    #[test]
     fn stationary_matches_the_analytic_two_state_solution() {
         let pi = two_state().stationary();
         assert_eq!(pi.len(), 2);
@@ -826,11 +904,13 @@ mod tests {
     }
 
     #[test]
-    fn try_stationary_reports_non_convergence_for_a_periodic_chain() {
-        assert!(matches!(
-            periodic().try_stationary(1e-12, 500),
-            Err(MarkovError::NotConverged { .. })
-        ));
+    fn try_stationary_solves_a_periodic_chain_directly() {
+        // Power iteration cannot settle here, but the direct solve still
+        // returns the exact stationary distribution (1/2, 1/4, 1/4).
+        let pi = periodic().try_stationary(1e-12, 500).unwrap();
+        assert!((pi[0] - 0.5).abs() < 1e-9);
+        assert!((pi[1] - 0.25).abs() < 1e-9);
+        assert!((pi[2] - 0.25).abs() < 1e-9);
     }
 
     #[test]

@@ -5,6 +5,16 @@ All notable changes to this crate will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to SemVer.
 
+## [Unreleased]
+
+### Changed
+
+- `DMatrix::from_vec`/`from_row_slice` panic when the data length is not `nrows * ncols`; `dot` panics on mismatched lengths; the generic matrix and matrix-vector products assert their inner dimensions.
+
+### Fixed
+
+- `Index<(i, j)>` checks each axis, so a row index past `nrows` no longer aliases another element.
+
 ## [0.1.0] - Unreleased
 
 ### Added

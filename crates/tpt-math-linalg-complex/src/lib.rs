@@ -99,9 +99,16 @@ impl<T: Scalar> Complex<T> {
         self.re * self.re + self.im * self.im
     }
 
-    /// The modulus `|z| = sqrt(re² + im²)`.
+    /// The modulus `|z| = sqrt(re² + im²)`, computed with a scaled hypot so
+    /// that large components do not overflow.
     pub fn norm(&self) -> T {
-        self.norm_sqr().sqrt()
+        let (a, b) = (self.re.abs(), self.im.abs());
+        let (big, small) = if a >= b { (a, b) } else { (b, a) };
+        if big == T::zero() {
+            return T::zero();
+        }
+        let r = small / big;
+        big * (T::one() + r * r).sqrt()
     }
 
     /// The argument (phase) `atan2(im, re)`.
@@ -111,11 +118,20 @@ impl<T: Scalar> Complex<T> {
 
     /// The complex multiplicative inverse `1 / z`, or `None` if `z == 0`.
     pub fn inv(&self) -> Option<Self> {
-        let n = self.norm_sqr();
-        if n == T::zero() {
+        if self.re == T::zero() && self.im == T::zero() {
             return None;
         }
-        Some(Complex::new(self.re / n, -self.im / n))
+        // 1/z = (re - i·im)/(re² + im²), scaled by the larger component to
+        // avoid forming re² + im² (which overflows for large |z|).
+        if self.re.abs() >= self.im.abs() {
+            let r = self.im / self.re;
+            let den = self.re + self.im * r;
+            Some(Complex::new(T::one() / den, -r / den))
+        } else {
+            let r = self.re / self.im;
+            let den = self.re * r + self.im;
+            Some(Complex::new(r / den, -T::one() / den))
+        }
     }
 
     /// The complex square root.
@@ -172,12 +188,18 @@ impl<T: Scalar + Copy> Mul for Complex<T> {
 
 impl<T: Scalar + Copy> Div for Complex<T> {
     type Output = Complex<T>;
+    /// Smith's algorithm: divides by the larger component of `rhs` first, so
+    /// `|rhs|²` is never formed and cannot overflow.
     fn div(self, rhs: Complex<T>) -> Complex<T> {
-        let d = rhs.norm_sqr();
-        Complex::new(
-            (self.re * rhs.re + self.im * rhs.im) / d,
-            (self.im * rhs.re - self.re * rhs.im) / d,
-        )
+        if rhs.re.abs() >= rhs.im.abs() {
+            let r = rhs.im / rhs.re;
+            let den = rhs.re + rhs.im * r;
+            Complex::new((self.re + self.im * r) / den, (self.im - self.re * r) / den)
+        } else {
+            let r = rhs.re / rhs.im;
+            let den = rhs.re * r + rhs.im;
+            Complex::new((self.re * r + self.im) / den, (self.im * r - self.re) / den)
+        }
     }
 }
 
@@ -258,15 +280,33 @@ impl<T: Scalar + Copy> ComplexDMatrix<T> {
 
     /// Build from a `Vec` laid out **column-major**: `(i, j)` is
     /// `data[i + j * nrows]`.
+    /// # Panics
+    ///
+    /// Panics if `data.len() != nrows * ncols`.
     pub fn from_vec(nrows: usize, ncols: usize, data: Vec<Complex<T>>) -> Self {
+        assert_eq!(
+            data.len(),
+            nrows * ncols,
+            "data length {} does not match a {nrows}x{ncols} matrix",
+            data.len()
+        );
         ComplexDMatrix { nrows, ncols, data }
     }
 
     /// Build from a slice laid out **row-major**.
+    /// # Panics
+    ///
+    /// Panics if `data.len() != nrows * ncols`.
     pub fn from_real_row_slice(nrows: usize, ncols: usize, data: &[T]) -> Self
     where
         T: Clone,
     {
+        assert_eq!(
+            data.len(),
+            nrows * ncols,
+            "data length {} does not match a {nrows}x{ncols} matrix",
+            data.len()
+        );
         ComplexDMatrix {
             nrows,
             ncols,
@@ -277,10 +317,19 @@ impl<T: Scalar + Copy> ComplexDMatrix<T> {
     }
 
     /// Build from a slice of complex values laid out **row-major**.
+    /// # Panics
+    ///
+    /// Panics if `data.len() != nrows * ncols`.
     pub fn from_row_slice(nrows: usize, ncols: usize, data: &[Complex<T>]) -> Self
     where
         T: Clone,
     {
+        assert_eq!(
+            data.len(),
+            nrows * ncols,
+            "data length {} does not match a {nrows}x{ncols} matrix",
+            data.len()
+        );
         ComplexDMatrix {
             nrows,
             ncols,
@@ -376,6 +425,13 @@ impl<T> Index<(usize, usize)> for ComplexDMatrix<T> {
     ///
     /// Panics if `(i, j)` is out of bounds.
     fn index(&self, (i, j): (usize, usize)) -> &Complex<T> {
+        // Checked per axis: a row index past `nrows` would alias another entry.
+        assert!(
+            i < self.nrows && j < self.ncols,
+            "index ({i}, {j}) out of bounds for a {}x{} matrix",
+            self.nrows,
+            self.ncols
+        );
         &self.data[self.offset(i, j)]
     }
 }
@@ -395,6 +451,11 @@ impl<T: Scalar + Copy> ComplexDVector<T> {
 
     /// Conjugate dot product `Σ conj(self_i) · other_i`.
     pub fn dot(&self, other: &ComplexDVector<T>) -> Complex<T> {
+        assert_eq!(
+            self.data.len(),
+            other.data.len(),
+            "dot product requires equal lengths"
+        );
         let mut s = Complex::from_real(T::zero());
         for i in 0..self.data.len() {
             s = s + self.data[i].conj() * other.data[i];
@@ -506,6 +567,11 @@ impl<T: Scalar + Copy> Mul<ComplexDMatrix<T>> for ComplexDMatrix<T> {
     ///
     /// Panics if the inner dimensions do not match.
     fn mul(self, rhs: ComplexDMatrix<T>) -> ComplexDMatrix<T> {
+        assert_eq!(
+            self.ncols, rhs.nrows,
+            "inner dimensions do not match: {}x{} * {}x{}",
+            self.nrows, self.ncols, rhs.nrows, rhs.ncols
+        );
         let m = self.nrows;
         let k = self.ncols;
         let n = rhs.ncols;
@@ -526,6 +592,13 @@ impl<T: Scalar + Copy> Mul<ComplexDVector<T>> for ComplexDMatrix<T> {
     ///
     /// Panics if the matrix column count does not match the vector length.
     fn mul(self, rhs: ComplexDVector<T>) -> ComplexDVector<T> {
+        assert_eq!(
+            self.ncols,
+            rhs.len(),
+            "matrix has {} columns but vector has length {}",
+            self.ncols,
+            rhs.len()
+        );
         let m = self.nrows;
         let k = self.ncols;
         ComplexDVector::from_fn(m, |i| {
@@ -587,6 +660,11 @@ pub enum ComplexDenseError {
         /// Human-readable description of the conflict.
         what: alloc::string::String,
     },
+    /// An iterative method exhausted its iteration budget.
+    NotConverged {
+        /// Number of iterations performed before giving up.
+        iterations: usize,
+    },
 }
 
 #[cfg(feature = "alloc")]
@@ -596,6 +674,9 @@ impl fmt::Display for ComplexDenseError {
             ComplexDenseError::Singular { what } => write!(f, "singular matrix in {what}"),
             ComplexDenseError::DimensionMismatch { what } => {
                 write!(f, "dimension mismatch: {what}")
+            }
+            ComplexDenseError::NotConverged { iterations } => {
+                write!(f, "did not converge after {iterations} iterations")
             }
         }
     }
@@ -747,12 +828,29 @@ impl ComplexDMatrix<f64> {
         Ok(Cholesky { l, n })
     }
 
-    /// Compute all eigenvalues of `self` via the shifted QR algorithm.
+    /// Compute all eigenvalues of `self` via Hessenberg reduction and shifted QR.
     ///
     /// For a complex matrix the eigenvalues are themselves complex; the returned
     /// vector has one entry per row/column.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `self` is not square or the QR iteration does not converge.
+    /// Use [`ComplexDMatrix::try_eigenvalues`] to handle these cases.
     pub fn eigenvalues(&self) -> Vec<Complex<f64>> {
-        shifted_qr_eigenvalues(self)
+        self.try_eigenvalues()
+            .unwrap_or_else(|e| panic!("eigenvalues failed: {e}"))
+    }
+
+    /// Fallible [`ComplexDMatrix::eigenvalues`].
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ComplexDenseError::DimensionMismatch`] if `self` is not square,
+    /// and [`ComplexDenseError::NotConverged`] if the QR iteration exhausts its
+    /// iteration budget.
+    pub fn try_eigenvalues(&self) -> Result<Vec<Complex<f64>>, ComplexDenseError> {
+        hessenberg_qr_eigenvalues(self)
     }
 }
 
@@ -831,152 +929,205 @@ impl Cholesky<f64> {
 }
 
 // ---------------------------------------------------------------------------
-// Shifted-QR eigenvalue solver (complex)
+// Eigenvalue solver (complex): Hessenberg reduction + single-shift QR
 // ---------------------------------------------------------------------------
 
+/// Eigenvalues of a square complex matrix.
+///
+/// Reduces `m` to upper Hessenberg form with Householder reflections, then runs
+/// single-shift QR iteration with Wilkinson shifts (and an occasional
+/// exceptional shift) using Givens rotations. Each rotation is a unitary
+/// similarity, so the eigenvalues are preserved. Deflated diagonal entries are
+/// returned in diagonal order.
 #[cfg(feature = "alloc")]
-fn shifted_qr_eigenvalues(m: &ComplexDMatrix<f64>) -> Vec<Complex<f64>> {
-    let mut n = m.nrows;
-    if m.ncols != n || n == 0 {
-        return Vec::new();
+fn hessenberg_qr_eigenvalues(
+    m: &ComplexDMatrix<f64>,
+) -> Result<Vec<Complex<f64>>, ComplexDenseError> {
+    let n = m.nrows;
+    if m.ncols != n {
+        return Err(ComplexDenseError::DimensionMismatch {
+            what: alloc::format!(
+                "eigenvalues need a square matrix, got {}x{}",
+                m.nrows,
+                m.ncols
+            ),
+        });
     }
-    // Working copy as a Vec<Vec<Complex<f64>>>.
+    if n == 0 {
+        return Ok(Vec::new());
+    }
     let mut a: Vec<Vec<Complex<f64>>> = (0..n)
         .map(|i| (0..n).map(|j| m[(i, j)]).collect())
         .collect();
-    let mut out: Vec<Complex<f64>> = Vec::with_capacity(n);
-    let tol = 1e-10;
-    let max_iter = 1000;
+    hessenberg_reduce(&mut a);
 
-    while n > 2 {
-        let mut iter = 0;
-        let mut converged = false;
-        while iter < max_iter && !converged {
-            iter += 1;
-            let mu = a[n - 1][n - 1];
-            // (A - mu I) = R Q, then A' = R Q + mu I (similarity transform).
-            let ashifted: Vec<Vec<Complex<f64>>> = (0..n)
-                .map(|i| {
-                    (0..n)
-                        .map(|j| a[i][j] - if i == j { mu } else { Complex::from_real(0.0) })
-                        .collect()
-                })
-                .collect();
-            let (q, r) = householder_qr(&ashifted);
-            let rq = mul_mm(&r, &q);
-            for i in 0..n {
-                for j in 0..n {
-                    a[i][j] = rq[i][j] + if i == j { mu } else { Complex::from_real(0.0) };
-                }
-            }
-            if a[n - 1][n - 2].norm() < tol {
-                converged = true;
-            }
-        }
-        // Deflate: the bottom-right entry is an eigenvalue.
-        out.push(a[n - 1][n - 1]);
-        n -= 1;
-        if n > 0 {
-            a.truncate(n);
-            for row in a.iter_mut() {
-                row.truncate(n);
-            }
-        }
-    }
+    let zero = Complex::from_real(0.0_f64);
+    let mut eig = vec![zero; n];
+    // Iteration budget: generous for small matrices, still finite for pathological ones.
+    let max_total = 50 * n.max(1);
+    let mut total = 0_usize;
+    let mut since_deflation = 0_usize;
+    let mut hi = n - 1;
 
-    if n == 2 {
-        // Solve the 2x2 characteristic polynomial directly (the single-shift QR
-        // does not reliably converge on a 2x2 complex block).
-        let a00 = a[0][0];
-        let a01 = a[0][1];
-        let a10 = a[1][0];
-        let a11 = a[1][1];
-        let tr = a00 + a11;
-        let det = a00 * a11 - a01 * a10;
-        let disc = (tr * tr - Complex::from_real(4.0) * det).sqrt();
-        let half = Complex::from_real(0.5);
-        out.push((tr + disc) * half);
-        out.push((tr - disc) * half);
-    } else if n == 1 {
-        out.push(a[0][0]);
+    while hi > 0 {
+        // Find the start `lo` of the active unreduced Hessenberg block `[lo..=hi]`,
+        // zeroing any subdiagonal entry that has become negligible.
+        let mut lo = hi;
+        while lo > 0 {
+            let sub = a[lo][lo - 1].norm();
+            let scale = a[lo - 1][lo - 1].norm() + a[lo][lo].norm();
+            if sub <= f64::EPSILON * scale {
+                a[lo][lo - 1] = zero;
+                break;
+            }
+            lo -= 1;
+        }
+        if lo == hi {
+            eig[hi] = a[hi][hi];
+            hi -= 1;
+            since_deflation = 0;
+            continue;
+        }
+
+        if total >= max_total {
+            return Err(ComplexDenseError::NotConverged { iterations: total });
+        }
+        total += 1;
+        since_deflation += 1;
+        let mu = if since_deflation % 11 == 0 {
+            // Exceptional shift breaks cycles that the Wilkinson shift cannot.
+            a[hi][hi] + Complex::from_real(0.75 * a[hi][hi - 1].norm())
+        } else {
+            wilkinson_shift(a[hi - 1][hi - 1], a[hi - 1][hi], a[hi][hi - 1], a[hi][hi])
+        };
+        qr_sweep(&mut a, lo, hi, mu);
     }
-    out
+    eig[0] = a[0][0];
+    Ok(eig)
 }
 
+/// Reduce `a` to upper Hessenberg form by unitary similarity (Householder).
 #[cfg(feature = "alloc")]
-fn householder_qr(a: &[Vec<Complex<f64>>]) -> (Vec<Vec<Complex<f64>>>, Vec<Vec<Complex<f64>>>) {
+fn hessenberg_reduce(a: &mut [Vec<Complex<f64>>]) {
     let n = a.len();
-    let m = a[0].len();
-    let mut r: Vec<Vec<Complex<f64>>> = a.to_vec();
-    let mut q: Vec<Vec<Complex<f64>>> = (0..n)
-        .map(|i| {
-            (0..n)
-                .map(|j| {
-                    if i == j {
-                        Complex::from_real(1.0)
-                    } else {
-                        Complex::from_real(0.0)
-                    }
-                })
-                .collect()
-        })
-        .collect();
+    let zero = Complex::from_real(0.0_f64);
+    for k in 0..n.saturating_sub(2) {
+        let len = n - k - 1;
+        let x: Vec<Complex<f64>> = (0..len).map(|i| a[k + 1 + i][k]).collect();
+        let nx = Float::sqrt(x.iter().fold(0.0_f64, |acc, z| acc + z.norm_sqr()));
+        if nx == 0.0 {
+            continue;
+        }
+        // alpha = -e^{i arg(x0)} |x| avoids cancellation in v = x - alpha e1.
+        let x0_mod = x[0].norm();
+        let phase = if x0_mod == 0.0 {
+            Complex::from_real(1.0_f64)
+        } else {
+            x[0] * (1.0 / x0_mod)
+        };
+        let alpha = -(phase * Complex::from_real(nx));
+        let mut v = x;
+        v[0] = v[0] - alpha;
+        let nv = Float::sqrt(v.iter().fold(0.0_f64, |acc, z| acc + z.norm_sqr()));
+        if nv == 0.0 {
+            continue;
+        }
+        let u: Vec<Complex<f64>> = v.iter().map(|z| *z * (1.0 / nv)).collect();
 
-    for k in 0..m.min(n) {
-        // Column vector x = r[k..][k].
-        let mut x: Vec<Complex<f64>> = (k..n).map(|i| r[i][k]).collect();
-        let norm_x = Float::sqrt(x.iter().fold(0.0_f64, |acc, z| acc + z.norm_sqr()));
-        if norm_x < 1e-14 {
-            continue;
-        }
-        let sign = if x[0].re < 0.0 { -1.0 } else { 1.0 };
-        x[0] = x[0] + Complex::from_real(sign * norm_x);
-        let norm_u = Float::sqrt(x.iter().fold(0.0_f64, |acc, z| acc + z.norm_sqr()));
-        if norm_u < 1e-14 {
-            continue;
-        }
-        // Apply H = I - 2 u uᴴ to the trailing submatrix of r (rows k..n, cols k..m).
-        for j in k..m {
-            let mut dot = Complex::from_real(0.0);
-            for (i, xi) in x.iter().enumerate() {
-                dot = dot + xi.conj() * r[k + i][j];
-            }
-            let coeff = dot / Complex::from_real(norm_u * norm_u / 2.0);
-            for (i, xi) in x.iter().enumerate() {
-                r[k + i][j] = r[k + i][j] - *xi * coeff;
-            }
-        }
-        // Accumulate Q = Q H (apply H to columns k..n, rows k..n of q).
+        // H = I - 2 u uᴴ on the trailing block: left-multiply rows k+1.., then
+        // right-multiply columns k+1.. by H.
         for j in 0..n {
-            let mut dot = Complex::from_real(0.0);
-            for (i, xi) in x.iter().enumerate() {
-                dot = dot + xi.conj() * q[k + i][j];
+            let mut s = zero;
+            for (i, ui) in u.iter().enumerate() {
+                s = s + ui.conj() * a[k + 1 + i][j];
             }
-            let coeff = dot / Complex::from_real(norm_u * norm_u / 2.0);
-            for (i, xi) in x.iter().enumerate() {
-                q[k + i][j] = q[k + i][j] - *xi * coeff;
+            let s2 = s * 2.0;
+            for (i, ui) in u.iter().enumerate() {
+                a[k + 1 + i][j] = a[k + 1 + i][j] - *ui * s2;
+            }
+        }
+        for row in a.iter_mut() {
+            let mut s = zero;
+            for (jj, uj) in u.iter().enumerate() {
+                s = s + row[k + 1 + jj] * *uj;
+            }
+            let s2 = s * 2.0;
+            for (jj, uj) in u.iter().enumerate() {
+                row[k + 1 + jj] = row[k + 1 + jj] - s2 * uj.conj();
             }
         }
     }
-    (q, r)
 }
 
+/// Eigenvalue of the trailing 2×2 block `[[a, b], [c, d]]` closest to `d`.
 #[cfg(feature = "alloc")]
-fn mul_mm(a: &[Vec<Complex<f64>>], b: &[Vec<Complex<f64>>]) -> Vec<Vec<Complex<f64>>> {
+fn wilkinson_shift(
+    a: Complex<f64>,
+    b: Complex<f64>,
+    c: Complex<f64>,
+    d: Complex<f64>,
+) -> Complex<f64> {
+    let half = Complex::from_real(0.5_f64);
+    let mean = (a + d) * half;
+    let half_diff = (a - d) * half;
+    let disc = (half_diff * half_diff + b * c).sqrt();
+    let l1 = mean + disc;
+    let l2 = mean - disc;
+    if (l1 - d).norm() < (l2 - d).norm() {
+        l1
+    } else {
+        l2
+    }
+}
+
+/// Givens rotation `G = [[c, s], [-s̄, c]]` (with real `c`) such that
+/// `G [x; y] = [r; 0]`.
+#[cfg(feature = "alloc")]
+fn givens(x: Complex<f64>, y: Complex<f64>) -> (f64, Complex<f64>) {
+    let nx = x.norm();
+    let r = Float::sqrt(x.norm_sqr() + y.norm_sqr());
+    if r == 0.0 {
+        return (1.0, Complex::from_real(0.0));
+    }
+    if nx == 0.0 {
+        return (0.0, Complex::from_real(1.0));
+    }
+    let c = nx / r;
+    let s = (x * (1.0 / nx)) * y.conj() * (1.0 / r);
+    (c, s)
+}
+
+/// One single-shift QR sweep (implicit bulge chase) on the block `[lo..=hi]`.
+///
+/// The rotations act on the whole matrix as `A ← G A Gᴴ`, so the spectrum is
+/// preserved and the Hessenberg structure is restored after each step.
+#[cfg(feature = "alloc")]
+fn qr_sweep(a: &mut [Vec<Complex<f64>>], lo: usize, hi: usize, mu: Complex<f64>) {
     let n = a.len();
-    let m = b[0].len();
-    let k = b.len();
-    let mut out = vec![vec![Complex::from_real(0.0); m]; n];
-    for i in 0..n {
-        for j in 0..m {
-            let mut s = Complex::from_real(0.0);
-            for p in 0..k {
-                s = s + a[i][p] * b[p][j];
-            }
-            out[i][j] = s;
+    let mut x = a[lo][lo] - mu;
+    let mut y = a[lo + 1][lo];
+    for k in lo..hi {
+        let (c, s) = givens(x, y);
+        // Rows k, k+1: A ← G A.
+        for j in 0..n {
+            let p = a[k][j];
+            let q = a[k + 1][j];
+            a[k][j] = p * c + s * q;
+            a[k + 1][j] = -(s.conj() * p) + q * c;
+        }
+        // Columns k, k+1: A ← A Gᴴ.
+        for row in a.iter_mut() {
+            let p = row[k];
+            let q = row[k + 1];
+            row[k] = p * c + s.conj() * q;
+            row[k + 1] = -(s * p) + q * c;
+        }
+        if k + 2 <= hi {
+            // Chase the bulge that the rotation pushed to (k+2, k).
+            x = a[k + 1][k];
+            y = a[k + 2][k];
         }
     }
-    out
 }
 
 // ===========================================================================
@@ -1005,6 +1156,19 @@ mod tests {
         let inv = z.inv().unwrap();
         assert_relative_eq!((z * inv).re, 1.0, epsilon = 1e-12);
         assert_relative_eq!((z * inv).im, 0.0, epsilon = 1e-12);
+    }
+
+    #[test]
+    fn division_and_norm_survive_large_magnitudes() {
+        // |z|² overflows f64 at this scale, so the textbook formulas gave NaN/inf.
+        let big = c(1e200, 1e200);
+        let q = big / big;
+        assert_relative_eq!(q.re, 1.0, epsilon = 1e-12);
+        assert_relative_eq!(q.im, 0.0, epsilon = 1e-12);
+        assert_relative_eq!(big.norm(), 1e200 * 2.0_f64.sqrt(), max_relative = 1e-12);
+        let inv = big.inv().unwrap();
+        assert!(inv.re.is_finite() && inv.im.is_finite());
+        assert_relative_eq!(inv.re, 0.5e-200, max_relative = 1e-12);
     }
 
     #[test]
@@ -1158,6 +1322,119 @@ mod tests {
         let s = 2.0_f64.sqrt();
         assert!(find(&ev, 2.0 - s, 0.0));
         assert!(find(&ev, 2.0 + s, 0.0));
+    }
+
+    #[test]
+    fn eigenvalues_3x3_companion_real_roots() {
+        // Companion matrix of (x-1)(x-2)(x-3) = x³ - 6x² + 11x - 6.
+        let a = ComplexDMatrix::from_real_row_slice(
+            3,
+            3,
+            &[0.0, 0.0, 6.0, 1.0, 0.0, -11.0, 0.0, 1.0, 6.0],
+        );
+        let ev = a.eigenvalues();
+        assert_eq!(ev.len(), 3);
+        assert!(find(&ev, 1.0, 0.0));
+        assert!(find(&ev, 2.0, 0.0));
+        assert!(find(&ev, 3.0, 0.0));
+    }
+
+    #[test]
+    fn eigenvalues_3x3_complex_roots() {
+        // Companion matrix of x³ - 1 has roots 1, ω, ω² (cube roots of unity).
+        let a = ComplexDMatrix::from_real_row_slice(
+            3,
+            3,
+            &[0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0],
+        );
+        let ev = a.eigenvalues();
+        let h = 0.5_f64;
+        let s = 3.0_f64.sqrt() / 2.0;
+        assert!(find(&ev, 1.0, 0.0));
+        assert!(find(&ev, -h, s));
+        assert!(find(&ev, -h, -s));
+    }
+
+    #[test]
+    fn eigenvalues_hermitian_3x3_with_repeated_value() {
+        // Block [[1, i], [-i, 1]] has eigenvalues 0 and 2; the 1×1 block adds 2.
+        let a = ComplexDMatrix::from_row_slice(
+            3,
+            3,
+            &[
+                c(1.0, 0.0),
+                c(0.0, 1.0),
+                c(0.0, 0.0),
+                c(0.0, -1.0),
+                c(1.0, 0.0),
+                c(0.0, 0.0),
+                c(0.0, 0.0),
+                c(0.0, 0.0),
+                c(2.0, 0.0),
+            ],
+        );
+        let ev = a.eigenvalues();
+        assert_eq!(ev.len(), 3);
+        assert!(find(&ev, 0.0, 0.0));
+        assert_eq!(ev.iter().filter(|z| find(&[**z], 2.0, 0.0)).count(), 2);
+    }
+
+    #[test]
+    fn eigenvalues_4x4_trace_and_spectrum_of_triangular() {
+        // Upper-triangular: eigenvalues are the diagonal, and the trace is their sum.
+        let a = ComplexDMatrix::from_row_slice(
+            4,
+            4,
+            &[
+                c(1.0, 0.0),
+                c(5.0, 2.0),
+                c(-3.0, 1.0),
+                c(0.5, 0.0),
+                c(0.0, 0.0),
+                c(0.0, 2.0),
+                c(4.0, 0.0),
+                c(1.0, -1.0),
+                c(0.0, 0.0),
+                c(0.0, 0.0),
+                c(-2.0, 0.0),
+                c(2.0, 2.0),
+                c(0.0, 0.0),
+                c(0.0, 0.0),
+                c(0.0, 0.0),
+                c(0.0, -3.0),
+            ],
+        );
+        let ev = a.eigenvalues();
+        assert_eq!(ev.len(), 4);
+        for (want_re, want_im) in [(1.0, 0.0), (0.0, 2.0), (-2.0, 0.0), (0.0, -3.0)] {
+            assert!(find(&ev, want_re, want_im), "missing {want_re}+{want_im}i");
+        }
+        let trace = ev.iter().fold(C::from_real(0.0), |acc, z| acc + *z);
+        assert_relative_eq!(trace.re, -1.0, epsilon = 1e-9);
+        assert_relative_eq!(trace.im, -1.0, epsilon = 1e-9);
+    }
+
+    #[test]
+    fn try_eigenvalues_rejects_non_square() {
+        let a = ComplexDMatrix::<f64>::zeros(2, 3);
+        assert!(matches!(
+            a.try_eigenvalues(),
+            Err(ComplexDenseError::DimensionMismatch { .. })
+        ));
+    }
+
+    #[test]
+    #[should_panic(expected = "length")]
+    fn from_vec_length_mismatch_panics() {
+        let _ = ComplexDMatrix::from_vec(2, 2, vec![c(1.0, 0.0); 3]);
+    }
+
+    #[test]
+    #[should_panic(expected = "out of bounds")]
+    fn index_row_out_of_bounds_panics() {
+        // (2, 0) would alias (0, 1) in column-major storage without a check.
+        let m = ComplexDMatrix::<f64>::zeros(2, 3);
+        let _ = m[(2, 0)];
     }
 
     fn mul_mm_public(a: &ComplexDMatrix<f64>, b: &ComplexDMatrix<f64>) -> ComplexDMatrix<f64> {

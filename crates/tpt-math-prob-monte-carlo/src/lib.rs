@@ -75,22 +75,21 @@ where
     F: Fn(f64) -> f64,
 {
     let width = b - a;
-    let mut sum = 0.0;
-    let mut sum_sq = 0.0;
-    for _ in 0..n {
-        let u: f64 = Standard.sample(rng);
-        let x = a + width * u;
-        let y = f(x);
-        sum += y;
-        sum_sq += y * y;
-    }
     if n == 0 {
         return (0.0, 0.0);
     }
-    let m = (n as f64).max(2.0);
-    let mean_f = sum / (n as f64);
-    let var_f = (sum_sq - mean_f * sum) / (m - 1.0).max(1.0);
-    let var_f = if var_f < 0.0 { 0.0 } else { var_f };
+    // Welford's one-pass update: avoids the cancellation of Σy² − (Σy)²/n.
+    let mut mean_f = 0.0;
+    let mut m2 = 0.0;
+    for k in 1..=n {
+        let u: f64 = Standard.sample(rng);
+        let x = a + width * u;
+        let y = f(x);
+        let delta = y - mean_f;
+        mean_f += delta / (k as f64);
+        m2 += delta * (y - mean_f);
+    }
+    let var_f = if n > 1 { m2 / ((n - 1) as f64) } else { 0.0 };
     let mean = width * mean_f;
     let stderr = width * (var_f / (n as f64)).sqrt();
     (mean, stderr)
@@ -192,23 +191,18 @@ where
         if n == 0 {
             return (0.0, 0.0);
         }
-        let mut buf = Vec::with_capacity(n);
-        let mut sum = 0.0;
-        let mut sum_sq = 0.0;
-        for _ in 0..n {
+        // Welford's one-pass update over the weighted terms.
+        let mut mean = 0.0;
+        let mut m2 = 0.0;
+        for k in 1..=n {
             let x = proposal.sample(rng);
             let w = (self.target)(x) / (self.proposal)(x);
             let term = h(x) * w;
-            buf.push(term);
-            sum += term;
-            sum_sq += term * term;
+            let delta = term - mean;
+            mean += delta / (k as f64);
+            m2 += delta * (term - mean);
         }
-        let m = (n as f64).max(2.0);
-        let mean = sum / (n as f64);
-        let mut var = (sum_sq - mean * sum) / (m - 1.0).max(1.0);
-        if var < 0.0 {
-            var = 0.0;
-        }
+        let var = if n > 1 { m2 / ((n - 1) as f64) } else { 0.0 };
         let stderr = (var / (n as f64)).sqrt();
         (mean, stderr)
     }
@@ -264,6 +258,21 @@ mod tests {
         assert!((mean - 1.0 / 3.0).abs() < 5.0 * stderr);
         assert!(stderr > 0.0);
         assert!(stderr < 1e-2);
+    }
+
+    #[test]
+    fn integrate_stderr_survives_large_offset() {
+        // f = 1e9 + x on [0, 1] has Var(f) = 1/12. The expanded sum-of-squares
+        // formula cancelled catastrophically at this offset and returned a
+        // stderr that was wrong by orders of magnitude.
+        let mut rng = SplitMix64::seed_from_u64(7);
+        let n = 100_000;
+        let (_mean, stderr) = integrate(&mut rng, |x| 1e9 + x, 0.0, 1.0, n);
+        let expected = (1.0_f64 / 12.0 / n as f64).sqrt();
+        assert!(
+            (stderr - expected).abs() < 0.1 * expected,
+            "stderr {stderr} vs expected {expected}"
+        );
     }
 
     #[test]

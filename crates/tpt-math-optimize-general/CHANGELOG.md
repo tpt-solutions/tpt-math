@@ -16,6 +16,11 @@ All notable changes to this crate are documented here. Format based on
   `tpt_math_linalg`/`tpt_math_linalg_dense` re-exports) are unchanged in
   signature.
 
+### Fixed
+
+- The line search brackets its zoom on `[a_lo, a]` (it used a degenerate `[a, a]` bracket after the first expansion), and it rejects non-finite steps.
+- Gradient descent and conjugate gradients stop with termination `LineSearchStalled` when no decrease can be found, instead of running to `max_iters`.
+
 ## [0.1.0]
 
 - Initial workspace release.

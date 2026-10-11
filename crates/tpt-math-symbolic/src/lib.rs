@@ -296,9 +296,13 @@ fn simplify<C: Coefficient>(e: Expr<C>) -> Expr<C> {
         }
         Expr::Func(name, a) => {
             let a = simplify(*a);
-            match &a {
-                Expr::Const(c) => Expr::Const(apply_func(&name, c.clone())),
-                _ => Expr::Func(name, Box::new(a)),
+            let folded = match &a {
+                Expr::Const(c) => apply_func(&name, c.clone()),
+                _ => None,
+            };
+            match folded {
+                Some(v) => Expr::Const(v),
+                None => Expr::Func(name, Box::new(a)),
             }
         }
     }
@@ -381,16 +385,25 @@ fn fold_mul<C: Coefficient>(items: Vec<Expr<C>>) -> Expr<C> {
     }
 }
 
-fn apply_func<C: Coefficient>(name: &str, c: C) -> C {
-    fn to_f64<C: Coefficient>(c: C) -> f64 {
-        // Coefficients are losslessly renderable through Display then parsed
-        // back via From<f64>; for f64 this is the identity path.
-        let s = c.to_string();
-        s.parse::<f64>().unwrap_or(0.0)
+/// Approximate a coefficient as `f64`. Parses decimal output and `p/q`
+/// rationals (as printed by exact coefficients); anything unparseable is NaN
+/// rather than a silent 0.
+fn to_f64<C: Coefficient>(c: C) -> f64 {
+    let s = c.to_string();
+    if let Some((p, q)) = s.split_once('/') {
+        match (p.trim().parse::<f64>(), q.trim().parse::<f64>()) {
+            (Ok(p), Ok(q)) => p / q,
+            _ => f64::NAN,
+        }
+    } else {
+        s.trim().parse::<f64>().unwrap_or(f64::NAN)
     }
-    fn from_f64<C: Coefficient>(f: f64) -> C {
-        C::from(f)
-    }
+}
+
+/// Fold a named unary function over a numeric coefficient. Returns `None` for
+/// names this crate does not know, so they stay symbolic instead of being
+/// silently treated as the identity.
+fn apply_func<C: Coefficient>(name: &str, c: C) -> Option<C> {
     let f = to_f64(c);
     let r = match name {
         "sin" => f.sin(),
@@ -399,9 +412,9 @@ fn apply_func<C: Coefficient>(name: &str, c: C) -> C {
         "exp" => f.exp(),
         "ln" => f.ln(),
         "sqrt" => f.sqrt(),
-        _ => f,
+        _ => return None,
     };
-    from_f64(r)
+    Some(C::from(r))
 }
 
 fn derivative<C: Coefficient>(e: &Expr<C>, var: &str) -> Expr<C> {
@@ -496,7 +509,7 @@ fn eval<C: Coefficient>(e: &Expr<C>, env: &HashMap<String, C>) -> Option<C> {
         Expr::Pow(a, n) => Some(eval(a, env)?.powi(*n as i32)),
         Expr::Func(name, a) => {
             let v = eval(a, env)?;
-            Some(apply_func(name, v))
+            apply_func(name, v)
         }
     }
 }
@@ -695,6 +708,26 @@ mod tests {
         let x = Expr64::var("x");
         let e = -(-x.clone());
         assert_eq!(e.simplify(), x);
+    }
+
+    #[test]
+    fn eval_unknown_function_is_none() {
+        // An unknown name used to evaluate as the identity.
+        let e = Expr64::func("frobnicate", Expr64::from(2.0));
+        assert_eq!(e.eval(&HashMap::new()), None);
+    }
+
+    #[cfg(feature = "exact")]
+    #[test]
+    fn rational_coefficients_convert_to_f64() {
+        // Rationals print as "p/q"; the old parser turned that into 0.0.
+        assert_eq!(to_f64(exact::Rational::from(0.75)), 0.75);
+    }
+
+    #[test]
+    fn simplify_keeps_unknown_function_symbolic() {
+        let e = Expr64::func("frobnicate", Expr64::from(2.0));
+        assert!(matches!(simplify(e), Expr::Func(ref n, _) if n == "frobnicate"));
     }
 
     #[test]

@@ -5,6 +5,22 @@ All notable changes to this crate will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to SemVer.
 
+## [Unreleased]
+
+### Added
+
+- `SparseError::Breakdown { iterations }` for a numerical breakdown.
+
+### Changed
+
+- **Breaking:** `SparseError` gained a variant.
+- CG and BiCGSTAB stop when `‖r‖ ≤ tol·‖b‖` (absolute `tol` when `b = 0`). Previously `tol` was absolute, so a small right-hand side was reported as solved without being solved.
+- Breakdowns (non-positive `pᵀAp`, zero `ρ`, `ω = 0`, non-finite values) report `Breakdown` instead of `NotConverged`.
+
+### Fixed
+
+- BiCGSTAB exits early when the half-step residual `‖s‖` is already within tolerance.
+
 ## [0.1.0] - 2026-08-19
 
 ### Added

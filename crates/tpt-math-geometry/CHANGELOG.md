@@ -6,6 +6,15 @@ Semantic Versioning.
 
 ## [Unreleased]
 
+### Changed
+
+- `Rotation::from_matrix` returns `None` for a reflection (determinant -1).
+- The `UnitQuaternion` product renormalises its result.
+
+### Fixed
+
+- `Rotation3::powf` and `slerp` no longer produce NaN when rounding pushes the trace or dot product past ±1 (angle via `atan2`, argument clamped).
+
 ## [0.1.1] - 2026-08-19
 
 ### Added

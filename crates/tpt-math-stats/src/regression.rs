@@ -76,12 +76,27 @@ pub fn try_pearson_correlation(x: &[f64], y: &[f64]) -> Result<f64, StatsError> 
     check_all_finite("x", x)?;
     check_all_finite("y", y)?;
 
-    let sums = centred_sums(x, y);
+    let mut sums = centred_sums(x, y);
+    if !(sums.sxx.is_finite() && sums.syy.is_finite() && sums.sxy.is_finite()) {
+        // r is invariant under scaling each sample. Rescale by the largest
+        // magnitude when the raw sums overflow; ordinary data keep the exact
+        // unscaled arithmetic (so perfect fits return exactly ±1).
+        sums = centred_sums(&scale_by_max_abs(x), &scale_by_max_abs(y));
+    }
     if sums.sxx == 0.0 || sums.syy == 0.0 {
         return Ok(f64::NAN);
     }
 
     Ok((sums.sxy / (sums.sxx * sums.syy).sqrt()).clamp(-1.0, 1.0))
+}
+
+/// Divide `v` by its largest absolute value (returned unchanged if that is 0).
+fn scale_by_max_abs(v: &[f64]) -> Vec<f64> {
+    let scale = v.iter().fold(0.0_f64, |acc, &vi| acc.max(vi.abs()));
+    if scale == 0.0 {
+        return v.to_vec();
+    }
+    v.iter().map(|&vi| vi / scale).collect()
 }
 
 /// Pearson product-moment correlation coefficient of `x` and `y`.
@@ -180,6 +195,16 @@ mod tests {
         assert_eq!(pearson_correlation(&x, &increasing), 1.0);
         assert_eq!(pearson_correlation(&x, &decreasing), -1.0);
         assert_eq!(pearson_correlation(&x, &x), 1.0);
+    }
+
+    #[test]
+    fn pearson_survives_overflowing_magnitudes() {
+        // Sxx ≈ 2e320 overflows f64, which made the old result NaN.
+        let x = [1e160, 2e160, 3e160];
+        let y = [2e160, 4e160, 6e160];
+        let r = pearson_correlation(&x, &y);
+        assert!(r.is_finite());
+        assert!((r - 1.0).abs() < 1e-12, "r = {r}");
     }
 
     #[test]

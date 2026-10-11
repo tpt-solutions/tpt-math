@@ -5,6 +5,16 @@ All notable changes to this crate will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to SemVer.
 
+## [Unreleased]
+
+### Changed
+
+- **Breaking:** `Matrix::from_columns` takes `C` columns, each of length `R`. The old signature had the dimensions swapped, so it only worked for square matrices.
+
+### Fixed
+
+- `from_columns` no longer indexes out of bounds for non-square matrices.
+
 ## [0.1.0] - Unreleased
 
 ### Added

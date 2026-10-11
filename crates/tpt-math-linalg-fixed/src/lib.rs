@@ -282,12 +282,13 @@ impl<T: Scalar, const R: usize, const C: usize> Matrix<T, R, C> {
         Matrix { data: out }
     }
 
-    /// Build from `R` column vectors (each of length `C`).
-    pub fn from_columns(columns: &[Vector<T, C>]) -> Option<Self>
+    /// Build from `C` column vectors (each of length `R`). Returns `None` if
+    /// the number of columns is not `C`.
+    pub fn from_columns(columns: &[Vector<T, R>]) -> Option<Self>
     where
         T: Scalar,
     {
-        if columns.len() != R {
+        if columns.len() != C {
             return None;
         }
         let mut out = [[T::zero(); C]; R];
@@ -785,5 +786,18 @@ mod tests {
         let a = Matrix2::from_array(&[1.0_f64, 2.0, 3.0, 4.0]);
         assert_eq!(a.data, [[1.0, 2.0], [3.0, 4.0]]);
         assert!(Matrix2::from_columns(&cols[0..1]).is_none());
+    }
+
+    #[test]
+    fn from_columns_non_square() {
+        // A 3x2 matrix: two columns, each of length 3. Used to index out of
+        // bounds because the column count and length were swapped.
+        let cols = [
+            Vector::<f64, 3>::new([1.0, 2.0, 3.0]),
+            Vector::<f64, 3>::new([4.0, 5.0, 6.0]),
+        ];
+        let m = Matrix::<f64, 3, 2>::from_columns(&cols).unwrap();
+        assert_eq!(m.data, [[1.0, 4.0], [2.0, 5.0], [3.0, 6.0]]);
+        assert!(Matrix::<f64, 3, 2>::from_columns(&cols[0..1]).is_none());
     }
 }
