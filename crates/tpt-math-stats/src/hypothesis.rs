@@ -396,6 +396,178 @@ pub fn chi_squared_goodness_of_fit(observed: &[u64], expected: &[f64]) -> (f64, 
         .unwrap_or_else(|e| panic!("chi_squared_goodness_of_fit: {e}"))
 }
 
+/// Upper-tail p-value of `f` under the F distribution with `(d1, d2)` degrees of
+/// freedom, `P(F > f) = I_{d2/(d2 + d1 f)}(d2/2, d1/2)`.
+fn upper_tail_f_p_value(f: f64, d1: f64, d2: f64) -> f64 {
+    if f.is_nan() {
+        return f64::NAN;
+    }
+    if f <= 0.0 {
+        return 1.0;
+    }
+    if f.is_infinite() {
+        return 0.0;
+    }
+    let x = d2 / (d2 + d1 * f);
+    crate::special::beta_reg(d2 / 2.0, d1 / 2.0, x).clamp(0.0, 1.0)
+}
+
+/// One-way analysis of variance: do `k` groups share a common mean?
+///
+/// Returns `(F, p)`, with `F = MS_between / MS_within` on `(k − 1, N − k)`
+/// degrees of freedom, where `N` is the total number of observations.
+///
+/// If the within-group variance is zero, `F` is `∞` when the groups' means
+/// differ (the p-value is then `0`) and `NaN` when they do not.
+///
+/// # Errors
+///
+/// Returns [`StatsError::NotEnoughData`] unless there are at least two groups,
+/// every group is non-empty, and `N > k`. Returns [`StatsError::NotFinite`] for
+/// a non-finite observation.
+///
+/// # Examples
+///
+/// ```
+/// # use tpt_math_stats::try_one_way_anova;
+/// // Group means 2, 5, 8 with within-group SS = 6: F = 54/2 ÷ 6/6 = 27 on (2, 6).
+/// let (f, p) = try_one_way_anova(&[&[1.0, 2.0, 3.0], &[4.0, 5.0, 6.0], &[7.0, 8.0, 9.0]])
+///     .unwrap();
+/// assert!((f - 27.0).abs() < 1e-12);
+/// // For two numerator degrees of freedom, P(F > f) = (1 + 2f/d2)^(−d2/2).
+/// assert!((p - 0.001).abs() < 1e-12);
+/// ```
+pub fn try_one_way_anova(groups: &[&[f64]]) -> Result<(f64, f64), StatsError> {
+    if groups.len() < 2 {
+        return Err(StatsError::NotEnoughData {
+            sample: "groups",
+            required: 2,
+            found: groups.len(),
+        });
+    }
+    for group in groups {
+        check_min_len("group", group, 1)?;
+        check_all_finite("group", group)?;
+    }
+
+    let k = groups.len();
+    let total: usize = groups.iter().map(|g| g.len()).sum();
+    if total <= k {
+        return Err(StatsError::NotEnoughData {
+            sample: "observations",
+            required: k + 1,
+            found: total,
+        });
+    }
+
+    let grand_mean = compensated_sum(groups.iter().flat_map(|g| g.iter().copied())) / total as f64;
+    let mut ss_between = 0.0;
+    let mut ss_within = 0.0;
+    for group in groups {
+        let mean = mean_unchecked(group);
+        ss_between += group.len() as f64 * (mean - grand_mean).powi(2);
+        ss_within += group.iter().map(|x| (x - mean).powi(2)).sum::<f64>();
+    }
+
+    let d1 = (k - 1) as f64;
+    let d2 = (total - k) as f64;
+    let ms_between = ss_between / d1;
+    let ms_within = ss_within / d2;
+    let f = ms_between / ms_within;
+    Ok((f, upper_tail_f_p_value(f, d1, d2)))
+}
+
+/// One-way ANOVA. See [`try_one_way_anova`].
+///
+/// # Panics
+///
+/// Panics on the conditions listed for [`try_one_way_anova`].
+pub fn one_way_anova(groups: &[&[f64]]) -> (f64, f64) {
+    try_one_way_anova(groups).unwrap_or_else(|e| panic!("one_way_anova: {e}"))
+}
+
+/// Pearson's chi-squared test of independence on an `r × c` contingency table.
+///
+/// `table[i][j]` is the count for row `i`, column `j`. Expected counts are
+/// `row_total · column_total / N`, and the statistic is referred to
+/// `(r − 1)(c − 1)` degrees of freedom. Returns `(X², p)`.
+///
+/// # Errors
+///
+/// Returns [`StatsError::NotEnoughData`] unless the table has at least two rows
+/// and two columns, and [`StatsError::LengthMismatch`] if the rows differ in
+/// length. Returns [`StatsError::NonPositiveExpected`] if a row or column is
+/// entirely zero, since its expected counts are then zero.
+///
+/// # Examples
+///
+/// ```
+/// # use tpt_math_stats::try_chi_squared_independence;
+/// // Expected counts are 12, 18, 28, 42, so X² = 4/12 + 4/18 + 4/28 + 4/42.
+/// let (x2, p) = try_chi_squared_independence(&[vec![10, 20], vec![30, 40]]).unwrap();
+/// assert!((x2 - 0.793_650_793_650_793_6).abs() < 1e-12);
+/// assert!(p > 0.3);
+/// ```
+pub fn try_chi_squared_independence(table: &[Vec<u64>]) -> Result<(f64, f64), StatsError> {
+    if table.len() < 2 {
+        return Err(StatsError::NotEnoughData {
+            sample: "rows",
+            required: 2,
+            found: table.len(),
+        });
+    }
+    let cols = table[0].len();
+    if cols < 2 {
+        return Err(StatsError::NotEnoughData {
+            sample: "columns",
+            required: 2,
+            found: cols,
+        });
+    }
+    for row in table {
+        check_equal_len(cols, row.len())?;
+    }
+
+    let row_sums: Vec<f64> = table
+        .iter()
+        .map(|row| row.iter().map(|&c| c as f64).sum())
+        .collect();
+    let col_sums: Vec<f64> = (0..cols)
+        .map(|j| table.iter().map(|row| row[j] as f64).sum())
+        .collect();
+    let total: f64 = row_sums.iter().sum();
+
+    let mut terms = Vec::with_capacity(table.len() * cols);
+    for (i, row) in table.iter().enumerate() {
+        for (j, &count) in row.iter().enumerate() {
+            let expected = row_sums[i] * col_sums[j] / total;
+            if expected <= 0.0 {
+                return Err(StatsError::NonPositiveExpected {
+                    index: i * cols + j,
+                    value: expected,
+                });
+            }
+            let residual = count as f64 - expected;
+            terms.push(residual * residual / expected);
+        }
+    }
+
+    let statistic = compensated_sum(terms);
+    let freedom = ((table.len() - 1) * (cols - 1)) as f64;
+    let p_value = upper_tail_chi_squared_p_value(statistic, freedom)?;
+    Ok((statistic, p_value))
+}
+
+/// Pearson's chi-squared test of independence. See
+/// [`try_chi_squared_independence`].
+///
+/// # Panics
+///
+/// Panics on the conditions listed for [`try_chi_squared_independence`].
+pub fn chi_squared_independence(table: &[Vec<u64>]) -> (f64, f64) {
+    try_chi_squared_independence(table).unwrap_or_else(|e| panic!("chi_squared_independence: {e}"))
+}
+
 /// Limiting `(statistic, p_value)` for a t-test whose standard error is zero.
 fn degenerate_t_result(difference: f64) -> (f64, f64) {
     if difference == 0.0 {

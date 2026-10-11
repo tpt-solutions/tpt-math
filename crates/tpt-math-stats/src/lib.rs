@@ -103,13 +103,20 @@
 //! assert!((mean(&sample) - 0.5).abs() < 0.02);
 //! ```
 
+mod bootstrap;
+mod corrections;
 mod descriptive;
 mod dist;
 mod error;
 mod hypothesis;
+mod nonparametric;
 mod regression;
 mod special;
 
+pub use bootstrap::{bootstrap_ci, try_bootstrap_ci};
+pub use corrections::{
+    benjamini_hochberg, bonferroni, holm, try_benjamini_hochberg, try_bonferroni, try_holm,
+};
 pub use descriptive::{
     excess_kurtosis, max, mean, median, min, quantile, skewness, std_dev, try_excess_kurtosis,
     try_max, try_mean, try_median, try_min, try_quantile, try_skewness, try_std_dev, try_variance,
@@ -118,9 +125,14 @@ pub use descriptive::{
 pub use dist::{ChiSquared, ContinuousCDF, Normal, StudentsT};
 pub use error::StatsError;
 pub use hypothesis::{
-    chi_squared_goodness_of_fit, one_sample_t_test, paired_t_test, pooled_t_test,
-    try_chi_squared_goodness_of_fit, try_one_sample_t_test, try_paired_t_test, try_pooled_t_test,
+    chi_squared_goodness_of_fit, chi_squared_independence, one_sample_t_test, one_way_anova,
+    paired_t_test, pooled_t_test, try_chi_squared_goodness_of_fit, try_chi_squared_independence,
+    try_one_sample_t_test, try_one_way_anova, try_paired_t_test, try_pooled_t_test,
     try_two_sample_t_test, two_sample_t_test,
+};
+pub use nonparametric::{
+    kolmogorov_smirnov_two_sample, mann_whitney_u, try_kolmogorov_smirnov_two_sample,
+    try_mann_whitney_u, try_wilcoxon_signed_rank, wilcoxon_signed_rank,
 };
 pub use regression::{
     covariance, linear_regression, pearson_correlation, try_covariance, try_linear_regression,
