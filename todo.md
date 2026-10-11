@@ -1123,8 +1123,8 @@ tree.*
       importance sampling (`diagnostics`). Adaptive and multivariate Metropolis are not.
 - [ ] ODE solvers (RK4/RK45), quadrature, root finding
       Status: Partial: fixed-step RK4, adaptive Dormand–Prince 5(4) (`dopri5_integrate`),
-      composite Simpson quadrature, and bisection and Brent root finding exist in
-      `tpt-math-numeric`. Higher-order quadrature (e.g. Gauss–Kronrod) is not.
+      composite Simpson, fixed and adaptive Gauss–Legendre quadrature, and bisection
+      and Brent root finding exist in `tpt-math-numeric`. Gauss–Kronrod is not.
 - [ ] IIR / biquad / Butterworth filters in `signal-filter`
       Status: Partial: RBJ biquads for lowpass, highpass, bandpass (constant 0 dB
       peak) and notch, plus Butterworth lowpass and highpass cascades. Butterworth
