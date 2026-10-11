@@ -23,6 +23,13 @@ tpt-math-autodiff-fwd = ["dep:tpt-math-autodiff-fwd"]
 tpt-math-autodiff-rev = ["dep:tpt-math-autodiff-rev"]
 
 
+[dev-dependencies]
+# Used by the cross-crate differential tests in `tests/differential.rs`.
+tpt-math-symbolic = { workspace = true }
+tpt-math-exact = { workspace = true }
+tpt-math-linalg-dense = { workspace = true, features = ["std"] }
+num-traits = { workspace = true }
+
 [lints]
 workspace = true
 

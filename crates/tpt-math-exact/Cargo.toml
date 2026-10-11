@@ -14,7 +14,7 @@ keywords = ["arbitrary-precision", "rational", "interval-arithmetic", "bigint", 
 categories = ["mathematics", "algorithms", "science"]
 
 [dependencies]
-num-bigint = { version = "0.5.1", default-features = false }
+num-bigint = { version = "0.4", default-features = false }
 num-rational = { version = "0.4.2", default-features = false, features = ["num-bigint"] }
 num-traits = { workspace = true }
 tpt-math-numeric = { workspace = true, default-features = false }
