@@ -1,5 +1,5 @@
 /target
-Cargo.lock
+pkg_*.log
 **/*.rs.bk
 .DS_Store
 *.swp

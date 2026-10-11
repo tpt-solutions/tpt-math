@@ -440,6 +440,10 @@ impl Hmm {
             return Ok((Vec::new(), 0.0));
         }
         let n = self.states;
+        // The log transition matrix is needed at every step; compute it once.
+        let log_trans: Vec<Vec<f64>> = (0..n)
+            .map(|i| (0..n).map(|j| ln(self.transition_prob(i, j))).collect())
+            .collect();
 
         // delta[i]: log probability of the best path ending in state `i`.
         let mut delta: Vec<f64> = (0..n)
@@ -455,7 +459,7 @@ impl Hmm {
                 let mut best = f64::NEG_INFINITY;
                 let mut arg = 0usize;
                 for (i, &score) in delta.iter().enumerate() {
-                    let candidate = score + ln(self.transition_prob(i, j));
+                    let candidate = score + log_trans[i][j];
                     if candidate > best {
                         best = candidate;
                         arg = i;

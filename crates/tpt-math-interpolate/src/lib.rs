@@ -48,7 +48,7 @@
 
 extern crate alloc;
 
-use tpt_math_linalg_dense::{DMatrix, DVector, DenseError};
+use tpt_math_linalg_dense::{DMatrix, DVector, DenseError, Lu};
 use tpt_math_numeric::{Float, Scalar};
 
 #[cfg(feature = "alloc")]
@@ -259,6 +259,24 @@ pub struct Kriging {
     xs: DVector<f64>,
     ys: DVector<f64>,
     variogram: Variogram,
+    /// LU factorisation of the Kriging matrix, which depends only on the
+    /// sample locations and the variogram, so it is computed once here.
+    factor: Lu,
+}
+
+/// The `(n+1)×(n+1)` ordinary-Kriging matrix for sample locations `xs`.
+#[cfg(feature = "alloc")]
+fn kriging_matrix(xs: &DVector<f64>, variogram: &Variogram) -> DMatrix<f64> {
+    let n = xs.len();
+    DMatrix::from_fn(n + 1, n + 1, |i, j| {
+        if i < n && j < n {
+            variogram.gamma((xs[i] - xs[j]).abs())
+        } else if (i < n && j == n) || (i == n && j < n) {
+            1.0
+        } else {
+            0.0
+        }
+    })
 }
 
 #[cfg(feature = "alloc")]
@@ -269,6 +287,12 @@ impl Kriging {
     ///
     /// Returns [`DenseError::DimensionMismatch`] if `xs` and `ys` differ in
     /// length.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`DenseError::DimensionMismatch`] if `xs` and `ys` differ in
+    /// length, and [`DenseError::Singular`] if the Kriging matrix is singular
+    /// (for example duplicate sample locations with a zero nugget).
     pub fn new(
         xs: DVector<f64>,
         ys: DVector<f64>,
@@ -280,7 +304,13 @@ impl Kriging {
                 what: format!("xs has length {n}, ys has length {}", ys.len()),
             });
         }
-        Ok(Kriging { xs, ys, variogram })
+        let factor = Lu::new(&kriging_matrix(&xs, &variogram))?;
+        Ok(Kriging {
+            xs,
+            ys,
+            variogram,
+            factor,
+        })
     }
 
     /// Predict the value (and Kriging variance) at `x`.
@@ -293,16 +323,6 @@ impl Kriging {
     /// Returns [`DenseError::Singular`] if the Kriging system is singular.
     pub fn predict(&self, x: f64) -> Result<(f64, f64), DenseError> {
         let n = self.xs.len();
-        let a = DMatrix::from_fn(n + 1, n + 1, |i, j| {
-            if i < n && j < n {
-                self.variogram.gamma((self.xs[i] - self.xs[j]).abs())
-            } else if (i < n && j == n) || (i == n && j < n) {
-                1.0
-            } else {
-                0.0
-            }
-        });
-
         let rhs = DVector::from_fn(n + 1, |i| {
             if i < n {
                 self.variogram.gamma((self.xs[i] - x).abs())
@@ -311,7 +331,7 @@ impl Kriging {
             }
         });
 
-        let w = a.solve(&rhs)?;
+        let w = self.factor.solve(&rhs)?;
         let mut mean = 0.0_f64;
         for i in 0..n {
             mean += w[i] * self.ys[i];
@@ -618,6 +638,17 @@ mod tests {
     // -------------------------------------------------------------------
     // Kriging: recovers a linear trend exactly (Linear variogram, nugget 0).
     // -------------------------------------------------------------------
+    #[test]
+    fn kriging_rejects_duplicate_samples_without_nugget() {
+        let xs = DVector::from_vec(vec![0.0_f64, 1.0, 1.0]);
+        let ys = DVector::from_vec(vec![0.0_f64, 1.0, 1.0]);
+        let v = Variogram::Linear {
+            slope: 1.0,
+            nugget: 0.0,
+        };
+        assert!(Kriging::new(xs, ys, v).is_err());
+    }
+
     #[test]
     fn kriging_recovers_line() {
         // y = x sampled at two colinear points; ordinary Kriging with the

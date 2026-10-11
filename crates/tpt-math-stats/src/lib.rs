@@ -111,8 +111,9 @@ mod regression;
 mod special;
 
 pub use descriptive::{
-    max, mean, median, min, std_dev, try_max, try_mean, try_median, try_min, try_std_dev,
-    try_variance, variance,
+    excess_kurtosis, max, mean, median, min, quantile, skewness, std_dev, try_excess_kurtosis,
+    try_max, try_mean, try_median, try_min, try_quantile, try_skewness, try_std_dev, try_variance,
+    variance,
 };
 pub use dist::{ChiSquared, ContinuousCDF, Normal, StudentsT};
 pub use error::StatsError;
@@ -121,7 +122,8 @@ pub use hypothesis::{
     try_one_sample_t_test, try_two_sample_t_test, two_sample_t_test,
 };
 pub use regression::{
-    linear_regression, pearson_correlation, try_linear_regression, try_pearson_correlation,
+    covariance, linear_regression, pearson_correlation, try_covariance, try_linear_regression,
+    try_pearson_correlation,
 };
 pub use special::{beta, beta_reg, erf, erfc, gamma, gamma_p, gamma_q, lgamma};
 

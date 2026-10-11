@@ -15,6 +15,12 @@ and this project adheres to SemVer.
 
 - `Index<(i, j)>` checks each axis, so a row index past `nrows` no longer aliases another element.
 
+### Added
+
+- `Lu`: a reusable LU factorisation (`Lu::new`, `solve`, `dim`) for many right-hand sides.
+- `Qr` (Householder) and `DMatrix::least_squares` for overdetermined least-squares problems.
+- `DMatrix::det` (from LU), `DMatrix::cholesky` (real `A = L Lᵀ`), and `DMatrix::symmetric_eigen` (cyclic Jacobi; ascending eigenvalues, orthonormal eigenvectors as columns).
+
 ## [0.1.0] - Unreleased
 
 ### Added

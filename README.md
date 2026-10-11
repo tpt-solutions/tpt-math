@@ -43,7 +43,6 @@ Crates are organised into layers; lower layers never depend on higher ones.
 ### Geometry & spatial
 | Crate | Wraps / consolidates | `no_std` | Notes |
 |-------|----------------------|----------|-------|
-| `tpt-math-geometry` | `tpt-math-linalg-fixed` (in-house) | yes | Points, rotations, quaternions, isometries, projections; no `nalgebra`. |
 | `tpt-math-spatial` | — (in-house) | yes | Featherstone 6-D spatial vectors, dual quaternions, screw theory; built on `tpt-math-geometry` / `-linalg-fixed`. |
 
 ### Graph & interpolation

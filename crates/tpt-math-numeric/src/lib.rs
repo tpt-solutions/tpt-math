@@ -16,6 +16,10 @@
 //! [`num_traits`]: num_traits
 //! [`libm`]: libm
 
+pub mod ode;
+pub mod quadrature;
+pub mod roots;
+
 pub use num_traits::{
     cast, float::FloatConst, real::Real, CheckedAdd, CheckedDiv, CheckedMul, CheckedNeg,
     CheckedRem, CheckedShl, CheckedShr, CheckedSub, Float, FromPrimitive, Inv, Num, NumAssign,

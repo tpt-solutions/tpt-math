@@ -6,6 +6,11 @@ All notable changes to this crate are documented here. Format based on
 
 ## [Unreleased]
 
+### Added
+
+- `Biquad`: second-order IIR section (RBJ low-pass, direct form II transposed), with `process`, `filter`, `reset`, and `magnitude`.
+- `butterworth_lowpass`: even-order Butterworth low-pass as a biquad cascade (−3 dB at the cutoff).
+
 ## [0.1.0]
 
 - Initial workspace release.

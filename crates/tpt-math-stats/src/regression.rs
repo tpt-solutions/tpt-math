@@ -90,6 +90,31 @@ pub fn try_pearson_correlation(x: &[f64], y: &[f64]) -> Result<f64, StatsError> 
     Ok((sums.sxy / (sums.sxx * sums.syy).sqrt()).clamp(-1.0, 1.0))
 }
 
+/// Sample covariance `Σ(xᵢ − x̄)(yᵢ − ȳ) / (n − 1)` of two paired samples.
+///
+/// # Errors
+///
+/// Returns [`StatsError::LengthMismatch`] if the slices differ in length,
+/// [`StatsError::NotEnoughData`] for fewer than two pairs, and
+/// [`StatsError::NotFinite`] for a non-finite observation.
+pub fn try_covariance(x: &[f64], y: &[f64]) -> Result<f64, StatsError> {
+    check_equal_len(x.len(), y.len())?;
+    check_min_len("x", x, 2)?;
+    check_all_finite("x", x)?;
+    check_all_finite("y", y)?;
+    let sums = centred_sums(x, y);
+    Ok(sums.sxy / ((x.len() - 1) as f64))
+}
+
+/// Sample covariance; see [`try_covariance`].
+///
+/// # Panics
+///
+/// Panics on any condition [`try_covariance`] reports as an error.
+pub fn covariance(x: &[f64], y: &[f64]) -> f64 {
+    try_covariance(x, y).unwrap_or_else(|e| panic!("covariance: {e}"))
+}
+
 /// Divide `v` by its largest absolute value (returned unchanged if that is 0).
 fn scale_by_max_abs(v: &[f64]) -> Vec<f64> {
     let scale = v.iter().fold(0.0_f64, |acc, &vi| acc.max(vi.abs()));
@@ -195,6 +220,18 @@ mod tests {
         assert_eq!(pearson_correlation(&x, &increasing), 1.0);
         assert_eq!(pearson_correlation(&x, &decreasing), -1.0);
         assert_eq!(pearson_correlation(&x, &x), 1.0);
+    }
+
+    #[test]
+    fn covariance_matches_hand_computed_values() {
+        // x̄ = 2, ȳ = 4: Σ(x−x̄)(y−ȳ) = 4, divided by n − 1 = 2.
+        let x = [1.0, 2.0, 3.0];
+        let y = [2.0, 4.0, 6.0];
+        assert!((try_covariance(&x, &y).unwrap() - 2.0).abs() < 1e-12);
+        // Covariance of a sample with itself is its variance.
+        assert!((try_covariance(&x, &x).unwrap() - crate::variance(&x)).abs() < 1e-12);
+        assert!(try_covariance(&x, &[1.0, 2.0]).is_err());
+        assert!(try_covariance(&[1.0], &[2.0]).is_err());
     }
 
     #[test]

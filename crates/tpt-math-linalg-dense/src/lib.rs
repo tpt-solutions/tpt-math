@@ -620,13 +620,24 @@ fn mul_matrix_generic<T: Scalar>(a: &DMatrix<T>, b: &DMatrix<T>) -> DMatrix<T> {
     let m = a.nrows;
     let k = a.ncols;
     let n = b.ncols;
-    DMatrix::from_fn(m, n, |i, j| {
-        let mut s = T::zero();
+    // j-k-i order: column-major storage means the inner loop walks contiguous
+    // columns of `a` and of the output.
+    let mut data = vec![T::zero(); m * n];
+    for j in 0..n {
+        let out_col = &mut data[j * m..(j + 1) * m];
         for kk in 0..k {
-            s = s + a[(i, kk)] * b[(kk, j)];
+            let bkj = b[(kk, j)];
+            let a_col = &a.data[kk * m..(kk + 1) * m];
+            for (o, &aik) in out_col.iter_mut().zip(a_col) {
+                *o = *o + aik * bkj;
+            }
         }
-        s
-    })
+    }
+    DMatrix {
+        nrows: m,
+        ncols: n,
+        data,
+    }
 }
 
 #[cfg(feature = "alloc")]
@@ -797,6 +808,329 @@ impl DMatrix<f64> {
     }
 }
 
+/// A reusable LU factorisation `P A = L U` of a square matrix.
+///
+/// Factor once with [`Lu::new`], then solve any number of right-hand sides with
+/// [`Lu::solve`] at O(n²) per solve instead of refactoring at O(n³) each time.
+#[cfg(feature = "alloc")]
+#[derive(Clone, Debug)]
+pub struct Lu {
+    lu: Vec<Vec<f64>>,
+    piv: Vec<usize>,
+}
+
+#[cfg(feature = "alloc")]
+impl Lu {
+    /// Factor the square matrix `m`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`DenseError::DimensionMismatch`] if `m` is not square, and
+    /// [`DenseError::Singular`] if it is numerically singular.
+    pub fn new(m: &DMatrix<f64>) -> Result<Self, DenseError> {
+        if m.nrows != m.ncols {
+            return Err(DenseError::DimensionMismatch {
+                what: format!("matrix is {}x{}, expected square", m.nrows, m.ncols),
+            });
+        }
+        let (lu, piv) = partial_pivot_lu(m)?;
+        Ok(Lu { lu, piv })
+    }
+
+    /// The dimension `n` of the factored `n × n` matrix.
+    pub fn dim(&self) -> usize {
+        self.lu.len()
+    }
+
+    /// Solve `A x = b` using the stored factorisation.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`DenseError::DimensionMismatch`] if `b.len() != dim()`.
+    pub fn solve(&self, b: &DVector<f64>) -> Result<DVector<f64>, DenseError> {
+        let n = self.dim();
+        if b.len() != n {
+            return Err(DenseError::DimensionMismatch {
+                what: format!("rhs has length {}, expected {n}", b.len()),
+            });
+        }
+        Ok(DVector::from_vec(solve_with_lu(&self.lu, &self.piv, b)))
+    }
+}
+
+/// A Householder QR factorisation `A = Q R` of a tall (`m ≥ n`) matrix, used
+/// for least-squares solves. `Q` is kept implicitly as its reflectors.
+#[cfg(feature = "alloc")]
+#[derive(Clone, Debug)]
+pub struct Qr {
+    m: usize,
+    n: usize,
+    /// Upper-triangular `R`, row-major `n × n`.
+    r: Vec<Vec<f64>>,
+    /// Reflectors `(k, v, vᵀv)` acting on rows `k..m`, in application order.
+    reflectors: Vec<(usize, Vec<f64>, f64)>,
+}
+
+#[cfg(feature = "alloc")]
+impl Qr {
+    /// Factor `a` (with `nrows ≥ ncols`).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`DenseError::DimensionMismatch`] if `a` has fewer rows than
+    /// columns, and [`DenseError::Singular`] if `a` is rank deficient.
+    pub fn new(a: &DMatrix<f64>) -> Result<Self, DenseError> {
+        let (m, n) = (a.nrows, a.ncols);
+        if m < n {
+            return Err(DenseError::DimensionMismatch {
+                what: format!("QR needs nrows >= ncols, got {m}x{n}"),
+            });
+        }
+        let mut w: Vec<Vec<f64>> = (0..m)
+            .map(|i| (0..n).map(|j| a[(i, j)]).collect())
+            .collect();
+        let mut reflectors = Vec::with_capacity(n);
+        for k in 0..n {
+            let norm = w[k..m]
+                .iter()
+                .map(|row| row[k] * row[k])
+                .sum::<f64>()
+                .sqrt();
+            if norm == 0.0 {
+                continue;
+            }
+            // Choose the sign that avoids cancellation in v = x - alpha e1.
+            let alpha = if w[k][k] > 0.0 { -norm } else { norm };
+            let mut v: Vec<f64> = (k..m).map(|i| w[i][k]).collect();
+            v[0] -= alpha;
+            let vtv: f64 = v.iter().map(|x| x * x).sum();
+            if vtv == 0.0 {
+                continue;
+            }
+            for j in k..n {
+                let dot: f64 = v.iter().enumerate().map(|(t, vt)| vt * w[k + t][j]).sum();
+                let f = 2.0 * dot / vtv;
+                for (t, vt) in v.iter().enumerate() {
+                    w[k + t][j] -= f * vt;
+                }
+            }
+            reflectors.push((k, v, vtv));
+        }
+        let r: Vec<Vec<f64>> = (0..n)
+            .map(|i| (0..n).map(|j| if j >= i { w[i][j] } else { 0.0 }).collect())
+            .collect();
+        let scale = r.iter().flatten().fold(0.0_f64, |acc, x| acc.max(x.abs()));
+        let tol = (n as f64) * f64::EPSILON * scale;
+        if (0..n).any(|i| {
+            let d = r[i][i].abs();
+            d.is_nan() || d <= tol
+        }) {
+            return Err(DenseError::Singular { what: "Qr::new" });
+        }
+        Ok(Qr {
+            m,
+            n,
+            r,
+            reflectors,
+        })
+    }
+
+    /// Solve the least-squares problem `min ‖A x − b‖₂`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`DenseError::DimensionMismatch`] if `b.len() != nrows`.
+    pub fn solve_least_squares(&self, b: &DVector<f64>) -> Result<DVector<f64>, DenseError> {
+        if b.len() != self.m {
+            return Err(DenseError::DimensionMismatch {
+                what: format!("rhs has length {}, expected {}", b.len(), self.m),
+            });
+        }
+        // y = Qᵀ b by applying the reflectors in order.
+        let mut y: Vec<f64> = b.iter().copied().collect();
+        for (k, v, vtv) in &self.reflectors {
+            let dot: f64 = v.iter().enumerate().map(|(t, vt)| vt * y[k + t]).sum();
+            let f = 2.0 * dot / vtv;
+            for (t, vt) in v.iter().enumerate() {
+                y[k + t] -= f * vt;
+            }
+        }
+        // Back-substitute R x = y[..n].
+        let n = self.n;
+        let mut x = vec![0.0_f64; n];
+        for i in (0..n).rev() {
+            let mut s = y[i];
+            for j in (i + 1)..n {
+                s -= self.r[i][j] * x[j];
+            }
+            x[i] = s / self.r[i][i];
+        }
+        Ok(DVector::from_vec(x))
+    }
+}
+
+#[cfg(feature = "alloc")]
+impl DMatrix<f64> {
+    /// Determinant, from the LU factorisation.
+    ///
+    /// A matrix the LU routine rejects as singular (pivot below `1e-12`) has
+    /// determinant `0.0`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`DenseError::DimensionMismatch`] if the matrix is not square.
+    pub fn det(&self) -> Result<f64, DenseError> {
+        if self.nrows != self.ncols {
+            return Err(DenseError::DimensionMismatch {
+                what: format!("matrix is {}x{}, expected square", self.nrows, self.ncols),
+            });
+        }
+        match partial_pivot_lu(self) {
+            Ok((lu, piv)) => {
+                // Sign of the row permutation, from its cycle count.
+                let n = piv.len();
+                let mut seen = vec![false; n];
+                let mut cycles = 0;
+                for start in 0..n {
+                    if !seen[start] {
+                        cycles += 1;
+                        let mut k = start;
+                        while !seen[k] {
+                            seen[k] = true;
+                            k = piv[k];
+                        }
+                    }
+                }
+                let sign = if (n - cycles) % 2 == 0 { 1.0 } else { -1.0 };
+                Ok(sign * (0..n).map(|i| lu[i][i]).product::<f64>())
+            }
+            Err(DenseError::Singular { .. }) => Ok(0.0),
+            Err(e) => Err(e),
+        }
+    }
+
+    /// Cholesky factorisation `A = L Lᵀ` of a symmetric positive-definite
+    /// matrix, returning the lower-triangular `L`. Only the lower triangle of
+    /// `self` is read.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`DenseError::DimensionMismatch`] if the matrix is not square, and
+    /// [`DenseError::Singular`] if it is not positive definite.
+    pub fn cholesky(&self) -> Result<DMatrix<f64>, DenseError> {
+        let n = self.nrows;
+        if self.ncols != n {
+            return Err(DenseError::DimensionMismatch {
+                what: format!("matrix is {}x{}, expected square", n, self.ncols),
+            });
+        }
+        let mut l = vec![vec![0.0_f64; n]; n];
+        for j in 0..n {
+            let d = self[(j, j)] - (0..j).map(|k| l[j][k] * l[j][k]).sum::<f64>();
+            if d.is_nan() || d <= 0.0 {
+                return Err(DenseError::Singular {
+                    what: "cholesky (not positive definite)",
+                });
+            }
+            l[j][j] = d.sqrt();
+            for i in (j + 1)..n {
+                let s = self[(i, j)] - (0..j).map(|k| l[i][k] * l[j][k]).sum::<f64>();
+                l[i][j] = s / l[j][j];
+            }
+        }
+        Ok(DMatrix::from_fn(n, n, |i, j| l[i][j]))
+    }
+
+    /// Eigendecomposition of a symmetric matrix by the cyclic Jacobi method.
+    ///
+    /// Returns `(values, vectors)` with the eigenvalues in ascending order and
+    /// the orthonormal eigenvectors as the columns of `vectors`, so that
+    /// `A v_k = λ_k v_k`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`DenseError::DimensionMismatch`] if the matrix is not square or
+    /// not symmetric (to a relative tolerance of `1e-12`).
+    pub fn symmetric_eigen(&self) -> Result<(DVector<f64>, DMatrix<f64>), DenseError> {
+        let n = self.nrows;
+        if self.ncols != n {
+            return Err(DenseError::DimensionMismatch {
+                what: format!("matrix is {}x{}, expected square", n, self.ncols),
+            });
+        }
+        let scale = self.iter().fold(0.0_f64, |acc, v| acc.max(v.abs()));
+        for i in 0..n {
+            for j in 0..i {
+                if (self[(i, j)] - self[(j, i)]).abs() > 1e-12 * (1.0 + scale) {
+                    return Err(DenseError::DimensionMismatch {
+                        what: "matrix is not symmetric".into(),
+                    });
+                }
+            }
+        }
+        let mut a: Vec<Vec<f64>> = (0..n)
+            .map(|i| (0..n).map(|j| self[(i, j)]).collect())
+            .collect();
+        let mut v: Vec<Vec<f64>> = (0..n)
+            .map(|i| (0..n).map(|j| if i == j { 1.0 } else { 0.0 }).collect())
+            .collect();
+
+        for _sweep in 0..100 {
+            let off: f64 = (0..n)
+                .flat_map(|p| ((p + 1)..n).map(move |q| (p, q)))
+                .map(|(p, q)| a[p][q] * a[p][q])
+                .sum();
+            if off <= 1e-30 * (1.0 + scale * scale) {
+                break;
+            }
+            for p in 0..n {
+                for q in (p + 1)..n {
+                    if a[p][q] == 0.0 {
+                        continue;
+                    }
+                    // Rotation angle that annihilates a[p][q].
+                    let theta = (a[q][q] - a[p][p]) / (2.0 * a[p][q]);
+                    let t = theta.signum() / (theta.abs() + (theta * theta + 1.0).sqrt());
+                    let t = if theta == 0.0 { 1.0 } else { t };
+                    let c = 1.0 / (t * t + 1.0).sqrt();
+                    let s = t * c;
+                    // A ← Pᵀ A P, with P the Givens rotation in the (p, q) plane.
+                    for k in 0..n {
+                        let (akp, akq) = (a[k][p], a[k][q]);
+                        a[k][p] = c * akp - s * akq;
+                        a[k][q] = s * akp + c * akq;
+                    }
+                    for k in 0..n {
+                        let (apk, aqk) = (a[p][k], a[q][k]);
+                        a[p][k] = c * apk - s * aqk;
+                        a[q][k] = s * apk + c * aqk;
+                    }
+                    for row in v.iter_mut() {
+                        let (vkp, vkq) = (row[p], row[q]);
+                        row[p] = c * vkp - s * vkq;
+                        row[q] = s * vkp + c * vkq;
+                    }
+                }
+            }
+        }
+
+        let mut order: Vec<usize> = (0..n).collect();
+        order.sort_by(|&i, &j| a[i][i].total_cmp(&a[j][j]));
+        let values = DVector::from_vec(order.iter().map(|&k| a[k][k]).collect());
+        let vectors = DMatrix::from_fn(n, n, |i, j| v[i][order[j]]);
+        Ok((values, vectors))
+    }
+
+    /// Least-squares solution of `min ‖self · x − b‖₂` via Householder QR.
+    ///
+    /// # Errors
+    ///
+    /// As [`Qr::new`] and [`Qr::solve_least_squares`].
+    pub fn least_squares(&self, b: &DVector<f64>) -> Result<DVector<f64>, DenseError> {
+        Qr::new(self)?.solve_least_squares(b)
+    }
+}
+
 /// Returns the LU factorization (in place) and the row permutation.
 #[cfg(feature = "alloc")]
 fn partial_pivot_lu(m: &DMatrix<f64>) -> Result<(Vec<Vec<f64>>, Vec<usize>), DenseError> {
@@ -935,6 +1269,133 @@ mod tests {
         let b = DVector::from_vec(vec![4.0_f64, 6.0]);
         let x = a.solve(&b).unwrap();
         assert_eq!(x, DVector::from_vec(vec![2.0, 3.0]));
+    }
+
+    #[test]
+    fn determinant_known_values() {
+        let a = DMatrix::from_row_slice(2, 2, &[4.0_f64, 1.0, 2.0, 3.0]);
+        assert!((a.det().unwrap() - 10.0).abs() < 1e-12);
+        let b = DMatrix::from_row_slice(3, 3, &[0.0_f64, 2.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 3.0]);
+        // Row swap (sign −1) times 2·1·3.
+        assert!((b.det().unwrap() + 6.0).abs() < 1e-12);
+        let singular = DMatrix::from_row_slice(2, 2, &[1.0_f64, 2.0, 2.0, 4.0]);
+        assert_eq!(singular.det().unwrap(), 0.0);
+        assert!(DMatrix::<f64>::zeros(2, 3).det().is_err());
+    }
+
+    #[test]
+    fn cholesky_reconstructs_and_rejects_indefinite() {
+        let a = DMatrix::from_row_slice(2, 2, &[4.0_f64, 2.0, 2.0, 3.0]);
+        let l = a.cholesky().unwrap();
+        assert!((l[(0, 0)] - 2.0).abs() < 1e-12);
+        assert!((l[(1, 0)] - 1.0).abs() < 1e-12);
+        assert!((l[(1, 1)] - 2.0_f64.sqrt()).abs() < 1e-12);
+        assert_eq!(l[(0, 1)], 0.0);
+        let indefinite = DMatrix::from_row_slice(2, 2, &[1.0_f64, 2.0, 2.0, 1.0]);
+        assert!(indefinite.cholesky().is_err());
+    }
+
+    #[test]
+    fn symmetric_eigen_residuals_and_orthonormality() {
+        let a = DMatrix::from_row_slice(3, 3, &[2.0_f64, 1.0, 0.5, 1.0, 3.0, -1.0, 0.5, -1.0, 1.0]);
+        let (vals, vecs) = a.symmetric_eigen().unwrap();
+        // Ascending order.
+        assert!(vals[0] <= vals[1] && vals[1] <= vals[2]);
+        for k in 0..3 {
+            for i in 0..3 {
+                let av: f64 = (0..3).map(|j| a[(i, j)] * vecs[(j, k)]).sum();
+                assert!(
+                    (av - vals[k] * vecs[(i, k)]).abs() < 1e-10,
+                    "pair {k}, row {i}"
+                );
+            }
+        }
+        for p in 0..3 {
+            for q in 0..3 {
+                let dot: f64 = (0..3).map(|i| vecs[(i, p)] * vecs[(i, q)]).sum();
+                let want = if p == q { 1.0 } else { 0.0 };
+                assert!((dot - want).abs() < 1e-10);
+            }
+        }
+        // The trace is the sum of the eigenvalues.
+        assert!((vals.iter().sum::<f64>() - 6.0).abs() < 1e-10);
+        let nonsym = DMatrix::from_row_slice(2, 2, &[1.0_f64, 2.0, 0.0, 1.0]);
+        assert!(nonsym.symmetric_eigen().is_err());
+    }
+
+    #[test]
+    fn least_squares_recovers_exact_line() {
+        // y = 2x + 1 sampled exactly: the fit must be exact.
+        let xs = [0.0_f64, 1.0, 2.0, 3.0, 4.0];
+        let mut data = Vec::new();
+        for &x in &xs {
+            data.push(1.0);
+            data.push(x);
+        }
+        let a = DMatrix::from_row_slice(5, 2, &data);
+        let b = DVector::from_vec(xs.iter().map(|x| 2.0 * x + 1.0).collect());
+        let coef = a.least_squares(&b).unwrap();
+        assert!((coef[0] - 1.0).abs() < 1e-12, "intercept {}", coef[0]);
+        assert!((coef[1] - 2.0).abs() < 1e-12, "slope {}", coef[1]);
+    }
+
+    #[test]
+    fn least_squares_satisfies_normal_equations() {
+        // Noisy, overdetermined: the residual must be orthogonal to the columns,
+        // i.e. Aᵀ(A x − b) = 0.
+        let rows = 6;
+        let a = DMatrix::from_fn(rows, 2, |i, j| if j == 0 { 1.0 } else { i as f64 });
+        let b = DVector::from_vec(vec![1.1, 2.9, 5.2, 6.8, 9.1, 11.0]);
+        let x = a.least_squares(&b).unwrap();
+        for j in 0..2 {
+            let mut g = 0.0;
+            for i in 0..rows {
+                let mut ri = -b[i];
+                for k in 0..2 {
+                    ri += a[(i, k)] * x[k];
+                }
+                g += a[(i, j)] * ri;
+            }
+            assert!(g.abs() < 1e-10, "column {j}: Aᵀr = {g}");
+        }
+    }
+
+    #[test]
+    fn least_squares_rejects_rank_deficient_and_wide_systems() {
+        // Two identical columns: rank 1.
+        let a = DMatrix::from_row_slice(3, 2, &[1.0_f64, 1.0, 2.0, 2.0, 3.0, 3.0]);
+        assert!(a
+            .least_squares(&DVector::from_vec(vec![1.0, 2.0, 3.0]))
+            .is_err());
+        // More unknowns than equations.
+        let wide = DMatrix::<f64>::zeros(2, 3);
+        assert!(wide
+            .least_squares(&DVector::from_vec(vec![1.0, 2.0]))
+            .is_err());
+    }
+
+    #[test]
+    fn lu_factors_once_and_solves_many_right_hand_sides() {
+        let a = DMatrix::from_row_slice(3, 3, &[4.0_f64, 1.0, 0.0, 1.0, 3.0, 1.0, 0.0, 1.0, 2.0]);
+        let lu = Lu::new(&a).unwrap();
+        for k in 0..4 {
+            let b = DVector::from_vec(vec![1.0 + k as f64, 2.0, -1.0]);
+            let x = lu.solve(&b).unwrap();
+            let want = a.solve(&b).unwrap();
+            for i in 0..3 {
+                assert!((x[i] - want[i]).abs() < 1e-12, "rhs {k}, component {i}");
+            }
+        }
+    }
+
+    #[test]
+    fn lu_rejects_singular_and_mismatched_inputs() {
+        let singular = DMatrix::from_row_slice(2, 2, &[1.0_f64, 1.0, 1.0, 1.0]);
+        assert!(Lu::new(&singular).is_err());
+        let a = DMatrix::from_row_slice(2, 2, &[2.0_f64, 0.0, 0.0, 2.0]);
+        let lu = Lu::new(&a).unwrap();
+        assert!(lu.solve(&DVector::from_vec(vec![1.0, 2.0, 3.0])).is_err());
+        assert!(Lu::new(&DMatrix::<f64>::zeros(2, 3)).is_err());
     }
 
     #[test]

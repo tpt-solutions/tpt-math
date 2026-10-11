@@ -21,6 +21,12 @@ All notable changes to this crate are documented here. Format based on
 - The line search brackets its zoom on `[a_lo, a]` (it used a degenerate `[a, a]` bracket after the first expansion), and it rejects non-finite steps.
 - Gradient descent and conjugate gradients stop with termination `LineSearchStalled` when no decrease can be found, instead of running to `max_iters`.
 
+### Added
+
+- `minimize_nelder_mead` and `minimize_nelder_mead_with`: derivative-free simplex minimisation.
+- `numerical_gradient`: central finite-difference gradients.
+- `minimize_lbfgs` and `minimize_lbfgs_with`: limited-memory BFGS with the two-loop recursion and the strong-Wolfe line search.
+
 ## [0.1.0]
 
 - Initial workspace release.

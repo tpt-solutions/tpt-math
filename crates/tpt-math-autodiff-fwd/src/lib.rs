@@ -183,6 +183,126 @@ where
     }
 }
 
+impl<T, const N: usize> Dual<T, N>
+where
+    T: Float,
+{
+    /// `sqrt(self)` with propagated derivative `du / (2 sqrt(re))`.
+    pub fn sqrt(self) -> Dual<T, N> {
+        let r = self.re.sqrt();
+        let two = T::one() + T::one();
+        Dual {
+            re: r,
+            du: core::array::from_fn(|i| self.du[i] / (two * r)),
+        }
+    }
+
+    /// `self^n` for an integer exponent, with derivative `n re^(n-1) du`.
+    /// A zero exponent is constant, so its derivative is `0` even at `re = 0`.
+    pub fn powi(self, n: i32) -> Dual<T, N> {
+        if n == 0 {
+            return Dual {
+                re: T::one(),
+                du: [T::zero(); N],
+            };
+        }
+        let k = T::from(n).unwrap_or_else(T::zero);
+        let p = self.re.powi(n - 1);
+        Dual {
+            re: self.re.powi(n),
+            du: core::array::from_fn(|i| self.du[i] * (k * p)),
+        }
+    }
+
+    /// `self^p` for a real exponent, with derivative `p re^(p-1) du`.
+    /// A zero exponent is constant, so its derivative is `0` even at `re = 0`.
+    pub fn powf(self, p: T) -> Dual<T, N> {
+        if p == T::zero() {
+            return Dual {
+                re: T::one(),
+                du: [T::zero(); N],
+            };
+        }
+        let d = p * self.re.powf(p - T::one());
+        Dual {
+            re: self.re.powf(p),
+            du: core::array::from_fn(|i| self.du[i] * d),
+        }
+    }
+
+    /// `tan(self)` with derivative `(1 + tan²(re)) du`.
+    pub fn tan(self) -> Dual<T, N> {
+        let t = self.re.tan();
+        let d = T::one() + t * t;
+        Dual {
+            re: t,
+            du: core::array::from_fn(|i| self.du[i] * d),
+        }
+    }
+
+    /// `tanh(self)` with derivative `(1 - tanh²(re)) du`.
+    pub fn tanh(self) -> Dual<T, N> {
+        let t = self.re.tanh();
+        let d = T::one() - t * t;
+        Dual {
+            re: t,
+            du: core::array::from_fn(|i| self.du[i] * d),
+        }
+    }
+
+    /// `atan(self)` with derivative `du / (1 + re²)`.
+    pub fn atan(self) -> Dual<T, N> {
+        let d = T::one() + self.re * self.re;
+        Dual {
+            re: self.re.atan(),
+            du: core::array::from_fn(|i| self.du[i] / d),
+        }
+    }
+
+    /// `|self|` with derivative `sign(re) du`. The subgradient at `re = 0` is
+    /// taken as `0`.
+    pub fn abs(self) -> Dual<T, N> {
+        let sign = if self.re > T::zero() {
+            T::one()
+        } else if self.re < T::zero() {
+            -T::one()
+        } else {
+            T::zero()
+        };
+        Dual {
+            re: self.re.abs(),
+            du: core::array::from_fn(|i| self.du[i] * sign),
+        }
+    }
+}
+
+macro_rules! impl_scalar_binop {
+    ($trait:ident, $fn:ident, $re:expr, $du:expr) => {
+        impl<T, const N: usize> core::ops::$trait<T> for Dual<T, N>
+        where
+            T: Copy
+                + Add<T, Output = T>
+                + Sub<T, Output = T>
+                + Mul<T, Output = T>
+                + Div<T, Output = T>
+                + Zero,
+        {
+            type Output = Dual<T, N>;
+            /// Operate with a plain scalar (a constant with zero derivative).
+            fn $fn(self, rhs: T) -> Dual<T, N> {
+                let re = $re(self.re, rhs);
+                let du = core::array::from_fn(|i| $du(self.du[i], rhs));
+                Dual { re, du }
+            }
+        }
+    };
+}
+
+impl_scalar_binop!(Add, add, |a, b| a + b, |da, _b| da);
+impl_scalar_binop!(Sub, sub, |a, b| a - b, |da, _b| da);
+impl_scalar_binop!(Mul, mul, |a, b| a * b, |da, b| da * b);
+impl_scalar_binop!(Div, div, |a, b| a / b, |da, b| da / b);
+
 #[cfg(test)]
 mod tests {
     use super::*;

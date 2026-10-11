@@ -37,15 +37,19 @@ const HALF_LN_2PI: f64 = 0.9189385332046727;
 // Log-gamma
 // ---------------------------------------------------------------------------
 
-/// The natural logarithm of the gamma function, `ln Γ(z)`.
+/// The natural logarithm of the absolute value of the gamma function,
+/// `ln |Γ(z)|`. Negative non-integer arguments are supported (the sign of Γ is
+/// dropped); non-positive integers are poles and give `+∞`.
 ///
 /// Uses a 9-term Lanczos approximation for `z >= 0.5` and the reflection
-/// identity `Γ(z)Γ(1-z) = π / sin(π z)` below that. Accurate to better than
-/// 1e-13 for all positive arguments.
+/// identity `|Γ(z)||Γ(1-z)| = π / |sin(π z)|` below that. Accurate to better
+/// than 1e-13 for all positive arguments.
 pub fn lgamma(z: f64) -> f64 {
     if z < 0.5 {
         let pi = std::f64::consts::PI;
-        std::f64::consts::PI.ln() - (pi * z).sin().ln() - lgamma(1.0 - z)
+        // |sin| because the reflection identity holds for the magnitude; a
+        // negative sine would make the logarithm NaN.
+        std::f64::consts::PI.ln() - (pi * z).sin().abs().ln() - lgamma(1.0 - z)
     } else {
         let zz = z - 1.0;
         let mut x = LANCZOS_C[0];
@@ -152,7 +156,7 @@ pub fn beta_reg(a: f64, b: f64, x: f64) -> f64 {
     if x >= 1.0 {
         return 1.0;
     }
-    let bt = (lgamma(a + b) - lgamma(a) - lgamma(b) + a * x.ln() + b * (1.0 - x).ln()).exp();
+    let bt = (lgamma(a + b) - lgamma(a) - lgamma(b) + a * x.ln() + b * (-x).ln_1p()).exp();
     if x < (a + 1.0) / (a + b + 2.0) {
         bt * beta_cf(a, b, x) / a
     } else {
@@ -229,10 +233,13 @@ pub fn erfc(x: f64) -> f64 {
 
 /// The error function `erf(x) = 1 - erfc(x) = 2/√π ∫_0^x e^{-t²} dt`.
 pub fn erf(x: f64) -> f64 {
+    // erf(x) = P(1/2, x²) for x ≥ 0. Using the lower regularized gamma keeps
+    // small arguments accurate, where `1 - erfc(x)` cancels.
+    let p = gamma_p(0.5, x * x);
     if x >= 0.0 {
-        1.0 - erfc(x)
+        p
     } else {
-        -erf(-x)
+        -p
     }
 }
 
@@ -245,6 +252,28 @@ mod tests {
         assert!((lgamma(1.0)).abs() < 1e-14);
         assert!((lgamma(2.0)).abs() < 1e-14);
         assert!((lgamma(5.0) - gamma(5.0).ln()).abs() < 1e-12);
+    }
+
+    #[test]
+    fn erf_is_relatively_accurate_near_zero() {
+        // erf(x) ≈ 2x/√π for small x. Computing it as 1 - erfc(x) lost all
+        // relative precision here (absolute error ~1e-16 on a value of 1e-10).
+        let x = 1e-10_f64;
+        let want = 2.0 * x / core::f64::consts::PI.sqrt();
+        assert!(((erf(x) - want) / want).abs() < 1e-10, "erf = {}", erf(x));
+        assert!(((erf(-x) + want) / want).abs() < 1e-10);
+    }
+
+    #[test]
+    fn log_gamma_of_negative_non_integer() {
+        // Γ(-1/2) = -2√π, so ln|Γ(-1/2)| = ln(2√π).
+        let want = (2.0 * core::f64::consts::PI.sqrt()).ln();
+        assert!(lgamma(-0.5).is_finite());
+        assert!(
+            (lgamma(-0.5) - want).abs() < 1e-10,
+            "lgamma = {}",
+            lgamma(-0.5)
+        );
     }
 
     #[test]

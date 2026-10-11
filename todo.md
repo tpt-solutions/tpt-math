@@ -1,12 +1,11 @@
 # tpt-math — Build Todo
 
 > Tracks bootstrap + full 23-crate build-out for the tpt-math foundation repo,
-> per `spec.txt` and `tpt-rust-map/registry.toml`. Crates.io publishing was
-> intentionally **out of scope** for this pass — crates stopped at
-> `status = "git"` in the registry, not `"published"` — but the workspace has
-> since been published to crates.io in full (see `spec2.txt` / per-crate
-> `CHANGELOG.md`). License for every crate: `MIT OR Apache-2.0`. Author: TPT
-> Solutions.
+> per `spec.txt` and `tpt-rust-map/registry.toml`. The workspace has since been
+> published to crates.io in full (see `spec2.txt` / per-crate `CHANGELOG.md`).
+> Crates were stopped at `status = "git"` in the registry during the initial
+> build-out. License for every crate: `MIT OR Apache-2.0`. Author: TPT
+> Solutions. Toolchain MSRV: Rust 1.84 (workspace `rust-version`).
 
 ## Phase 0 — Repo Bootstrap
 
@@ -1076,10 +1075,11 @@ tree.*
 - [ ] Dense: j-k-i matmul (contiguous columns); reusable `Lu` struct
       (factor once, solve many RHS); flat storage instead of `Vec<Vec<_>>`;
       in-place `+=` / `axpy` / `*_into` operators
+      Status: Partial: reusable `Lu` and the j-k-i matmul are done (`tpt-math-linalg-dense`). In-place operators are not. Dense storage is already a flat column-major `Vec`.
 - [ ] Sparse: `matvec_into`, in-place axpy in CG/BiCGSTAB, residual norm
       computed once per iteration, counting-sort transpose/convert
-- [ ] `Kriging::predict`: factor once in `new` (currently O(n³) per call)
-- [ ] HMM Viterbi: precompute log transition/emission matrices
+- [x] `Kriging::predict`: factor once in `new` (currently O(n³) per call)
+- [x] HMM Viterbi: precompute log transition/emission matrices
 - [ ] `tpt-math-exact` intervals: add/sub in 2 ops, not 12 BigRational clones
 - [ ] `tpt-math-signal-filter`: FFT overlap-add for long FIR kernels; real-FFT
       path in `signal-fft`
@@ -1091,17 +1091,20 @@ tree.*
 
 - [ ] Dense QR, least squares, symmetric eigen, SVD, real Cholesky,
       det / rank / cond, matrix exp (none exist in the workspace)
+      Status: Partial: Householder QR and `least_squares` are done. Symmetric eigen, SVD, real Cholesky, det/rank/cond and matrix exp are not.
 - [ ] Optimisation: L-BFGS, Nelder-Mead, damped Newton + line search,
       simplex LP, finite-difference gradients
+      Status: Partial: Nelder-Mead and finite-difference gradients are done. L-BFGS, damped Newton with line search, and simplex LP are not.
 - [ ] Stats: quantiles, skew/kurtosis, covariance, pooled/paired t,
       Mann-Whitney, Wilcoxon, KS, ANOVA/F, chi-squared independence,
       bootstrap, multiple-comparison corrections
+      Status: Partial: quantiles (type 7), skewness and excess kurtosis are done. Covariance, pooled/paired t, and the rank and goodness-of-fit tests are not.
 - [ ] Sampling: HMC, multivariate/adaptive Metropolis, R-hat/ESS
       diagnostics, self-normalised importance sampling + ESS
 - [ ] ODE solvers (RK4/RK45), quadrature, root finding
 - [ ] IIR / biquad / Butterworth filters in `signal-filter`
 - [ ] Sparse LU/Cholesky, Jacobi/ILU/IC preconditioners, GMRES
-- [ ] `autodiff-fwd`: sqrt, powi/powf, tan, tanh, atan, abs, `Dual op scalar`
+- [x] `autodiff-fwd`: sqrt, powi/powf, tan, tanh, atan, abs, `Dual op scalar`
 - [ ] `prob-dist`: pdf / cdf / quantile / moments (currently sampling-only)
 - [ ] `symbolic`: like-term collection, `x/x`, `x^0`, `x^1`, fixpoint
       simplification, more functions
@@ -1122,11 +1125,13 @@ tree.*
 
 ### 7.5 Repo hygiene, CI and automation
 
-- [ ] Delete tracked `pkg_tpt-math-*.log` (6 files) and stale
+- [x] Delete tracked `pkg_tpt-math-*.log` (6 files) and stale
       `history/todo 1260819.md`; add `pkg_*.log` to `.gitignore`
-- [ ] Fix the header of this file (MSRV says 1.75, workspace is 1.84;
+      Status: Done: the six `pkg_*.log` files and `history/todo 1260819.md` were deleted from the working tree. Not committed.
+- [x] Fix the header of this file (MSRV says 1.75, workspace is 1.84;
       "publishing out of scope" contradicts "since published")
 - [ ] Commit `Cargo.lock` (workspace has binaries); remove from `.gitignore`
+      Status: Partial: `Cargo.lock` is no longer ignored. It is not committed yet.
 - [ ] CI MSRV job pinned to 1.84; resolve `simd` feature needing Rust 1.85+
       and the out-of-repo `tpt-simd-blas` path dependency that breaks
       `--all-features` and `cargo package`
@@ -1134,6 +1139,7 @@ tree.*
       with `NO_STD_CRATES` in `xtask` (8 crates) — extend the CI list or
       correct the README; add an xtask check that validates the README
       tables and the no-std list against `cargo metadata`
+      Status: Partial: the duplicate geometry row is removed. The `no_std` column and the `xtask` README check are not done.
 - [ ] CI additions: rust-cache, `concurrency` cancel, `cargo doc` with
       `-D warnings`, cargo-semver-checks, coverage (llvm-cov), scheduled
       `cargo deny` / audit, wasm32 build, cargo-hack feature powerset for

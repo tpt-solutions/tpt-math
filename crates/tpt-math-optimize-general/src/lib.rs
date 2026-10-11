@@ -725,6 +725,333 @@ fn cubic_min(al: f64, phi_al: f64, dphi_al: f64, ah: f64, phi_ah: f64, dphi_ah: 
     ah - (ah - al) * (dphi_ah + d2 - d1) / denom
 }
 
+/// Minimize a smooth objective with limited-memory BFGS (L-BFGS).
+///
+/// Keeps the last `memory` curvature pairs `(s, y)` and applies the inverse
+/// Hessian approximation with the two-loop recursion; steps come from the same
+/// strong-Wolfe line search as the other solvers.
+///
+/// # Errors
+///
+/// As [`minimize_gradient_descent`], plus `memory == 0`.
+///
+/// # Examples
+///
+/// ```
+/// use tpt_math_optimize_general::{minimize_lbfgs, tpt_math_linalg_dense::DVector};
+///
+/// let cost = |p: &DVector<f64>| (p[0] - 3.0).powi(2) + 50.0 * (p[1] - 2.0).powi(2);
+/// let grad = |p: &DVector<f64>| DVector::from_vec(vec![2.0 * (p[0] - 3.0), 100.0 * (p[1] - 2.0)]);
+/// let best = minimize_lbfgs(cost, grad, DVector::zeros(2), 5, 100).unwrap();
+/// assert!((best[0] - 3.0).abs() < 1e-6 && (best[1] - 2.0).abs() < 1e-6);
+/// ```
+pub fn minimize_lbfgs<F, G>(
+    cost: F,
+    grad: G,
+    init: DVector<f64>,
+    memory: usize,
+    max_iters: u64,
+) -> Result<DVector<f64>, String>
+where
+    F: Fn(&DVector<f64>) -> f64,
+    G: Fn(&DVector<f64>) -> DVector<f64>,
+{
+    minimize_lbfgs_with(cost, grad, init, memory, &Options::new(max_iters)).map(|s| s.param)
+}
+
+/// [`minimize_lbfgs`] with explicit [`Options`], reporting a full [`Solution`].
+///
+/// # Errors
+///
+/// As [`minimize_lbfgs`].
+pub fn minimize_lbfgs_with<F, G>(
+    cost: F,
+    grad: G,
+    init: DVector<f64>,
+    memory: usize,
+    options: &Options,
+) -> Result<Solution, String>
+where
+    F: Fn(&DVector<f64>) -> f64,
+    G: Fn(&DVector<f64>) -> DVector<f64>,
+{
+    validate(&init, options)?;
+    if memory == 0 {
+        return Err("L-BFGS memory must be at least 1".into());
+    }
+    let mut x = init;
+    let mut g = grad(&x);
+    // Curvature pairs, oldest first: (s, y, ρ = 1 / (sᵀy)).
+    let mut pairs: Vec<(DVector<f64>, DVector<f64>, f64)> = Vec::with_capacity(memory);
+    let mut iters: u64 = 0;
+    loop {
+        if g.norm() <= options.gradient_tolerance {
+            return Ok(lbfgs_solution(&cost, x, iters, true, "GradientTolerance"));
+        }
+        if iters >= options.max_iters {
+            return Ok(lbfgs_solution(&cost, x, iters, false, "MaxIters"));
+        }
+
+        // Two-loop recursion: d = −H g with H the implicit inverse Hessian.
+        let mut q = g.clone();
+        let mut alphas = vec![0.0_f64; pairs.len()];
+        for (idx, (s, y, rho)) in pairs.iter().enumerate().rev() {
+            let a = rho * s.dot(&q);
+            alphas[idx] = a;
+            q = q - y.clone() * a;
+        }
+        let gamma = match pairs.last() {
+            Some((s, y, _)) => s.dot(y) / y.dot(y),
+            None => 1.0,
+        };
+        let mut r = q * gamma;
+        for (idx, (s, y, rho)) in pairs.iter().enumerate() {
+            let beta = rho * y.dot(&r);
+            r = r + s.clone() * (alphas[idx] - beta);
+        }
+        let mut dir = -r;
+        if g.dot(&dir) >= 0.0 {
+            // Not a descent direction: fall back to steepest descent and forget history.
+            pairs.clear();
+            dir = -g.clone();
+        }
+
+        let mut alpha = line_search(&cost, &grad, &x, &dir);
+        if alpha == 0.0 {
+            if pairs.is_empty() {
+                return Ok(lbfgs_solution(&cost, x, iters, false, "LineSearchStalled"));
+            }
+            // A stale quasi-Newton direction stalled: restart from steepest descent.
+            pairs.clear();
+            dir = -g.clone();
+            alpha = line_search(&cost, &grad, &x, &dir);
+            if alpha == 0.0 {
+                return Ok(lbfgs_solution(&cost, x, iters, false, "LineSearchStalled"));
+            }
+        }
+
+        let x_new = x.clone() + dir * alpha;
+        let g_new = grad(&x_new);
+        let s = x_new.clone() - x.clone();
+        let y = g_new.clone() - g.clone();
+        let sy = s.dot(&y);
+        // Keep only pairs with positive curvature, which keeps H positive definite.
+        if sy > 1e-12 * y.dot(&y).sqrt() * s.norm() {
+            if pairs.len() == memory {
+                pairs.remove(0);
+            }
+            pairs.push((s, y, 1.0 / sy));
+        }
+        x = x_new;
+        g = g_new;
+        iters += 1;
+    }
+}
+
+fn lbfgs_solution<F>(
+    cost: &F,
+    param: DVector<f64>,
+    iters: u64,
+    converged: bool,
+    termination: &str,
+) -> Solution
+where
+    F: Fn(&DVector<f64>) -> f64,
+{
+    Solution {
+        cost: cost(&param),
+        param,
+        iters,
+        converged,
+        termination: termination.to_string(),
+    }
+}
+
+/// Central finite-difference approximation of the gradient of `cost` at `x`,
+/// with step `h` in each coordinate. Use it when no analytic gradient exists.
+///
+/// # Examples
+///
+/// ```
+/// use tpt_math_optimize_general::{numerical_gradient, tpt_math_linalg_dense::DVector};
+///
+/// let cost = |p: &DVector<f64>| p[0] * p[0] * p[1];
+/// let g = numerical_gradient(&cost, &DVector::from_vec(vec![3.0, 2.0]), 1e-6);
+/// assert!((g[0] - 12.0).abs() < 1e-6); // d/dx = 2xy
+/// assert!((g[1] - 9.0).abs() < 1e-6); // d/dy = x²
+/// ```
+pub fn numerical_gradient<F>(cost: &F, x: &DVector<f64>, h: f64) -> DVector<f64>
+where
+    F: Fn(&DVector<f64>) -> f64,
+{
+    let n = x.len();
+    let mut g = vec![0.0_f64; n];
+    let mut probe = x.clone();
+    for (i, gi) in g.iter_mut().enumerate() {
+        let xi = x[i];
+        probe.as_mut_slice()[i] = xi + h;
+        let fp = cost(&probe);
+        probe.as_mut_slice()[i] = xi - h;
+        let fm = cost(&probe);
+        probe.as_mut_slice()[i] = xi;
+        *gi = (fp - fm) / (2.0 * h);
+    }
+    DVector::from_vec(g)
+}
+
+/// Minimize a derivative-free objective with the Nelder–Mead simplex method.
+///
+/// The initial simplex is `init` plus `step` along each coordinate axis.
+/// Convergence is declared when the spread of costs over the simplex and the
+/// simplex diameter are both at most `options.gradient_tolerance` (relative to
+/// the best cost's and point's magnitudes).
+///
+/// # Errors
+///
+/// Returns an error for an empty or non-finite `init`, a negative tolerance, or
+/// a non-positive or non-finite `step`.
+///
+/// # Examples
+///
+/// ```
+/// use tpt_math_optimize_general::{minimize_nelder_mead_with, Options, tpt_math_linalg_dense::DVector};
+///
+/// let cost = |p: &DVector<f64>| (p[0] - 3.0).powi(2) + (p[1] + 1.0).powi(2);
+/// let s = minimize_nelder_mead_with(cost, DVector::zeros(2), 1.0, &Options::new(500)).unwrap();
+/// assert!((s.param[0] - 3.0).abs() < 1e-5);
+/// assert!((s.param[1] + 1.0).abs() < 1e-5);
+/// ```
+pub fn minimize_nelder_mead_with<F>(
+    cost: F,
+    init: DVector<f64>,
+    step: f64,
+    options: &Options,
+) -> Result<Solution, String>
+where
+    F: Fn(&DVector<f64>) -> f64,
+{
+    validate(&init, options)?;
+    if !(step.is_finite() && step > 0.0) {
+        return Err(format!("initial simplex step must be positive, got {step}"));
+    }
+    const ALPHA: f64 = 1.0; // reflection
+    const GAMMA: f64 = 2.0; // expansion
+    const RHO: f64 = 0.5; // contraction
+    const SIGMA: f64 = 0.5; // shrink
+
+    let n = init.len();
+    let mut simplex: Vec<(DVector<f64>, f64)> = Vec::with_capacity(n + 1);
+    let f0 = cost(&init);
+    simplex.push((init.clone(), f0));
+    for i in 0..n {
+        let mut v = init.clone();
+        v.as_mut_slice()[i] += step;
+        let fv = cost(&v);
+        simplex.push((v, fv));
+    }
+
+    let tol = options.gradient_tolerance;
+    let mut iters: u64 = 0;
+    loop {
+        simplex.sort_by(|a, b| a.1.total_cmp(&b.1));
+        let best = simplex[0].1;
+        let worst = simplex[n].1;
+        // Stop only when both the cost spread and the simplex diameter are small:
+        // a flat cost spread alone can hold the simplex ~√tol away from the optimum.
+        let x_best = simplex[0].0.clone();
+        let diameter = simplex
+            .iter()
+            .map(|(x, _)| (x.clone() - x_best.clone()).norm())
+            .fold(0.0_f64, f64::max);
+        let x_scale = 1.0 + x_best.norm();
+        if (worst - best).abs() <= tol * (1.0 + best.abs()) && diameter <= tol * x_scale {
+            return Ok(nelder_mead_solution(simplex, iters, true, "CostTolerance"));
+        }
+        if iters >= options.max_iters {
+            return Ok(nelder_mead_solution(simplex, iters, false, "MaxIters"));
+        }
+        iters += 1;
+
+        // Centroid of every vertex except the worst.
+        let mut centroid = DVector::zeros(n);
+        for (x, _) in &simplex[..n] {
+            centroid = centroid + x.clone();
+        }
+        let centroid = centroid / (n as f64);
+        let x_worst = simplex[n].0.clone();
+        let f_second_worst = simplex[n - 1].1;
+
+        let along = |t: f64| centroid.clone() + (centroid.clone() - x_worst.clone()) * t;
+        let x_r = along(ALPHA);
+        let f_r = cost(&x_r);
+        if f_r < best {
+            let x_e = along(ALPHA * GAMMA);
+            let f_e = cost(&x_e);
+            simplex[n] = if f_e < f_r { (x_e, f_e) } else { (x_r, f_r) };
+        } else if f_r < f_second_worst {
+            simplex[n] = (x_r, f_r);
+        } else {
+            // Contract toward the centroid: outside if the reflection improved on
+            // the worst vertex, inside otherwise.
+            let (x_c, f_c) = if f_r < worst {
+                let x_c = centroid.clone() + (x_r.clone() - centroid.clone()) * RHO;
+                let f_c = cost(&x_c);
+                (x_c, f_c)
+            } else {
+                let x_c = centroid.clone() + (x_worst.clone() - centroid.clone()) * RHO;
+                let f_c = cost(&x_c);
+                (x_c, f_c)
+            };
+            if f_c < f_r.min(worst) {
+                simplex[n] = (x_c, f_c);
+            } else {
+                // Shrink every vertex toward the best one.
+                let x_best = simplex[0].0.clone();
+                for vertex in simplex.iter_mut().skip(1) {
+                    let v = x_best.clone() + (vertex.0.clone() - x_best.clone()) * SIGMA;
+                    vertex.1 = cost(&v);
+                    vertex.0 = v;
+                }
+            }
+        }
+    }
+}
+
+/// Minimize a derivative-free objective with Nelder–Mead, returning only the
+/// best point. See [`minimize_nelder_mead_with`].
+///
+/// # Errors
+///
+/// As [`minimize_nelder_mead_with`].
+pub fn minimize_nelder_mead<F>(
+    cost: F,
+    init: DVector<f64>,
+    step: f64,
+    max_iters: u64,
+) -> Result<DVector<f64>, String>
+where
+    F: Fn(&DVector<f64>) -> f64,
+{
+    minimize_nelder_mead_with(cost, init, step, &Options::new(max_iters)).map(|s| s.param)
+}
+
+fn nelder_mead_solution(
+    mut simplex: Vec<(DVector<f64>, f64)>,
+    iters: u64,
+    converged: bool,
+    termination: &'static str,
+) -> Solution {
+    simplex.sort_by(|a, b| a.1.total_cmp(&b.1));
+    let (param, cost) = simplex.swap_remove(0);
+    Solution {
+        param,
+        cost,
+        iters,
+        converged,
+        termination: termination.to_string(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1014,5 +1341,64 @@ mod tests {
         assert_eq!(options.max_iters, DEFAULT_MAX_ITERS);
         assert_eq!(options.gradient_tolerance, DEFAULT_GRADIENT_TOLERANCE);
         assert_eq!(Options::new(DEFAULT_MAX_ITERS), options);
+    }
+
+    #[test]
+    fn numerical_gradient_matches_analytic() {
+        let cost = |p: &DVector<f64>| p[0] * p[0] * p[1];
+        let g = numerical_gradient(&cost, &DVector::from_vec(vec![3.0, 2.0]), 1e-6);
+        assert_close(&g, &[12.0, 9.0], 1e-6);
+    }
+
+    #[test]
+    fn nelder_mead_minimizes_bowl_without_gradients() {
+        let s = minimize_nelder_mead_with(bowl_cost, DVector::zeros(2), 1.0, &Options::new(1000))
+            .unwrap();
+        assert!(s.converged, "termination: {}", s.termination);
+        assert_close(&s.param, &[3.0, 2.0], 1e-6);
+    }
+
+    #[test]
+    fn nelder_mead_minimizes_rosenbrock() {
+        let rosen = |p: &DVector<f64>| (1.0 - p[0]).powi(2) + 100.0 * (p[1] - p[0] * p[0]).powi(2);
+        let x = minimize_nelder_mead(rosen, DVector::from_vec(vec![-1.2, 1.0]), 0.5, 5000).unwrap();
+        assert_close(&x, &[1.0, 1.0], 1e-3);
+    }
+
+    #[test]
+    fn nelder_mead_rejects_bad_step() {
+        assert!(minimize_nelder_mead(bowl_cost, DVector::zeros(2), 0.0, 10).is_err());
+    }
+
+    #[test]
+    fn lbfgs_minimizes_rosenbrock() {
+        let rosen = |p: &DVector<f64>| (1.0 - p[0]).powi(2) + 100.0 * (p[1] - p[0] * p[0]).powi(2);
+        let rosen_grad = |p: &DVector<f64>| {
+            DVector::from_vec(vec![
+                -2.0 * (1.0 - p[0]) - 400.0 * p[0] * (p[1] - p[0] * p[0]),
+                200.0 * (p[1] - p[0] * p[0]),
+            ])
+        };
+        let s = minimize_lbfgs_with(
+            rosen,
+            rosen_grad,
+            DVector::from_vec(vec![-1.2, 1.0]),
+            8,
+            &Options::new(500),
+        )
+        .unwrap();
+        assert!(s.converged, "termination: {}", s.termination);
+        assert_close(&s.param, &[1.0, 1.0], 1e-5);
+    }
+
+    #[test]
+    fn lbfgs_handles_ill_conditioned_valley() {
+        let best = minimize_lbfgs(valley_cost, valley_grad, DVector::zeros(2), 5, 200).unwrap();
+        assert_close(&best, &[3.0, 2.0], 1e-6);
+    }
+
+    #[test]
+    fn lbfgs_rejects_zero_memory() {
+        assert!(minimize_lbfgs(bowl_cost, bowl_grad, DVector::zeros(2), 0, 10).is_err());
     }
 }

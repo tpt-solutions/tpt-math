@@ -34,6 +34,12 @@ pub enum StatsError {
         second: usize,
     },
 
+    /// A quantile probability was outside `[0, 1]` (or `NaN`).
+    ProbabilityOutOfRange {
+        /// The offending probability.
+        value: f64,
+    },
+
     /// An observation was `NaN` or infinite.
     NotFinite {
         /// Name of the offending argument.
@@ -72,6 +78,9 @@ pub enum StatsError {
 impl fmt::Display for StatsError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            StatsError::ProbabilityOutOfRange { value } => {
+                write!(f, "probability {value} is outside [0, 1]")
+            }
             StatsError::NotEnoughData {
                 sample,
                 required,

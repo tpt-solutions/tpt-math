@@ -269,6 +269,109 @@ pub fn try_median(samples: &[f64]) -> Result<f64, StatsError> {
     })
 }
 
+/// Sample `p`-quantile by linear interpolation between order statistics
+/// (type 7, the default of R and NumPy): `h = (n − 1) p`.
+///
+/// # Errors
+///
+/// Returns [`StatsError::ProbabilityOutOfRange`] if `p` is outside `[0, 1]`,
+/// and the usual errors for empty or non-finite samples.
+///
+/// # Examples
+///
+/// ```
+/// # use tpt_math_stats::try_quantile;
+/// assert_eq!(try_quantile(&[1.0, 2.0, 3.0, 4.0], 0.5).unwrap(), 2.5);
+/// ```
+pub fn try_quantile(samples: &[f64], p: f64) -> Result<f64, StatsError> {
+    check_min_len("samples", samples, 1)?;
+    check_all_finite("samples", samples)?;
+    if !(0.0..=1.0).contains(&p) {
+        return Err(StatsError::ProbabilityOutOfRange { value: p });
+    }
+    let mut sorted = samples.to_vec();
+    sorted.sort_by(f64::total_cmp);
+    let h = (sorted.len() - 1) as f64 * p;
+    let lo = h.floor() as usize;
+    let hi = (lo + 1).min(sorted.len() - 1);
+    let frac = h - lo as f64;
+    Ok(sorted[lo] + frac * (sorted[hi] - sorted[lo]))
+}
+
+/// Sample `p`-quantile; see [`try_quantile`].
+///
+/// # Panics
+///
+/// Panics on any condition [`try_quantile`] reports as an error.
+pub fn quantile(samples: &[f64], p: f64) -> f64 {
+    try_quantile(samples, p).unwrap_or_else(|e| panic!("quantile: {e}"))
+}
+
+/// Population skewness `m₃ / m₂^{3/2}` (with `mₖ` the k-th central moment).
+/// Returns `NaN` for a constant sample.
+///
+/// # Errors
+///
+/// Returns the usual errors for empty or non-finite samples.
+pub fn try_skewness(samples: &[f64]) -> Result<f64, StatsError> {
+    let (m2, m3, _) = central_moments(samples)?;
+    Ok(if m2 == 0.0 {
+        f64::NAN
+    } else {
+        m3 / m2.powf(1.5)
+    })
+}
+
+/// Population skewness; see [`try_skewness`].
+///
+/// # Panics
+///
+/// Panics if `samples` is empty or contains a non-finite value.
+pub fn skewness(samples: &[f64]) -> f64 {
+    try_skewness(samples).unwrap_or_else(|e| panic!("skewness: {e}"))
+}
+
+/// Population excess kurtosis `m₄ / m₂² − 3` (zero for a normal distribution).
+/// Returns `NaN` for a constant sample.
+///
+/// # Errors
+///
+/// Returns the usual errors for empty or non-finite samples.
+pub fn try_excess_kurtosis(samples: &[f64]) -> Result<f64, StatsError> {
+    let (m2, _, m4) = central_moments(samples)?;
+    Ok(if m2 == 0.0 {
+        f64::NAN
+    } else {
+        m4 / (m2 * m2) - 3.0
+    })
+}
+
+/// Population excess kurtosis; see [`try_excess_kurtosis`].
+///
+/// # Panics
+///
+/// Panics if `samples` is empty or contains a non-finite value.
+pub fn excess_kurtosis(samples: &[f64]) -> f64 {
+    try_excess_kurtosis(samples).unwrap_or_else(|e| panic!("excess_kurtosis: {e}"))
+}
+
+/// Central moments `(m₂, m₃, m₄)` about the mean, with `1/n` normalisation.
+fn central_moments(samples: &[f64]) -> Result<(f64, f64, f64), StatsError> {
+    check_min_len("samples", samples, 1)?;
+    check_all_finite("samples", samples)?;
+    let n = samples.len() as f64;
+    let mean = mean_unchecked(samples);
+    let (mut m2, mut m3, mut m4) = (0.0, 0.0, 0.0);
+    for &x in samples {
+        let d = x - mean;
+        let d2 = d * d;
+        m2 += d2;
+        m3 += d2 * d;
+        m4 += d2 * d2;
+    }
+    Ok((m2 / n, m3 / n, m4 / n))
+}
+
 /// Median of `samples`.
 ///
 /// # Panics
@@ -397,5 +500,27 @@ mod tests {
     #[should_panic(expected = "variance")]
     fn variance_panics_on_single_observation() {
         let _ = variance(&[1.0]);
+    }
+
+    #[test]
+    fn quantile_uses_linear_interpolation() {
+        // Type-7 (R/NumPy default): h = (n − 1) p, linearly interpolated.
+        let x = [1.0, 2.0, 3.0, 4.0];
+        assert_eq!(quantile(&x, 0.0), 1.0);
+        assert_eq!(quantile(&x, 0.5), 2.5);
+        assert_eq!(quantile(&x, 1.0), 4.0);
+        assert!((quantile(&x, 0.25) - 1.75).abs() < 1e-12);
+        assert!(try_quantile(&x, 1.5).is_err());
+        assert!(try_quantile(&x, f64::NAN).is_err());
+    }
+
+    #[test]
+    fn skewness_and_excess_kurtosis_of_known_samples() {
+        // Symmetric sample: zero skew. m2 = 2, m4 = 6.8 ⇒ excess kurtosis −1.3.
+        let x = [1.0, 2.0, 3.0, 4.0, 5.0];
+        assert!(skewness(&x).abs() < 1e-12);
+        assert!((excess_kurtosis(&x) + 1.3).abs() < 1e-12);
+        // A right-tailed sample has positive skew.
+        assert!(skewness(&[1.0, 2.0, 3.0, 10.0]) > 0.0);
     }
 }

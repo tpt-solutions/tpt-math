@@ -17,6 +17,7 @@ and this project adheres to semantic versioning.
 - **Breaking:** `ComplexDenseError` gained a variant; exhaustive matches need an arm.
 - `eigenvalues` now uses Hessenberg reduction and Wilkinson-shifted QR. It panics on a non-square matrix or non-convergence (it used to return an empty vector for non-square input and silently deflate at the iteration cap).
 - Matrix multiply, matrix-vector product, `dot`, and the `from_vec`/`from_row_slice`/`from_real_row_slice` constructors assert their dimensions; indexing checks row bounds.
+- `ComplexDMatrix` constructors `from_vec`, `from_row_slice` and `from_real_row_slice` assert the data length.
 
 ### Fixed
 

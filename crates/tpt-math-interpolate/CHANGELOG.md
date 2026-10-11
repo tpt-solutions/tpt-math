@@ -12,6 +12,11 @@ and this project adheres to SemVer.
 - `Pchip::new` accepts two nodes (it used to index out of bounds).
 - `Pchip::eval` extrapolates linearly along the endpoint tangent outside the node range, as documented.
 
+### Changed
+
+- **Breaking behaviour:** `Kriging::new` now factors the Kriging matrix and returns `DenseError::Singular` for a singular system (for example duplicate samples with zero nugget). It used to fail only at `predict`.
+- `Kriging::predict` reuses the stored factorisation instead of refactoring per call.
+
 ## [0.1.0] - 2026-08-19
 
 ### Added
