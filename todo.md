@@ -1136,9 +1136,9 @@ tree.*
 - [x] `autodiff-fwd`: sqrt, powi/powf, tan, tanh, atan, abs, `Dual op scalar`
 - [ ] `prob-dist`: pdf / cdf / quantile / moments (currently sampling-only)
       Status: Partial: `density` gives pdf/pmf, cdf and quantile for Normal,
-      Exponential, Gamma, Beta, Uniform and Poisson (requires `std`). Moments,
-      the remaining families (Student-t, Cauchy, chi-squared, ...) and
-      distribution-specific quantiles for Gamma/Beta/Poisson are not.
+      Exponential, Gamma, Beta, Uniform and Poisson (requires `std`), plus their
+      moments. The remaining families (Student-t, Cauchy, chi-squared, ...) and
+      quantiles for Gamma/Beta/Poisson are not.
 - [ ] `symbolic`: like-term collection, more functions
       Status: Partial: `x/x` (taken as 1, undefined at 0), `x^0`, `x^1`, nested
       powers, fixpoint simplification and like-term collection are done. Additional
