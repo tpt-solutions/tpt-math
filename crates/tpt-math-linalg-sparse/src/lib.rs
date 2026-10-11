@@ -1031,6 +1031,194 @@ impl SparseCholesky {
     }
 }
 
+/// Incomplete LU factorisation with zero fill-in, ILU(0).
+///
+/// Computes `L U ≈ A` where `L` is unit lower triangular and `U` upper
+/// triangular, and keeps only the sparsity pattern of `A`. The product matches
+/// `A` on that pattern and differs elsewhere. Applying `(LU)⁻¹` to a vector is
+/// a cheap approximate inverse, which makes ILU(0) a standard preconditioner.
+/// For a matrix with no fill-in under LU, such as a tridiagonal one, it is exact.
+#[cfg(feature = "alloc")]
+#[derive(Clone, Debug, PartialEq)]
+pub struct Ilu0 {
+    n: usize,
+    /// Each row sorted by column. Strictly lower entries hold `L`, the diagonal
+    /// and upper entries hold `U`.
+    rows: Vec<Vec<(usize, f64)>>,
+    /// Position of the diagonal entry within each row.
+    diagonal: Vec<usize>,
+}
+
+#[cfg(feature = "alloc")]
+impl Ilu0 {
+    /// Compute the ILU(0) factors of a square CSR matrix.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SparseError::DimensionMismatch`] if `a` is not square, and
+    /// [`SparseError::Breakdown`] if a row has no diagonal entry or a pivot is
+    /// zero.
+    pub fn factor(a: &CsrMatrix<f64>) -> Result<Self, SparseError> {
+        if a.nrows() != a.ncols() {
+            return Err(SparseError::DimensionMismatch);
+        }
+        let n = a.nrows();
+        let mut rows: Vec<Vec<(usize, f64)>> = vec![Vec::new(); n];
+        for (r, c, &v) in a.iter() {
+            rows[r].push((c, v));
+        }
+        for row in &mut rows {
+            row.sort_by_key(|&(c, _)| c);
+        }
+        let mut diagonal = vec![0usize; n];
+        for (i, row) in rows.iter().enumerate() {
+            match row.iter().position(|&(c, _)| c == i) {
+                Some(p) => diagonal[i] = p,
+                None => return Err(SparseError::Breakdown { iterations: i }),
+            }
+        }
+
+        // IKJ-ordered elimination restricted to the existing pattern.
+        const ABSENT: usize = usize::MAX;
+        let mut pos = vec![ABSENT; n];
+        for i in 0..n {
+            for (p, &(c, _)) in rows[i].iter().enumerate() {
+                pos[c] = p;
+            }
+            for kp in 0..rows[i].len() {
+                let k = rows[i][kp].0;
+                if k >= i {
+                    break;
+                }
+                let pivot = rows[k][diagonal[k]].1;
+                if pivot == 0.0 || pivot.is_nan() {
+                    return Err(SparseError::Breakdown { iterations: k });
+                }
+                let multiplier = rows[i][kp].1 / pivot;
+                rows[i][kp].1 = multiplier;
+                // Row k is finished, so reading it while updating row i is safe.
+                let row_k = rows[k].clone();
+                for &(j, ukj) in row_k.iter().filter(|&&(j, _)| j > k) {
+                    let p = pos[j];
+                    if p != ABSENT {
+                        rows[i][p].1 -= multiplier * ukj;
+                    }
+                }
+            }
+            for &(c, _) in &rows[i] {
+                pos[c] = ABSENT;
+            }
+        }
+        Ok(Ilu0 { n, rows, diagonal })
+    }
+
+    /// Apply the preconditioner: returns `(LU)⁻¹ r`, an approximation to `A⁻¹ r`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SparseError::DimensionMismatch`] if `r` has the wrong length.
+    pub fn apply(&self, r: &DVector<f64>) -> Result<DVector<f64>, SparseError> {
+        if r.len() != self.n {
+            return Err(SparseError::DimensionMismatch);
+        }
+        let mut y: Vec<f64> = r.as_slice().to_vec();
+        // Forward substitution with unit lower L.
+        for i in 0..self.n {
+            let mut s = y[i];
+            for &(j, v) in self.rows[i].iter().take_while(|&&(j, _)| j < i) {
+                s -= v * y[j];
+            }
+            y[i] = s;
+        }
+        // Back substitution with upper U.
+        for i in (0..self.n).rev() {
+            let mut s = y[i];
+            for &(j, v) in &self.rows[i][self.diagonal[i] + 1..] {
+                s -= v * y[j];
+            }
+            y[i] = s / self.rows[i][self.diagonal[i]].1;
+        }
+        Ok(DVector::from_vec(y))
+    }
+}
+
+#[cfg(test)]
+mod ilu_tests {
+    use super::*;
+
+    fn tridiagonal(n: usize) -> CsrMatrix<f64> {
+        let mut coo = CooMatrix::<f64>::new(n, n);
+        for i in 0..n {
+            coo.push(i, i, 4.0);
+            if i + 1 < n {
+                coo.push(i, i + 1, -1.0);
+                coo.push(i + 1, i, -1.0);
+            }
+        }
+        coo.to_csr()
+    }
+
+    #[test]
+    fn exact_when_lu_has_no_fill_in() {
+        // A tridiagonal matrix produces no fill-in, so ILU(0) equals LU.
+        let a = tridiagonal(8);
+        let x_true = DVector::from_fn(8, |i| (i as f64 + 1.0).ln());
+        let b = a.matvec(&x_true).unwrap();
+        let ilu = Ilu0::factor(&a).unwrap();
+        let x = ilu.apply(&b).unwrap();
+        assert!((x - x_true).norm() < 1e-12);
+    }
+
+    #[test]
+    fn approximate_inverse_reduces_residual_on_laplacian() {
+        // 2D Laplacian: LU fills in, so ILU(0) is only approximate, but applying
+        // it should still reduce the residual a lot compared with doing nothing.
+        let m = 6;
+        let n = m * m;
+        let mut coo = CooMatrix::<f64>::new(n, n);
+        for r in 0..m {
+            for c in 0..m {
+                let k = r * m + c;
+                coo.push(k, k, 4.0);
+                if c > 0 {
+                    coo.push(k, k - 1, -1.0);
+                }
+                if c + 1 < m {
+                    coo.push(k, k + 1, -1.0);
+                }
+                if r > 0 {
+                    coo.push(k, k - m, -1.0);
+                }
+                if r + 1 < m {
+                    coo.push(k, k + m, -1.0);
+                }
+            }
+        }
+        let a = coo.to_csr();
+        let b = DVector::from_fn(n, |i| if i % 3 == 0 { 1.0 } else { -0.5 });
+        let ilu = Ilu0::factor(&a).unwrap();
+        let x = ilu.apply(&b).unwrap();
+        let residual = (b.clone() - a.matvec(&x).unwrap()).norm();
+        assert!(
+            residual < 0.5 * b.norm(),
+            "residual {residual} vs |b| {}",
+            b.norm()
+        );
+    }
+
+    #[test]
+    fn missing_diagonal_is_a_breakdown() {
+        let mut coo = CooMatrix::<f64>::new(2, 2);
+        coo.push(0, 0, 1.0);
+        coo.push(0, 1, 1.0);
+        coo.push(1, 0, 1.0);
+        assert_eq!(
+            Ilu0::factor(&coo.to_csr()),
+            Err(SparseError::Breakdown { iterations: 1 })
+        );
+    }
+}
+
 #[cfg(test)]
 mod cholesky_tests {
     use super::*;
