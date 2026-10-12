@@ -238,6 +238,62 @@ impl FirFilter {
         out
     }
 
+    /// Filter a signal by FFT overlap-add. The result matches [`filter`](Self::filter).
+    ///
+    /// The signal is cut into blocks. Each block is convolved with the kernel
+    /// through the FFT, and the overlapping tails are summed. The cost is
+    /// `O(n log m)` instead of the `O(n·m)` of the direct sum, which pays off for
+    /// long kernels. Short kernels are better served by [`filter`](Self::filter).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use tpt_math_signal_filter::FirFilter;
+    ///
+    /// let fir = FirFilter::lowpass(201, 0.05);
+    /// let signal: Vec<f64> = (0..1000).map(|t| (t as f64 * 0.4).sin()).collect();
+    /// let direct = fir.filter(&signal);
+    /// let fast = fir.filter_overlap_add(&signal);
+    /// for (a, b) in direct.iter().zip(&fast) {
+    ///     assert!((a - b).abs() < 1e-10);
+    /// }
+    /// ```
+    pub fn filter_overlap_add(&self, signal: &[f64]) -> Vec<f64> {
+        let m = self.coeffs.len();
+        let n = signal.len();
+        if m == 0 || n == 0 {
+            return vec![0.0; n];
+        }
+        let delay = self.group_delay();
+        // Each block of `block` samples convolves to `block + m − 1` samples,
+        // which must fit in the transform length so nothing wraps around.
+        let fft_len = (2 * m).next_power_of_two().max(64);
+        let block = fft_len - m + 1;
+
+        let mut engine = Fft::new();
+        let kernel_spectrum = engine.forward_n(&self.coeffs, fft_len);
+        let mut full = vec![0.0; n + m - 1];
+        let mut start = 0;
+        while start < n {
+            let end = (start + block).min(n);
+            let spectrum = engine.forward_n(&signal[start..end], fft_len);
+            let product: Vec<Complex<f64>> = spectrum
+                .iter()
+                .zip(&kernel_spectrum)
+                .map(|(&a, &b)| a * b)
+                .collect();
+            let segment = engine.inverse_normalized(&product);
+            // The block's linear convolution spans `end − start + m − 1` samples.
+            let span = end - start + m - 1;
+            for (acc, z) in full[start..start + span].iter_mut().zip(&segment) {
+                *acc += z.re;
+            }
+            start += block;
+        }
+        // `filter` centres the kernel with `delay`, so output `i` is full[i + delay].
+        full[delay..delay + n].to_vec()
+    }
+
     /// Filter a signal in place, overwriting it with the result.
     ///
     /// Identical to [`filter`](Self::filter) in every respect except that it
@@ -571,5 +627,44 @@ mod tests {
             assert!(sinc(-(k as f64)).abs() < 1e-15);
         }
         assert!((sinc(0.5) - 2.0 / PI).abs() < 1e-15);
+    }
+}
+
+#[cfg(test)]
+mod overlap_add_tests {
+    use super::*;
+
+    fn signal(n: usize) -> Vec<f64> {
+        (0..n)
+            .map(|t| (t as f64 * 0.137).sin() + 0.25 * (t as f64 * 1.9).cos())
+            .collect()
+    }
+
+    fn assert_same(direct: &[f64], fast: &[f64]) {
+        assert_eq!(direct.len(), fast.len());
+        for (i, (a, b)) in direct.iter().zip(fast).enumerate() {
+            assert!((a - b).abs() < 1e-10, "sample {i}: direct {a}, fast {b}");
+        }
+    }
+
+    #[test]
+    fn matches_direct_filter_across_kernel_and_signal_lengths() {
+        for &m in &[1usize, 2, 5, 31, 129, 300] {
+            let fir = FirFilter::lowpass(m, 0.1);
+            // Lengths that are shorter than a block, exactly one block, several
+            // blocks, and a ragged last block.
+            for &n in &[1usize, 7, 64, 500, 1537] {
+                let x = signal(n);
+                assert_same(&fir.filter(&x), &fir.filter_overlap_add(&x));
+            }
+        }
+    }
+
+    #[test]
+    fn empty_inputs_are_handled() {
+        let fir = FirFilter::lowpass(9, 0.2);
+        assert!(fir.filter_overlap_add(&[]).is_empty());
+        let empty = FirFilter::new(Vec::new());
+        assert_eq!(empty.filter_overlap_add(&[1.0, 2.0]), vec![0.0, 0.0]);
     }
 }

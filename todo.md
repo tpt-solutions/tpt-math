@@ -1093,6 +1093,8 @@ tree.*
       uses the four-corner rule, which is needed for mixed signs.
 - [ ] `tpt-math-signal-filter`: FFT overlap-add for long FIR kernels; real-FFT
       path in `signal-fft`
+      Status: Partial: `FirFilter::filter_overlap_add` is done, and matches the direct
+      `filter` to 1e-10. The real-FFT path in `signal-fft` is not.
 - [ ] Optional `rayon` feature: Monte Carlo, FIR, GEMM
 - [ ] Criterion benches for every numeric crate (only 5 have any); scheduled
       regression run in CI
@@ -1146,10 +1148,11 @@ tree.*
       Exponential, Gamma, Beta, Uniform, Poisson, Student-t, Cauchy and chi-squared
       (requires `std`). Continuous quantiles without a closed form invert the CDF
       by bisection; Poisson returns the smallest `k` with `P(X ≤ k) ≥ p`.
-- [ ] `symbolic`: like-term collection, more functions
-      Status: Partial: `x/x` (taken as 1, undefined at 0), `x^0`, `x^1`, nested
-      powers, fixpoint simplification and like-term collection are done. Additional
-      functions are not.
+- [x] `symbolic`: like-term collection, more functions
+      Status: Done: `x/x` (taken as 1, undefined at 0), `x^0`, `x^1`, nested
+      powers, fixpoint simplification, like-term collection, and the functions
+      `sin`, `cos`, `tan`, `exp`, `ln`, `sqrt`, `asin`, `acos`, `atan`, `sinh`,
+      `cosh`, `tanh`, all with derivatives checked against finite differences.
 - [x] `tpt-math-linalg` wrappers: `Mat * scalar`, `Vec` dot/norm, solve,
       by-reference operator forms
       Status: Done: `Mat` scalar `*`/`/`, `Vec::norm`/`Vec::dot` (bare-scalar

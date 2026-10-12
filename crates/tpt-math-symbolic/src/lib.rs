@@ -479,6 +479,12 @@ fn apply_func<C: Coefficient>(name: &str, c: C) -> Option<C> {
         "exp" => f.exp(),
         "ln" => f.ln(),
         "sqrt" => f.sqrt(),
+        "asin" => f.asin(),
+        "acos" => f.acos(),
+        "atan" => f.atan(),
+        "sinh" => f.sinh(),
+        "cosh" => f.cosh(),
+        "tanh" => f.tanh(),
         _ => return None,
     };
     Some(C::from(r))
@@ -531,6 +537,12 @@ fn derivative<C: Coefficient>(e: &Expr<C>, var: &str) -> Expr<C> {
                 }
                 "ln" => da / inner,
                 "sqrt" => da / (Expr::Const(C::from(2.0)) * Expr::func("sqrt", inner)),
+                "asin" => da / Expr::func("sqrt", Expr::Const(C::one()) - inner.clone().pow(2)),
+                "acos" => -da / Expr::func("sqrt", Expr::Const(C::one()) - inner.clone().pow(2)),
+                "atan" => da / (Expr::Const(C::one()) + inner.clone().pow(2)),
+                "sinh" => Expr::func("cosh", inner) * da,
+                "cosh" => Expr::func("sinh", inner) * da,
+                "tanh" => (Expr::Const(C::one()) - Expr::func("tanh", inner).pow(2)) * da,
                 other => Expr::Func(format!("{other}'"), Box::new(inner)) * da,
             }
         }
@@ -902,6 +914,43 @@ mod tests {
         let x = Expr64::var("x");
         let d = Expr64::func("ln", x.clone()).derivative("x").simplify();
         assert!((d.eval_str("x", 2.0).unwrap() - 0.5).abs() < 1e-9);
+    }
+
+    #[test]
+    fn inverse_and_hyperbolic_derivatives_match_finite_differences() {
+        // Compare each symbolic derivative with a central difference at a few
+        // points inside the domain of the inverse functions.
+        let x = Expr64::var("x");
+        for name in ["asin", "acos", "atan", "sinh", "cosh", "tanh"] {
+            let f = Expr64::func(name, x.clone());
+            let d = f.derivative("x").simplify();
+            for &p in &[-0.6, -0.2, 0.1, 0.5] {
+                let h = 1e-6;
+                let fp = f.eval_str("x", p + h).unwrap();
+                let fm = f.eval_str("x", p - h).unwrap();
+                let numeric = (fp - fm) / (2.0 * h);
+                let symbolic = d.eval_str("x", p).unwrap();
+                assert!(
+                    (symbolic - numeric).abs() < 1e-6,
+                    "{name}'({p}): symbolic {symbolic}, numeric {numeric}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn inverse_and_hyperbolic_functions_fold_numerically() {
+        // A constant argument is folded by `simplify` through `apply_func`.
+        let folded = |name: &str, v: f64| Expr64::func(name, Expr64::from(v)).simplify();
+        assert_eq!(
+            folded("atan", 1.0),
+            Expr64::from(core::f64::consts::FRAC_PI_4)
+        );
+        assert_eq!(
+            folded("asin", 1.0),
+            Expr64::from(core::f64::consts::FRAC_PI_2)
+        );
+        assert!(matches!(folded("tanh", 0.0), Expr::Const(c) if c == 0.0));
     }
 
     #[test]

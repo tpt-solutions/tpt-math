@@ -8,6 +8,7 @@ All notable changes to this crate are documented here. Format based on
 
 ### Added
 
+- `FirFilter::filter_overlap_add`: FFT overlap-add filtering for long kernels. It gives the same output as `filter`, at `O(n log m)` instead of `O(n·m)`.
 - `butterworth_bandpass`: Butterworth band-pass as a high-pass stage at the low edge cascaded with a low-pass stage at the high edge. This is a cascade, not an LP→BP prototype transform, so band edges are only approximately −3 dB for narrow bands.
 - `butterworth_highpass`: Butterworth high-pass cascade of even order, the high-pass counterpart of `butterworth_lowpass`.
 - `Biquad::highpass`, `Biquad::bandpass` (constant 0 dB peak gain) and `Biquad::notch` (RBJ cookbook forms). `Biquad::lowpass` now shares their parameter validation.

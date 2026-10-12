@@ -47,7 +47,7 @@ assert_eq!(d.eval_str("x", 2.0).unwrap(), 42.0);
 
 `Expr64` is `Expr<f64>`, the default floating-point expression type. Named unary
 functions are built with `Expr::func` and differentiate via the chain rule
-(`sin`, `cos`, `tan`, `exp`, `ln`, `sqrt` are known; anything else derives to a
+(`sin`, `cos`, `tan`, `exp`, `ln`, `sqrt`, `asin`, `acos`, `atan`, `sinh`, `cosh`, `tanh` are known; anything else derives to a
 formal `name'(...)` factor):
 
 ```rust

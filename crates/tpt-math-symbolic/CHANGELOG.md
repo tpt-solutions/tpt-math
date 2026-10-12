@@ -6,6 +6,10 @@ All notable changes to this crate are documented here. Format based on
 
 ## [Unreleased]
 
+### Added
+
+- Named functions `asin`, `acos`, `atan`, `sinh`, `cosh`, `tanh`: folded numerically by `simplify` and differentiated by the chain rule. Checked against central differences.
+
 ### Changed
 
 - Unknown function names stay symbolic: `simplify` leaves them unfolded, and `eval` returns `None`. They used to be treated as the identity.
