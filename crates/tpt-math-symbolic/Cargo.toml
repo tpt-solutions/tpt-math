@@ -24,6 +24,7 @@ alloc = []
 exact = ["dep:tpt-math-exact"]
 
 [dev-dependencies]
+proptest = { workspace = true }
 
 [lints]
 workspace = true

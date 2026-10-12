@@ -1159,6 +1159,9 @@ tree.*
       powers, fixpoint simplification, like-term collection, and the functions
       `sin`, `cos`, `tan`, `exp`, `ln`, `sqrt`, `asin`, `acos`, `atan`, `sinh`,
       `cosh`, `tanh`, all with derivatives checked against finite differences.
+      Finding (not fixed): `simplify` preserves value but is not canonical. Equal sums
+      can come out with their terms in a different order on a second pass, so the
+      output is not a normal form. Property tests check value only.
 - [x] `tpt-math-linalg` wrappers: `Mat * scalar`, `Vec` dot/norm, solve,
       by-reference operator forms
       Status: Done: `Mat` scalar `*`/`/`, `Vec::norm`/`Vec::dot` (bare-scalar
@@ -1232,7 +1235,10 @@ tree.*
       Status: Partial: Dependabot is configured (weekly, cargo and actions, `tpt-*`
       grouped). `typos` is configured (`_typos.toml`), the tree is clean, and a CI
       job runs it. That job uses `crate-ci/typos@master`, which should be pinned to a
-      release tag. Not done: release-plz, proptest, cargo-fuzz, taplo.
+      release tag. `proptest` is a workspace dev-dependency, with property tests for
+      `exact` (rational ring laws, interval enclosure of sums) and `symbolic`
+      (simplification preserves value and is idempotent). Not done: release-plz,
+      cargo-fuzz (symbolic, exact), taplo.
 - [ ] `[package.metadata.docs.rs]` (`all-features`, `docsrs` cfg) in each
       crate; feature tables in READMEs; examples for geometry/spatial,
       graph, signal, sparse/complex linalg, `no_std`
