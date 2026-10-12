@@ -1207,7 +1207,8 @@ tree.*
 - [x] Top-level `tpt-math` facade crate with `prelude` and short feature names
       Status: Done: `crates/tpt-math` re-exports each area behind a short feature
       (nothing on by default, `full` for all), with a feature-gated prelude. It is
-      not published. Confirm the crates.io name is free before publishing.
+      not published. The crates.io name `tpt-math` returned 404 (free) on the check made
+      in this session. Recheck just before publishing.
 
 ### 7.5 Repo hygiene, CI and automation
 
