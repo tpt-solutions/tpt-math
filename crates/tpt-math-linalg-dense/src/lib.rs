@@ -643,6 +643,49 @@ macro_rules! impl_assign_ops {
 impl_assign_ops!(DVector);
 impl_assign_ops!(DMatrix);
 
+#[cfg(feature = "rayon")]
+impl DMatrix<f64> {
+    /// Matrix product `self · rhs`, with output columns computed in parallel.
+    ///
+    /// Each column is accumulated in the same order as the serial product, so
+    /// the result is bitwise equal to the serial scalar product. Without the `simd`
+    /// feature that is `self * rhs`; with it, `*` uses a BLAS kernel that
+    /// reassociates sums, so the two can differ by a few ulps. Only `f64` is
+    /// parallelised: the generic `Mul` impls cannot require `Send + Sync`
+    /// without breaking existing callers.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the inner dimensions do not match.
+    pub fn par_mul(&self, rhs: &DMatrix<f64>) -> DMatrix<f64> {
+        use rayon::prelude::*;
+
+        assert_eq!(
+            self.ncols, rhs.nrows,
+            "inner dimensions do not match: {}x{} * {}x{}",
+            self.nrows, self.ncols, rhs.nrows, rhs.ncols
+        );
+        let (m, k, n) = (self.nrows, self.ncols, rhs.ncols);
+        let mut data = vec![0.0; m * n];
+        if m > 0 {
+            data.par_chunks_mut(m).enumerate().for_each(|(j, out_col)| {
+                for kk in 0..k {
+                    let bkj = rhs.data[j * rhs.nrows + kk];
+                    let a_col = &self.data[kk * m..(kk + 1) * m];
+                    for (o, &aik) in out_col.iter_mut().zip(a_col) {
+                        *o += aik * bkj;
+                    }
+                }
+            });
+        }
+        DMatrix {
+            nrows: m,
+            ncols: n,
+            data,
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Matrix * matrix and matrix * vector
 // ---------------------------------------------------------------------------
@@ -2177,5 +2220,47 @@ mod lu_tolerance_tests {
         let zero = DMatrix::zeros(3, 3);
         assert!(Lu::with_relative_tolerance(&zero, 1e-10).is_err());
         assert!(Lu::with_pivot_tolerance(&zero, 0.0).is_err());
+    }
+}
+
+#[cfg(all(test, feature = "rayon"))]
+mod par_mul_tests {
+    use super::*;
+
+    #[test]
+    fn par_mul_is_bitwise_equal_to_serial_product() {
+        // Non-square shapes, including a single column and an empty result.
+        for &(m, k, n) in &[
+            (1usize, 1usize, 1usize),
+            (3, 5, 2),
+            (17, 9, 23),
+            (64, 64, 64),
+        ] {
+            let a = DMatrix::from_fn(m, k, |i, j| ((i * 7 + j * 3) as f64).sin());
+            let b = DMatrix::from_fn(k, n, |i, j| ((i * 5 + j) as f64).cos() * 1e-3);
+            // Serial reference in the same accumulation order as `par_mul`. Not
+            // `*`: with the `simd` feature that goes through a reassociating BLAS kernel.
+            // Column-major reference, accumulated in the same order as `par_mul`.
+            let mut reference = vec![0.0; m * n];
+            for j in 0..n {
+                for kk in 0..k {
+                    for i in 0..m {
+                        reference[j * m + i] += a[(i, kk)] * b[(kk, j)];
+                    }
+                }
+            }
+            assert_eq!(
+                a.par_mul(&b).as_slice(),
+                reference.as_slice(),
+                "shape {m}x{k}x{n}"
+            );
+        }
+    }
+
+    #[test]
+    fn par_mul_handles_empty_output() {
+        let a = DMatrix::<f64>::zeros(0, 3);
+        let b = DMatrix::<f64>::zeros(3, 4);
+        assert_eq!(a.par_mul(&b).nrows(), 0);
     }
 }

@@ -16,8 +16,14 @@ categories = ["mathematics", "science", "algorithms", "simulation"]
 [dependencies]
 tpt-math-prob-core = { workspace = true, features = ["std"] }
 
+[dependencies.rayon]
+workspace = true
+optional = true
+
 [features]
 default = []
+# Parallel `integrate_par`. Results depend only on the seed, not the thread count.
+rayon = ["dep:rayon"]
 
 
 [lints]

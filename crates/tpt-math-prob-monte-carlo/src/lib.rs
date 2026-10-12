@@ -232,6 +232,83 @@ where
     ImportanceSampling::new(target, proposal_density).estimate(rng, proposal, h, n)
 }
 
+/// Number of independent random streams used by [`integrate_par`].
+///
+/// Fixed, so that the result depends only on the seed and `n`, never on how many
+/// threads run the chunks.
+#[cfg(feature = "rayon")]
+const PAR_CHUNKS: usize = 64;
+
+/// Parallel [`integrate`] over `PAR_CHUNKS` independent `SplitMix64` streams.
+///
+/// Chunk `i` draws from a stream seeded by `seed` and `i`, and the per-chunk
+/// Welford summaries are merged in chunk order with Chan et al.'s pairwise
+/// formula. The output is therefore a function of `(seed, a, b, n)` only: running
+/// with one thread or many gives the same bits. It is a different sample from
+/// [`integrate`] with the same seed, so compare the two statistically, not bitwise.
+///
+/// # Examples
+///
+/// ```
+/// use tpt_math_prob_monte_carlo::integrate_par;
+///
+/// // ∫_0^1 x^2 dx = 1/3
+/// let (mean, stderr) = integrate_par(7, |x| x * x, 0.0, 1.0, 200_000);
+/// assert!((mean - 1.0 / 3.0).abs() < 10.0 * stderr);
+/// ```
+#[cfg(feature = "rayon")]
+pub fn integrate_par<F>(seed: u64, f: F, a: f64, b: f64, n: usize) -> (f64, f64)
+where
+    F: Fn(f64) -> f64 + Sync,
+{
+    use rayon::prelude::*;
+    use tpt_math_prob_core::SplitMix64;
+
+    if n == 0 {
+        return (0.0, 0.0);
+    }
+    let width = b - a;
+    // Split n as evenly as possible: the first `n % PAR_CHUNKS` chunks get one more.
+    let chunk_len = |i: usize| n / PAR_CHUNKS + usize::from(i < n % PAR_CHUNKS);
+
+    // Each chunk returns (count, mean, m2) of its values of f.
+    let summaries: Vec<(usize, f64, f64)> = (0..PAR_CHUNKS)
+        .into_par_iter()
+        .map(|i| {
+            let stream = seed.wrapping_add((i as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15));
+            let mut rng = SplitMix64::seed_from_u64(stream);
+            let mut mean_f = 0.0;
+            let mut m2 = 0.0;
+            let len = chunk_len(i);
+            for k in 1..=len {
+                let u: f64 = Standard.sample(&mut rng);
+                let y = f(a + width * u);
+                let delta = y - mean_f;
+                mean_f += delta / (k as f64);
+                m2 += delta * (y - mean_f);
+            }
+            (len, mean_f, m2)
+        })
+        .collect();
+
+    // Merge in index order so the floating-point result is fixed.
+    let (mut count, mut mean_f, mut m2) = (0usize, 0.0_f64, 0.0_f64);
+    for (len, mean_c, m2_c) in summaries {
+        if len == 0 {
+            continue;
+        }
+        let total = (count + len) as f64;
+        let delta = mean_c - mean_f;
+        mean_f += delta * (len as f64) / total;
+        m2 += m2_c + delta * delta * (count as f64) * (len as f64) / total;
+        count += len;
+    }
+    let var_f = if n > 1 { m2 / ((n - 1) as f64) } else { 0.0 };
+    let mean = width * mean_f;
+    let stderr = width * (var_f / (n as f64)).sqrt();
+    (mean, stderr)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -336,5 +413,44 @@ mod tests {
         let mut rng = SplitMix64::seed_from_u64(21);
         let (mean, _) = integrate(&mut rng, |x| x, 0.0, 10.0, 200_000);
         assert!((mean - 50.0).abs() < 2.0);
+    }
+}
+
+#[cfg(all(test, feature = "rayon"))]
+mod par_tests {
+    use super::*;
+
+    #[test]
+    fn parallel_integral_is_deterministic_for_a_seed() {
+        let f = |x: f64| x.sin();
+        let first = integrate_par(42, f, 0.0, core::f64::consts::PI, 50_000);
+        let second = integrate_par(42, f, 0.0, core::f64::consts::PI, 50_000);
+        assert_eq!(first, second);
+    }
+
+    #[test]
+    fn parallel_integral_agrees_with_exact_value() {
+        // ∫_0^π sin x dx = 2
+        let (mean, stderr) = integrate_par(9, f64::sin, 0.0, core::f64::consts::PI, 400_000);
+        assert!((mean - 2.0).abs() < 10.0 * stderr, "{mean} ± {stderr}");
+    }
+
+    #[test]
+    fn result_does_not_depend_on_thread_count() {
+        let run = |threads: usize| {
+            rayon::ThreadPoolBuilder::new()
+                .num_threads(threads)
+                .build()
+                .unwrap()
+                .install(|| integrate_par(5, |x: f64| (3.0 * x).exp(), 0.0, 1.0, 30_000))
+        };
+        assert_eq!(run(1), run(4));
+    }
+
+    #[test]
+    fn parallel_integral_handles_small_and_zero_n() {
+        assert_eq!(integrate_par(1, |x| x, 0.0, 1.0, 0), (0.0, 0.0));
+        let (mean, _) = integrate_par(1, |_| 3.0, 0.0, 1.0, 5);
+        assert!((mean - 3.0).abs() < 1e-12);
     }
 }

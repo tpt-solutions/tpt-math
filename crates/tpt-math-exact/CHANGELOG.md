@@ -6,6 +6,11 @@ All notable changes to this crate are documented here. Format based on
 
 ## [Unreleased]
 
+### Added
+
+- `roots` module: `isolate_roots` bisects on an interval extension and returns boxes that provably contain every root. `poly_enclosure` builds a valid extension for a polynomial. `poly_eval` and `has_sign_change` give point evaluation and a Bolzano certificate.
+
+
 ### Changed
 
 - `Interval` addition and subtraction use two endpoint operations each (`[a+c, b+d]` and `[a-d, b-c]`) instead of the four-corner min/max used for products.

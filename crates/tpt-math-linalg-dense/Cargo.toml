@@ -15,6 +15,8 @@ categories = ["mathematics", "science", "algorithms", "no-std"]
 
 [dependencies]
 tpt-math-numeric = { workspace = true, default-features = false }
+# Parallel f64 matrix product (`DMatrix::par_mul`). Needs std.
+rayon = { workspace = true, optional = true }
 # Optional SIMD kernels (see the `simd` feature). Path dependency on the sibling
 # tpt-simd repo until tpt-simd is published; needs Rust 1.85+ (edition 2024).
 tpt-simd-blas = { path = "../../../tpt-simd/tpt-simd-blas", version = "0.1.0", optional = true, default-features = false, features = ["alloc"] }
@@ -31,6 +33,8 @@ alloc = ["tpt-math-numeric/alloc"]
 # loops by a few ulps (tpt-simd ADR 0003, tier 2). Adds a `T: 'static` bound to
 # those operations. Enable `simd-runtime` to detect AVX2+FMA at run time.
 simd = ["alloc", "dep:tpt-simd-blas"]
+# Multi-threaded `DMatrix::<f64>::par_mul`. Results are bitwise equal to `*`.
+rayon = ["std", "dep:rayon"]
 simd-runtime = ["simd", "tpt-simd-blas/runtime-dispatch"]
 
 [dev-dependencies]

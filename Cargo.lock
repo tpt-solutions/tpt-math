@@ -1036,6 +1036,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "tpt-math"
+version = "0.1.0"
+dependencies = [
+ "tpt-math-autodiff",
+ "tpt-math-exact",
+ "tpt-math-geometry",
+ "tpt-math-graph",
+ "tpt-math-interpolate",
+ "tpt-math-linalg",
+ "tpt-math-numeric",
+ "tpt-math-optimize",
+ "tpt-math-prob",
+ "tpt-math-signal",
+ "tpt-math-spatial",
+ "tpt-math-stats",
+ "tpt-math-symbolic",
+ "tpt-math-units",
+]
+
+[[package]]
 name = "tpt-math-autodiff"
 version = "0.1.0"
 dependencies = [
@@ -1138,6 +1158,7 @@ name = "tpt-math-linalg-dense"
 version = "0.1.0"
 dependencies = [
  "criterion",
+ "rayon",
  "tpt-math-numeric",
  "tpt-simd-blas",
 ]
@@ -1236,6 +1257,7 @@ dependencies = [
 name = "tpt-math-prob-monte-carlo"
 version = "0.1.0"
 dependencies = [
+ "rayon",
  "tpt-math-prob-core",
 ]
 

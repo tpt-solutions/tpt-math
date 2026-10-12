@@ -9,6 +9,11 @@ and this project adheres to SemVer.
 
 ### Added
 
+- `DMatrix::<f64>::par_mul` behind the new `rayon` feature: the product with output columns computed in parallel. The result is bitwise equal to the serial scalar product (without the `simd` feature, that is `*`).
+
+
+### Added
+
 - `Lu::with_pivot_tolerance(m, tol)`: LU with an explicit absolute pivot threshold. `tol = 0` accepts any non-zero finite pivot. The default `Lu::new` keeps its `1e-12` threshold.
 - `Lu::with_relative_tolerance(m, rel)`: scale-invariant singularity test (threshold `rel` times the largest entry). A zero matrix is always rejected.
 

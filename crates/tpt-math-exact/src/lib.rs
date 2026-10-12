@@ -19,6 +19,8 @@ extern crate alloc;
 pub use num_bigint::{BigInt, BigUint};
 pub use num_rational::BigRational;
 pub use tpt_math_numeric as numeric;
+
+pub mod roots;
 use tpt_math_numeric::FromPrimitive;
 
 /// Exact rational number type alias.

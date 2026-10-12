@@ -1099,6 +1099,9 @@ tree.*
       `filter` to 1e-10. The real-FFT path is `Fft::rfft`/`irfft` in `signal-fft`,
       and the filter uses it.
 - [ ] Optional `rayon` feature: Monte Carlo, FIR, GEMM
+      Status: Partial: `rayon` features for Monte Carlo (`integrate_par`, seeded and
+      thread-count independent) and f64 GEMM (`DMatrix::par_mul`, bitwise equal to
+      the serial scalar product). FIR is left serial, per the recommendation: overlap-add is already fast.
 - [ ] Criterion benches for every numeric crate (only 5 have any); scheduled
       regression run in CI
       Status: Partial: benches added for sparse solvers and FIR filtering (direct
@@ -1177,6 +1180,10 @@ tree.*
       `tpt-math-autodiff/tests/differential.rs` (no new proptest dependency).
       It found and fixed a `num-bigint` version split in `tpt-math-exact`.
 - [ ] Interval / error-bounded solvers built on `tpt-math-exact::Interval`
+      Status: Partial: `tpt-math-exact::roots` isolates the roots of a scalar
+      function by interval bisection, with a polynomial extension and a sign-change
+      certificate. Not done: interval Newton (it needs interval division), and
+      error-bounded ODE or system solvers.
       (for `tpt-formal`)
 - [ ] Units-aware optimise / ODE / autodiff via `units-dyn` + generic scalars
 - [ ] Common `SolveReport { status, iters, residual }` across sparse, convex
@@ -1187,7 +1194,10 @@ tree.*
       for every outcome. The convex solver reports `iterations` on `QpSolution` but
       not as a `SolveReport`, because its failures carry a reason string that does
       not fit `SolveStatus`. Not done: the general optimizers.
-- [ ] Top-level `tpt-math` facade crate with `prelude` and short feature names
+- [x] Top-level `tpt-math` facade crate with `prelude` and short feature names
+      Status: Done: `crates/tpt-math` re-exports each area behind a short feature
+      (nothing on by default, `full` for all), with a feature-gated prelude. It is
+      not published. Confirm the crates.io name is free before publishing.
 
 ### 7.5 Repo hygiene, CI and automation
 

@@ -1,0 +1,72 @@
+[package]
+name = "tpt-math"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "Facade: one dependency for the tpt-math numeric substrate, with short feature names and a prelude."
+readme = "README.md"
+repository.workspace = true
+homepage.workspace = true
+documentation = "https://docs.rs/tpt-math"
+keywords = ["math", "numerics", "linear-algebra", "probability", "optimization"]
+categories = ["mathematics", "science", "algorithms"]
+
+[dependencies]
+tpt-math-numeric = { workspace = true, optional = true }
+tpt-math-units = { workspace = true, optional = true }
+tpt-math-linalg = { workspace = true, optional = true }
+tpt-math-exact = { workspace = true, optional = true }
+tpt-math-prob = { workspace = true, optional = true }
+tpt-math-stats = { workspace = true, optional = true }
+tpt-math-autodiff = { workspace = true, optional = true }
+tpt-math-optimize = { workspace = true, optional = true }
+tpt-math-signal = { workspace = true, optional = true }
+tpt-math-symbolic = { workspace = true, optional = true }
+tpt-math-geometry = { workspace = true, optional = true }
+tpt-math-spatial = { workspace = true, optional = true }
+tpt-math-graph = { workspace = true, optional = true }
+tpt-math-interpolate = { workspace = true, optional = true }
+
+# Short feature names. Nothing is enabled by default, so a dependency pulls in
+# only what it names. `full` enables every area.
+[features]
+default = []
+numeric = ["dep:tpt-math-numeric"]
+units = ["dep:tpt-math-units"]
+linalg = ["dep:tpt-math-linalg"]
+exact = ["dep:tpt-math-exact"]
+prob = ["dep:tpt-math-prob"]
+stats = ["dep:tpt-math-stats"]
+autodiff = ["dep:tpt-math-autodiff"]
+optimize = ["dep:tpt-math-optimize"]
+signal = ["dep:tpt-math-signal"]
+symbolic = ["dep:tpt-math-symbolic"]
+geometry = ["dep:tpt-math-geometry"]
+spatial = ["dep:tpt-math-spatial"]
+graph = ["dep:tpt-math-graph"]
+interpolate = ["dep:tpt-math-interpolate"]
+full = [
+    "numeric",
+    "units",
+    "linalg",
+    "exact",
+    "prob",
+    "stats",
+    "autodiff",
+    "optimize",
+    "signal",
+    "symbolic",
+    "geometry",
+    "spatial",
+    "graph",
+    "interpolate",
+]
+
+[lints]
+workspace = true
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
