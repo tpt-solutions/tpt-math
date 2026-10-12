@@ -508,6 +508,142 @@ impl<T: Scalar> Sub<T> for DMatrix<T> {
 }
 
 // ---------------------------------------------------------------------------
+// In-place operators and `*_into` products (no allocation)
+// ---------------------------------------------------------------------------
+
+impl<T: Scalar> DVector<T> {
+    /// `self ← self + α·x` in place.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the lengths differ.
+    pub fn axpy(&mut self, alpha: T, x: &DVector<T>) {
+        assert_eq!(self.len(), x.len(), "axpy: length mismatch");
+        for (s, &xi) in self.data.iter_mut().zip(&x.data) {
+            *s = *s + alpha * xi;
+        }
+    }
+}
+
+impl<T: Scalar> DMatrix<T> {
+    /// `self ← self + α·x` in place.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the shapes differ.
+    pub fn axpy(&mut self, alpha: T, x: &DMatrix<T>) {
+        assert_eq!(
+            (self.nrows, self.ncols),
+            (x.nrows, x.ncols),
+            "axpy: shape mismatch"
+        );
+        for (s, &xi) in self.data.iter_mut().zip(&x.data) {
+            *s = *s + alpha * xi;
+        }
+    }
+
+    /// `y ← self · x`, written into the caller's buffer `y`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `x.len() != self.ncols()` or `y.len() != self.nrows()`.
+    pub fn mul_vector_into(&self, x: &DVector<T>, y: &mut DVector<T>) {
+        assert_eq!(
+            self.ncols,
+            x.len(),
+            "mul_vector_into: column/vector mismatch"
+        );
+        assert_eq!(
+            self.nrows,
+            y.len(),
+            "mul_vector_into: output length mismatch"
+        );
+        // Column-oriented accumulation: each column of `self` is contiguous.
+        for o in y.data.iter_mut() {
+            *o = T::zero();
+        }
+        for (k, &xk) in x.data.iter().enumerate() {
+            let col = &self.data[k * self.nrows..(k + 1) * self.nrows];
+            for (o, &aik) in y.data.iter_mut().zip(col) {
+                *o = *o + aik * xk;
+            }
+        }
+    }
+
+    /// `out ← self · rhs`, written into the caller's buffer `out`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the inner dimensions do not match or `out` is not
+    /// `self.nrows() × rhs.ncols()`.
+    pub fn mul_matrix_into(&self, rhs: &DMatrix<T>, out: &mut DMatrix<T>) {
+        assert_eq!(
+            self.ncols, rhs.nrows,
+            "mul_matrix_into: inner dimension mismatch"
+        );
+        assert_eq!(
+            (out.nrows, out.ncols),
+            (self.nrows, rhs.ncols),
+            "mul_matrix_into: output shape mismatch"
+        );
+        let m = self.nrows;
+        for j in 0..rhs.ncols {
+            let out_col = &mut out.data[j * m..(j + 1) * m];
+            for o in out_col.iter_mut() {
+                *o = T::zero();
+            }
+            for kk in 0..self.ncols {
+                let bkj = rhs.data[j * rhs.nrows + kk];
+                let a_col = &self.data[kk * m..(kk + 1) * m];
+                for (o, &aik) in out_col.iter_mut().zip(a_col) {
+                    *o = *o + aik * bkj;
+                }
+            }
+        }
+    }
+}
+
+macro_rules! impl_assign_ops {
+    ($type:ident) => {
+        impl<T: Scalar> core::ops::AddAssign<&$type<T>> for $type<T> {
+            /// # Panics
+            ///
+            /// Panics on a shape mismatch.
+            fn add_assign(&mut self, rhs: &$type<T>) {
+                self.axpy(T::one(), rhs);
+            }
+        }
+
+        impl<T: Scalar> core::ops::SubAssign<&$type<T>> for $type<T> {
+            /// # Panics
+            ///
+            /// Panics on a shape mismatch.
+            fn sub_assign(&mut self, rhs: &$type<T>) {
+                self.axpy(-T::one(), rhs);
+            }
+        }
+
+        impl<T: Scalar> core::ops::MulAssign<T> for $type<T> {
+            fn mul_assign(&mut self, rhs: T) {
+                for s in self.data.iter_mut() {
+                    *s = *s * rhs;
+                }
+            }
+        }
+
+        impl<T: Scalar> core::ops::DivAssign<T> for $type<T> {
+            fn div_assign(&mut self, rhs: T) {
+                for s in self.data.iter_mut() {
+                    *s = *s / rhs;
+                }
+            }
+        }
+    };
+}
+impl_assign_ops!(DVector);
+impl_assign_ops!(DMatrix);
+
+// ---------------------------------------------------------------------------
 // Matrix * matrix and matrix * vector
 // ---------------------------------------------------------------------------
 
@@ -1890,5 +2026,76 @@ mod decomposition_tests {
             DMatrix::zeros(2, 3).matrix_exp(),
             Err(DenseError::DimensionMismatch { .. })
         ));
+    }
+}
+
+#[cfg(test)]
+mod in_place_tests {
+    use super::*;
+
+    #[test]
+    fn vector_compound_assignments() {
+        let mut v = DVector::from_row_slice(&[1.0_f64, 2.0, 3.0]);
+        let w = DVector::from_row_slice(&[10.0_f64, 20.0, 30.0]);
+        v += &w;
+        assert_eq!(v, DVector::from_row_slice(&[11.0, 22.0, 33.0]));
+        v -= &w;
+        assert_eq!(v, DVector::from_row_slice(&[1.0, 2.0, 3.0]));
+        v *= 2.0;
+        assert_eq!(v, DVector::from_row_slice(&[2.0, 4.0, 6.0]));
+        v /= 4.0;
+        assert_eq!(v, DVector::from_row_slice(&[0.5, 1.0, 1.5]));
+    }
+
+    #[test]
+    fn axpy_updates_in_place() {
+        let mut v = DVector::from_row_slice(&[1.0_f64, 1.0]);
+        v.axpy(3.0, &DVector::from_row_slice(&[2.0, -1.0]));
+        assert_eq!(v, DVector::from_row_slice(&[7.0, -2.0]));
+
+        let mut m = DMatrix::from_row_slice(2, 2, &[1.0_f64, 0.0, 0.0, 1.0]);
+        m.axpy(-2.0, &DMatrix::from_row_slice(2, 2, &[1.0, 2.0, 3.0, 4.0]));
+        assert_eq!(m, DMatrix::from_row_slice(2, 2, &[-1.0, -4.0, -6.0, -7.0]));
+    }
+
+    #[test]
+    fn matrix_compound_assignments() {
+        let mut m = DMatrix::from_row_slice(2, 2, &[1.0_f64, 2.0, 3.0, 4.0]);
+        let n = DMatrix::from_row_slice(2, 2, &[1.0_f64, 1.0, 1.0, 1.0]);
+        m += &n;
+        m -= &n;
+        assert_eq!(m, DMatrix::from_row_slice(2, 2, &[1.0, 2.0, 3.0, 4.0]));
+        m *= 0.5;
+        assert_eq!(m, DMatrix::from_row_slice(2, 2, &[0.5, 1.0, 1.5, 2.0]));
+    }
+
+    #[test]
+    fn mul_vector_into_matches_operator_and_overwrites_buffer() {
+        let a = DMatrix::from_row_slice(2, 3, &[1.0_f64, 2.0, 3.0, 4.0, 5.0, 6.0]);
+        let x = DVector::from_row_slice(&[1.0, -1.0, 2.0]);
+        let mut y = DVector::from_row_slice(&[99.0, 99.0]);
+        a.mul_vector_into(&x, &mut y);
+        assert_eq!(y, a.clone() * x);
+    }
+
+    #[test]
+    fn mul_matrix_into_matches_operator_and_overwrites_buffer() {
+        let a = DMatrix::from_row_slice(2, 3, &[1.0_f64, 2.0, 3.0, 4.0, 5.0, 6.0]);
+        let b = DMatrix::from_row_slice(3, 2, &[7.0_f64, 8.0, 9.0, 10.0, 11.0, 12.0]);
+        let mut out = DMatrix::from_row_slice(2, 2, &[5.0_f64; 4]);
+        a.mul_matrix_into(&b, &mut out);
+        assert_eq!(out, a.clone() * b.clone());
+        assert_eq!(
+            out,
+            DMatrix::from_row_slice(2, 2, &[58.0, 64.0, 139.0, 154.0])
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "output shape mismatch")]
+    fn mul_matrix_into_rejects_wrong_output_shape() {
+        let a = DMatrix::from_row_slice(2, 2, &[1.0_f64, 0.0, 0.0, 1.0]);
+        let mut out = DMatrix::zeros(3, 2);
+        a.mul_matrix_into(&a.clone(), &mut out);
     }
 }

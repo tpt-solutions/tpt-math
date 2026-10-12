@@ -215,8 +215,12 @@ pub fn student_t_pdf(nu: f64, x: f64) -> f64 {
 
 /// Cumulative distribution function of Student's t distribution.
 ///
-/// `P(T ≤ x) = 1 − ½·I_{ν/(ν+x²)}(ν/2, ½)` for `x ≥ 0`, by symmetry otherwise.
-/// The incomplete beta keeps the tail accurate.
+/// `P(T ≤ x) = ½ + sign(x)·½·I_w(½, ν/2)` with `w = x²/(x² + ν)`.
+///
+/// This uses `P(|T| ≤ |x|) = I_w(½, ν/2)`, so the small-`x` region, which is
+/// the centre of the distribution, is evaluated where the incomplete beta is
+/// small and accurate. The form `1 − ½·I_{ν/(ν+x²)}(ν/2, ½)` instead needs the
+/// argument `ν/(ν+x²)`, which rounds to 1 for small `x` and loses the centre.
 pub fn student_t_cdf(nu: f64, x: f64) -> f64 {
     if !is_positive(nu) || x.is_nan() {
         return f64::NAN;
@@ -224,11 +228,19 @@ pub fn student_t_cdf(nu: f64, x: f64) -> f64 {
     if x.is_infinite() {
         return if x > 0.0 { 1.0 } else { 0.0 };
     }
-    let tail = 0.5 * regularized_incomplete_beta(nu / 2.0, 0.5, nu / (nu + x * x));
-    if x >= 0.0 {
-        1.0 - tail
+    // Two-sided tail probability P(|T| > |x|), evaluated in whichever form is
+    // accurate for this x: the direct one near the centre, and the complement
+    // (argument ν/(x²+ν) < ½) out in the tails.
+    let w = x * x / (x * x + nu);
+    let two_sided_tail = if w < 0.5 {
+        1.0 - regularized_incomplete_beta(0.5, nu / 2.0, w)
     } else {
-        tail
+        regularized_incomplete_beta(nu / 2.0, 0.5, nu / (x * x + nu))
+    };
+    if x >= 0.0 {
+        1.0 - 0.5 * two_sided_tail
+    } else {
+        0.5 * two_sided_tail
     }
 }
 
@@ -260,6 +272,157 @@ pub fn chi_squared_pdf(k: f64, x: f64) -> f64 {
 /// Cumulative distribution function of the chi-squared distribution.
 pub fn chi_squared_cdf(k: f64, x: f64) -> f64 {
     gamma_cdf(k / 2.0, 2.0, x)
+}
+
+/// Bisection for `x` with `cdf(x) = p`, given a bracket `lo ≤ x ≤ hi` with
+/// `cdf(lo) ≤ p ≤ cdf(hi)`. Runs until the midpoint no longer separates the
+/// bracket, so the result is accurate to the last bit of the representable
+/// interval, for any continuous CDF.
+fn bisect_cdf<F: Fn(f64) -> f64>(cdf: F, p: f64, mut lo: f64, mut hi: f64) -> f64 {
+    loop {
+        let mid = 0.5 * (lo + hi);
+        if !(mid > lo && mid < hi) {
+            break;
+        }
+        if cdf(mid) < p {
+            lo = mid;
+        } else {
+            hi = mid;
+        }
+    }
+    0.5 * (lo + hi)
+}
+
+/// Quantile of a distribution supported on `[0, ∞)`, by bisection on its CDF.
+/// `p` must lie in `(0, 1)`.
+fn quantile_nonnegative<F: Fn(f64) -> f64>(cdf: F, p: f64) -> f64 {
+    // Double the upper bracket until it passes p. The CDF tends to 1, so this
+    // terminates for any p < 1; the cap guards against a non-convergent CDF.
+    let mut hi = 1.0;
+    for _ in 0..2000 {
+        if cdf(hi) >= p {
+            return bisect_cdf(&cdf, p, 0.0, hi);
+        }
+        hi *= 2.0;
+    }
+    f64::NAN
+}
+
+/// Quantile of a distribution on the whole real line, by bisection on its CDF.
+/// `p` must lie in `(0, 1)`.
+fn quantile_real<F: Fn(f64) -> f64>(cdf: F, p: f64) -> f64 {
+    // Expand the bracket outward on both sides until it straddles p.
+    let mut lo = -1.0;
+    let mut hi = 1.0;
+    for _ in 0..2000 {
+        if cdf(lo) <= p && cdf(hi) >= p {
+            return bisect_cdf(&cdf, p, lo, hi);
+        }
+        if cdf(lo) > p {
+            lo *= 2.0;
+        }
+        if cdf(hi) < p {
+            hi *= 2.0;
+        }
+    }
+    f64::NAN
+}
+
+/// Quantile of the gamma distribution with shape `k` and scale `θ`.
+///
+/// Computed by bisection on [`gamma_cdf`]. `p = 0` gives `0` and `p = 1` gives
+/// `∞`.
+pub fn gamma_quantile(shape: f64, scale: f64, p: f64) -> f64 {
+    if !is_positive(shape) || !is_positive(scale) || !(0.0..=1.0).contains(&p) {
+        return f64::NAN;
+    }
+    if p == 0.0 {
+        return 0.0;
+    }
+    if p == 1.0 {
+        return f64::INFINITY;
+    }
+    scale * quantile_nonnegative(|x| gamma_p(shape, x), p)
+}
+
+/// Quantile of the beta distribution on `[0, 1]` with shape parameters `a`
+/// and `b`, by bisection on [`beta_cdf`].
+pub fn beta_quantile(a: f64, b: f64, p: f64) -> f64 {
+    if !is_positive(a) || !is_positive(b) || !(0.0..=1.0).contains(&p) {
+        return f64::NAN;
+    }
+    if p == 0.0 {
+        return 0.0;
+    }
+    if p == 1.0 {
+        return 1.0;
+    }
+    bisect_cdf(|x| beta_cdf(a, b, x), p, 0.0, 1.0)
+}
+
+/// Quantile of the chi-squared distribution with `k` degrees of freedom.
+pub fn chi_squared_quantile(k: f64, p: f64) -> f64 {
+    gamma_quantile(k / 2.0, 2.0, p)
+}
+
+/// Quantile of Student's t distribution with `nu` degrees of freedom, by
+/// bisection on [`student_t_cdf`]. `p = 0` gives `−∞` and `p = 1` gives `∞`.
+pub fn student_t_quantile(nu: f64, p: f64) -> f64 {
+    if !is_positive(nu) || !(0.0..=1.0).contains(&p) {
+        return f64::NAN;
+    }
+    if p == 0.0 {
+        return f64::NEG_INFINITY;
+    }
+    if p == 1.0 {
+        return f64::INFINITY;
+    }
+    quantile_real(|x| student_t_cdf(nu, x), p)
+}
+
+/// Quantile of the Cauchy distribution, `x₀ + s·tan(π(p − ½))` (closed form).
+pub fn cauchy_quantile(x0: f64, s: f64, p: f64) -> f64 {
+    if !is_positive(s) || !(0.0..=1.0).contains(&p) {
+        return f64::NAN;
+    }
+    if p == 0.0 {
+        return f64::NEG_INFINITY;
+    }
+    if p == 1.0 {
+        return f64::INFINITY;
+    }
+    x0 + s * (core::f64::consts::PI * (p - 0.5)).tan()
+}
+
+/// Smallest integer `k` with `P(X ≤ k) ≥ p` for a Poisson variable with rate
+/// `λ`, returned as a float so that `NaN` can mark invalid input.
+///
+/// Searches by doubling and then bisecting over the integers, using
+/// [`poisson_cdf`]. `p = 1` gives `∞`.
+pub fn poisson_quantile(lambda: f64, p: f64) -> f64 {
+    if !is_nonnegative(lambda) || !(0.0..=1.0).contains(&p) {
+        return f64::NAN;
+    }
+    if p == 1.0 {
+        return f64::INFINITY;
+    }
+    let mut hi: u64 = 1;
+    while poisson_cdf(lambda, hi) < p {
+        match hi.checked_mul(2) {
+            Some(next) => hi = next,
+            None => return f64::INFINITY,
+        }
+    }
+    let mut lo: u64 = 0;
+    while lo < hi {
+        let mid = lo + (hi - lo) / 2;
+        if poisson_cdf(lambda, mid) >= p {
+            hi = mid;
+        } else {
+            lo = mid + 1;
+        }
+    }
+    lo as f64
 }
 
 /// Mean and variance of Student's t, `(0, ν/(ν−2))`.
@@ -529,5 +692,122 @@ mod tests {
         assert!(close(sum, 1.0, 1e-12));
         assert_eq!(poisson_pmf(0.0, 0), 1.0);
         assert!(poisson_pmf(-1.0, 0).is_nan());
+    }
+}
+
+#[cfg(test)]
+mod quantile_tests {
+    use super::*;
+
+    fn close(a: f64, b: f64, tol: f64) -> bool {
+        (a - b).abs() <= tol
+    }
+
+    #[test]
+    fn gamma_with_shape_one_is_exponential() {
+        // Gamma(1, θ) is Exponential(rate 1/θ): quantile = −θ·ln(1 − p).
+        for &p in &[0.01, 0.3, 0.5, 0.9, 0.999] {
+            let q = gamma_quantile(1.0, 2.5, p);
+            assert!(close(q, -2.5 * (-p).ln_1p(), 1e-9), "p={p}: {q}");
+        }
+    }
+
+    #[test]
+    fn chi_squared_two_dof_is_exponential_with_mean_two() {
+        for &p in &[0.05, 0.5, 0.95] {
+            let q = chi_squared_quantile(2.0, p);
+            assert!(close(q, -2.0 * (-p).ln_1p(), 1e-9), "p={p}: {q}");
+        }
+    }
+
+    #[test]
+    fn beta_one_one_is_uniform() {
+        for &p in &[0.1, 0.5, 0.77] {
+            assert!(close(beta_quantile(1.0, 1.0, p), p, 1e-12));
+        }
+    }
+
+    #[test]
+    fn student_t_one_dof_is_cauchy() {
+        for &p in &[0.1, 0.5, 0.9, 0.975] {
+            let q = student_t_quantile(1.0, p);
+            assert!(
+                close(q, (core::f64::consts::PI * (p - 0.5)).tan(), 1e-8),
+                "p={p}: {q}"
+            );
+        }
+    }
+
+    #[test]
+    fn student_t_cdf_keeps_centre_and_left_tail_precise() {
+        // ν = 1 is Cauchy: F(x) = ½ + atan(x)/π. Check the centre, where the
+        // CDF is 0.5 + small, and the far left tail, where it is small.
+        let cauchy = |x: f64| 0.5 + x.atan() / core::f64::consts::PI;
+        for &x in &[1e-8, -1e-8, 0.3, -0.3, -1e4, -1e8] {
+            let got = student_t_cdf(1.0, x);
+            // For x < 0 the left tail is atan(1/|x|)/π; the sum ½ + atan(x)/π would
+            // cancel there and be the inaccurate side of the comparison.
+            let want = if x < 0.0 {
+                (1.0 / -x).atan() / core::f64::consts::PI
+            } else {
+                cauchy(x)
+            };
+            let rel = ((got - want) / want).abs();
+            assert!(rel < 1e-9, "x={x}: got {got}, want {want}, rel {rel}");
+        }
+    }
+
+    #[test]
+    fn student_t_matches_known_critical_value() {
+        // t₀.₉₇₅ with 4 dof is 2.776445 (two-sided 5 % critical value).
+        assert!(close(student_t_quantile(4.0, 0.975), 2.776_445, 1e-6));
+    }
+
+    #[test]
+    fn cauchy_quantile_is_closed_form_and_inverts_cdf() {
+        let q = cauchy_quantile(1.0, 2.0, 0.75);
+        assert!(close(q, 3.0, 1e-12));
+        assert!(close(cauchy_cdf(1.0, 2.0, q), 0.75, 1e-12));
+    }
+
+    #[test]
+    fn continuous_quantiles_invert_their_cdfs() {
+        for &p in &[1e-6, 0.02, 0.4, 0.8, 1.0 - 1e-6] {
+            let g = gamma_quantile(3.7, 0.8, p);
+            assert!(close(gamma_cdf(3.7, 0.8, g), p, 1e-9), "gamma p={p}");
+            let b = beta_quantile(0.6, 4.2, p);
+            assert!(close(beta_cdf(0.6, 4.2, b), p, 1e-9), "beta p={p}");
+            let t = student_t_quantile(7.0, p);
+            assert!(close(student_t_cdf(7.0, t), p, 1e-9), "t p={p}");
+        }
+    }
+
+    #[test]
+    fn poisson_quantile_is_smallest_k_reaching_p() {
+        // λ = 2: P(X ≤ 0) ≈ 0.1353, P(X ≤ 1) ≈ 0.4060, P(X ≤ 2) ≈ 0.6767.
+        assert_eq!(poisson_quantile(2.0, 0.1), 0.0);
+        assert_eq!(poisson_quantile(2.0, 0.2), 1.0);
+        assert_eq!(poisson_quantile(2.0, 0.5), 2.0);
+        // The defining property: the CDF at the quantile reaches p, and the
+        // CDF one step below does not.
+        for &p in &[0.01, 0.3, 0.9, 0.999] {
+            let k = poisson_quantile(12.5, p) as u64;
+            assert!(poisson_cdf(12.5, k) >= p);
+            if k > 0 {
+                assert!(poisson_cdf(12.5, k - 1) < p);
+            }
+        }
+    }
+
+    #[test]
+    fn quantiles_reject_invalid_input() {
+        assert!(gamma_quantile(-1.0, 1.0, 0.5).is_nan());
+        assert!(gamma_quantile(1.0, 1.0, 1.5).is_nan());
+        assert!(beta_quantile(1.0, 1.0, f64::NAN).is_nan());
+        assert!(student_t_quantile(0.0, 0.5).is_nan());
+        assert!(cauchy_quantile(0.0, 0.0, 0.5).is_nan());
+        assert!(poisson_quantile(-1.0, 0.5).is_nan());
+        assert_eq!(gamma_quantile(2.0, 1.0, 1.0), f64::INFINITY);
+        assert_eq!(student_t_quantile(3.0, 0.0), f64::NEG_INFINITY);
     }
 }

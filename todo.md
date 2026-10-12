@@ -1075,10 +1075,12 @@ tree.*
 
 ### 7.2 Performance
 
-- [ ] Dense: j-k-i matmul (contiguous columns); reusable `Lu` struct
+- [x] Dense: j-k-i matmul (contiguous columns); reusable `Lu` struct
       (factor once, solve many RHS); flat storage instead of `Vec<Vec<_>>`;
       in-place `+=` / `axpy` / `*_into` operators
-      Status: Partial: reusable `Lu` and the j-k-i matmul are done (`tpt-math-linalg-dense`). In-place operators are not. Dense storage is already a flat column-major `Vec`.
+      Status: Done: reusable `Lu`, the j-k-i matmul, in-place `+=`/`-=`/`*=`/`/=`
+      and `axpy`, and allocation-free `mul_vector_into`/`mul_matrix_into` in
+      `tpt-math-linalg-dense`. Dense storage is a flat column-major `Vec`.
 - [x] Sparse: `matvec_into`, in-place axpy in CG/BiCGSTAB, residual norm
       computed once per iteration, counting-sort transpose/convert
       Status: Done: `CsrMatrix::matvec_into`, residual norm once per iteration,
@@ -1138,11 +1140,11 @@ tree.*
       fill-reducing ordering), ILU(0) (`Ilu0`) and ILU-preconditioned GMRES
       (`gmres_ilu0`) are done. Sparse LU and IC(0) are not.
 - [x] `autodiff-fwd`: sqrt, powi/powf, tan, tanh, atan, abs, `Dual op scalar`
-- [ ] `prob-dist`: pdf / cdf / quantile / moments (currently sampling-only)
-      Status: Partial: `density` gives pdf/pmf, cdf and moments for Normal,
+- [x] `prob-dist`: pdf / cdf / quantile / moments (currently sampling-only)
+      Status: Done: `density` gives pdf/pmf, cdf, moments and quantiles for Normal,
       Exponential, Gamma, Beta, Uniform, Poisson, Student-t, Cauchy and chi-squared
-      (requires `std`), and quantiles for Normal, Exponential and Uniform. Quantiles
-      for the other families are not.
+      (requires `std`). Continuous quantiles without a closed form invert the CDF
+      by bisection; Poisson returns the smallest `k` with `P(X ≤ k) ≥ p`.
 - [ ] `symbolic`: like-term collection, more functions
       Status: Partial: `x/x` (taken as 1, undefined at 0), `x^0`, `x^1`, nested
       powers, fixpoint simplification and like-term collection are done. Additional

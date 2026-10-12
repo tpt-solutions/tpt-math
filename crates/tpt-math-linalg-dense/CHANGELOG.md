@@ -7,6 +7,11 @@ and this project adheres to SemVer.
 
 ## [Unreleased]
 
+### Added
+
+- In-place operators: `+=`/`-=` (with `&DVector`/`&DMatrix`), `*=`/`/=` by a scalar, and `axpy(α, x)` (`self ← self + α·x`) for `DVector` and `DMatrix`.
+- `DMatrix::mul_vector_into` and `DMatrix::mul_matrix_into`: products written into a caller-owned buffer, with no allocation.
+
 ### Changed
 
 - `DMatrix::from_vec`/`from_row_slice` panic when the data length is not `nrows * ncols`; `dot` panics on mismatched lengths; the generic matrix and matrix-vector products assert their inner dimensions.
