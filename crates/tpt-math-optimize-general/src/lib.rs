@@ -396,7 +396,7 @@ where
     }
 }
 
-/// Minimize a smooth objective with [`Newton`]'s method, using the analytic
+/// Minimize a smooth objective with `Newton`'s method, using the analytic
 /// Hessian.
 ///
 /// Newton converges quadratically near a minimum — a quadratic objective is

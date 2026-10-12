@@ -1,0 +1,16 @@
+# Dependency update PRs. Workspace-internal `tpt-*` crates are grouped so that a
+# related set of bumps lands as one PR instead of many.
+version: 2
+updates:
+  - package-ecosystem: cargo
+    directory: "/"
+    schedule:
+      interval: weekly
+    groups:
+      tpt-internal:
+        patterns:
+          - "tpt-*"
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly

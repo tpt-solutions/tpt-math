@@ -54,6 +54,23 @@ All workspace crates are `MIT OR Apache-2.0`. `deny.toml` enforces:
 When adding a new external wrap, confirm its license is on the allow-list before
 merging, and update the note in `deny.toml` if you add a new upstream family.
 
+## External `registry.toml` dependency
+
+Crate status and the `no_std` marking come from `../tpt-rust-map/registry.toml`,
+a file in a sibling repository. This repo does not vendor it. Two things depend
+on it:
+
+- `cargo xtask no-std` builds the crates in its `NO_STD_CRATES` list. That list
+  mirrors the `no_std = true` entries in `registry.toml`.
+- `cargo xtask drift` checks that `NO_STD_CRATES`, the crates declaring
+  `#![no_std]` in their `src/lib.rs`, and the README `no_std` column all agree.
+  It runs as part of `cargo xtask check`.
+
+`xtask` does not read `registry.toml` itself. The list is a hand-maintained
+mirror, so when you change a crate's `no_std` status, update the crate's
+`#![no_std]`, the `NO_STD_CRATES` entry, the README row and `registry.toml`
+together. `cargo xtask drift` catches the in-repo parts if one is missed.
+
 ## Adding a new crate
 
 1. Scaffold under `crates/<name>/` following the existing crates' layout.

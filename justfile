@@ -6,9 +6,14 @@
 default:
     @just --list
 
-# Run the full verification gate: fmt --check + clippy + cargo-deny.
+# Run the full verification gate: fmt --check + clippy + tests + doctests +
+# rustdoc (warnings denied) + no_std build + drift check + cargo-deny.
 check:
     cargo xtask check
+
+# Everything CI runs on every push. Also covers the feature-powerset and bench
+# jobs, which need cargo-hack and are run separately in CI.
+ci: check
 
 # Format the whole workspace.
 fmt:

@@ -21,7 +21,7 @@
 //! depend on it:
 //!
 //! * **Unbounded recursion in `simplify`.** Simplification is implemented as
-//!   straight structural recursion over the expression tree ([`simplify`]).
+//!   straight structural recursion over the expression tree (`simplify`).
 //!   It terminates for any finite, acyclic expression, but it is *not* guarded
 //!   against cyclic/self-referential input: building an expression that
 //!   contains itself (e.g. via `Rc`/interior mutability smuggled past the
@@ -33,7 +33,7 @@
 //! * **`f64` round-trip breaks exactness for transcendental functions.**
 //!   [`Coefficient`] values are rendered through [`fmt::Display`] and parsed
 //!   back via `f64` when evaluating functions such as `sin`/`cos`/`exp`
-//!   (see [`apply_func`]). For the default `f64` coefficient this is the
+//!   (see `apply_func`). For the default `f64` coefficient this is the
 //!   identity path and is fine, but it means *exact* coefficients (the `exact`
 //!   feature's `BigRational`) are first coerced to `f64`, losing precision and
 //!   making transcendental results approximate even when the inputs were

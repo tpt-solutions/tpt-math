@@ -5,8 +5,8 @@
 //! Descriptive statistics, hypothesis tests, and least-squares regression.
 //!
 //! This crate is the workspace's home for "classical" statistics. It implements
-//! its own distributions and special functions (see [`crate::dist`] and
-//! [`crate::special`]) behind a small, slice-oriented API that speaks plain
+//! its own distributions and special functions (see `crate::dist` and
+//! `crate::special`) behind a small, slice-oriented API that speaks plain
 //! `&[f64]` and returns plain tuples, so callers never have to build a
 //! distribution object just to get a p-value. No Apache-2.0 `statrs` dependency
 //! is pulled in.
@@ -80,8 +80,8 @@
 //!
 //! Anything outside the descriptive/hypothesis/regression surface is also
 //! available in-house (no Apache-2.0 `statrs` dependency): the special
-//! functions in [`special`] (error, gamma, beta and their regularized incomplete
-//! forms) and the distributions in [`dist`] (chi-squared, Student's t, normal).
+//! functions in `special` (error, gamma, beta and their regularized incomplete
+//! forms) and the distributions in `dist` (chi-squared, Student's t, normal).
 //!
 //! ```
 //! use tpt_math_stats::{ChiSquared, ContinuousCDF};

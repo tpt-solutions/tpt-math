@@ -32,7 +32,11 @@ enum Cmd {
     Deny,
     /// Build the `no_std = true` crates for `thumbv6m-none-eabi`.
     NoStd,
-    /// Comprehensive gate: fmt --check + clippy + deny.
+    /// Check that the no_std list, the crates declaring `#![no_std]`, and the
+    /// README `no_std` column agree.
+    Drift,
+    /// Full local gate, matching the CI jobs: fmt --check, clippy, tests,
+    /// doctests, no_std build, drift check and cargo-deny.
     Check,
 }
 
@@ -47,6 +51,14 @@ const NO_STD_CRATES: &[(&str, &str)] = &[
     ("tpt-math-prob-dist", "alloc"),
     ("tpt-math-prob-sampler", "alloc"),
     ("tpt-math-autodiff-fwd", "alloc"),
+    ("tpt-math-linalg-dense", "alloc"),
+    ("tpt-math-linalg-sparse", "alloc"),
+    ("tpt-math-linalg-complex", "alloc"),
+    ("tpt-math-linalg-fixed", ""),
+    ("tpt-math-geometry", ""),
+    ("tpt-math-spatial", ""),
+    ("tpt-math-graph", ""),
+    ("tpt-math-interpolate", "alloc"),
 ];
 
 const NO_STD_TARGET: &str = "thumbv6m-none-eabi";
@@ -74,6 +86,7 @@ fn run() -> Result<(), String> {
         Cmd::Test => cargo(&["test", "--workspace", "--all-features"]),
         Cmd::Deny => cargo_deny(&["check"]),
         Cmd::NoStd => no_std(),
+        Cmd::Drift => drift(),
         Cmd::Check => {
             cargo(&["fmt", "--all", "--", "--check"])?;
             cargo(&[
@@ -85,6 +98,14 @@ fn run() -> Result<(), String> {
                 "-D",
                 "warnings",
             ])?;
+            cargo(&["test", "--workspace", "--all-features"])?;
+            cargo(&["test", "--workspace", "--all-features", "--doc"])?;
+            cargo_with_env(
+                &["doc", "--workspace", "--no-deps", "--all-features"],
+                &[("RUSTDOCFLAGS", "-D warnings")],
+            )?;
+            no_std()?;
+            drift()?;
             cargo_deny(&["check"])?;
             Ok(())
         }
@@ -94,6 +115,19 @@ fn run() -> Result<(), String> {
 fn cargo(args: &[&str]) -> Result<(), String> {
     let status = Command::new("cargo")
         .args(args)
+        .status()
+        .map_err(|e| format!("failed to spawn cargo: {e}"))?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err(format!("`cargo {}` failed", args.join(" ")))
+    }
+}
+
+fn cargo_with_env(args: &[&str], envs: &[(&str, &str)]) -> Result<(), String> {
+    let status = Command::new("cargo")
+        .args(args)
+        .envs(envs.iter().copied())
         .status()
         .map_err(|e| format!("failed to spawn cargo: {e}"))?;
     if status.success() {
@@ -123,6 +157,72 @@ fn cargo_deny(args: &[&str]) -> Result<(), String> {
         Ok(())
     } else {
         Err(format!("`cargo deny {}` failed", args.join(" ")))
+    }
+}
+
+/// Compare three views of the `no_std` crate set and fail on any difference:
+///
+/// 1. crates whose `src/lib.rs` declares `#![no_std]`,
+/// 2. the `NO_STD_CRATES` list used by [`no_std`],
+/// 3. README table rows whose `no_std` column starts with `yes`.
+fn drift() -> Result<(), String> {
+    use std::collections::BTreeSet;
+    use std::fs;
+
+    let mut declared = BTreeSet::new();
+    let entries = fs::read_dir("crates").map_err(|e| format!("reading crates/: {e}"))?;
+    for entry in entries {
+        let entry = entry.map_err(|e| format!("reading crates/: {e}"))?;
+        let lib = entry.path().join("src").join("lib.rs");
+        let Ok(source) = fs::read_to_string(&lib) else {
+            continue;
+        };
+        if source.contains("#![no_std]") {
+            declared.insert(entry.file_name().to_string_lossy().into_owned());
+        }
+    }
+
+    let listed: BTreeSet<String> = NO_STD_CRATES
+        .iter()
+        .map(|(name, _)| (*name).to_string())
+        .collect();
+
+    let readme = fs::read_to_string("README.md").map_err(|e| format!("reading README.md: {e}"))?;
+    let mut documented = BTreeSet::new();
+    for line in readme.lines().filter(|l| l.starts_with("| `tpt-math-")) {
+        // Columns: "", crate, wraps, no_std, notes, "".
+        let cells: Vec<&str> = line.split('|').map(str::trim).collect();
+        if let (Some(name), Some(no_std)) = (cells.get(1), cells.get(3)) {
+            if no_std.starts_with("yes") {
+                documented.insert(name.trim_matches('`').to_string());
+            }
+        }
+    }
+
+    let mut problems = Vec::new();
+    for (label, other) in [
+        ("NO_STD_CRATES", &listed),
+        ("the README no_std column", &documented),
+    ] {
+        for name in declared.difference(other) {
+            problems.push(format!(
+                "{name} declares #![no_std] but is missing from {label}"
+            ));
+        }
+        for name in other.difference(&declared) {
+            problems.push(format!(
+                "{name} is listed in {label} but does not declare #![no_std]"
+            ));
+        }
+    }
+    if problems.is_empty() {
+        println!(
+            "no_std drift check: {} crates agree across all three sources",
+            declared.len()
+        );
+        Ok(())
+    } else {
+        Err(problems.join("\n"))
     }
 }
 

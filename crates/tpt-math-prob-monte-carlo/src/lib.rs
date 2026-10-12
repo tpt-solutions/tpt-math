@@ -10,7 +10,7 @@
 //! * [`ImportanceSampling`] for variance reduction via a change of measure.
 //!
 //! All routines are generic over [`Rng`] so they work with any generator,
-//! including the deterministic [`SplitMix64`] used throughout the tests.
+//! including the deterministic `SplitMix64` used throughout the tests.
 
 use std::vec::Vec;
 

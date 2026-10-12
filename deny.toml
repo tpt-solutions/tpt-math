@@ -1,6 +1,17 @@
 # cargo-deny configuration — license/security/dependency hygiene.
 # See https://embarkstudios.github.io/cargo-deny/
 
+[graph]
+# Only the platforms this workspace targets are checked. The bare-metal target
+# matters because the no_std crates must compile there.
+targets = [
+    "x86_64-unknown-linux-gnu",
+    "x86_64-pc-windows-msvc",
+    "aarch64-apple-darwin",
+    "thumbv6m-none-eabi",
+    "wasm32-unknown-unknown",
+]
+
 [advisories]
 version = 2
 yanked = "deny"
@@ -35,8 +46,12 @@ allow = [
 confidence-threshold = 0.9
 
 [bans]
-multiple-versions = "warn"
-wildcards = "allow"
+# Duplicate versions fail the build. `hashbrown` is the one exception: `petgraph`
+# and `indexmap` pin different majors, and both are needed. Remove the skip when
+# they converge.
+multiple-versions = "deny"
+skip = [{ crate = "hashbrown" }]
+wildcards = "deny"
 
 [sources]
 unknown-registry = "deny"

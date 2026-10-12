@@ -37,7 +37,7 @@ pub mod special;
 
 /// A source of pseudo-random bits.
 ///
-/// Implementors must provide [`next_u64`](Rng::next_u64); [`next_f64`] is
+/// Implementors must provide [`next_u64`](Rng::next_u64); `next_f64` is
 /// provided with a sensible default.
 pub trait Rng {
     /// Return the next 64 bits of pseudo-random output.

@@ -4,14 +4,14 @@
 //! Implemented from standard numerical recipes with no external dependency,
 //! so no Apache-2.0-only crate enters the workspace through them:
 //!
-//! * log-gamma ([`ln_gamma`]) via a 9-term Lanczos approximation, with the
+//! * log-gamma (`ln_gamma`) via a 9-term Lanczos approximation, with the
 //!   reflection formula for arguments below one half;
-//! * gamma and beta ([`gamma`], [`beta`], [`ln_beta`]) and their regularized
-//!   incomplete forms ([`gamma_p`], [`gamma_q`], [`regularized_incomplete_beta`]);
-//! * the error function ([`erf`], [`erfc`]) built on the incomplete gamma
+//! * gamma and beta (`gamma`, `beta`, `ln_beta`) and their regularized
+//!   incomplete forms (`gamma_p`, `gamma_q`, `regularized_incomplete_beta`);
+//! * the error function (`erf`, `erfc`) built on the incomplete gamma
 //!   function, so both tails keep relative precision;
 //! * the standard normal CDF, PDF and quantile;
-//! * combinatorial helpers ([`ln_binomial`], [`ln_factorial`]) and [`xlogy`].
+//! * combinatorial helpers (`ln_binomial`, `ln_factorial`) and `xlogy`.
 //!
 //! The series and continued fractions stop once they converge. If they exhaust
 //! their iteration budget they return `NaN` rather than an unconverged value.

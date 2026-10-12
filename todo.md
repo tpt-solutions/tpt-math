@@ -1183,18 +1183,32 @@ tree.*
 - [ ] CI MSRV job pinned to 1.84; resolve `simd` feature needing Rust 1.85+
       and the out-of-repo `tpt-simd-blas` path dependency that breaks
       `--all-features` and `cargo package`
-- [ ] README: `tpt-math-geometry` listed twice; `no_std` column disagrees
+- [x] README: `tpt-math-geometry` listed twice; `no_std` column disagrees
       with `NO_STD_CRATES` in `xtask` (8 crates) — extend the CI list or
       correct the README; add an xtask check that validates the README
       tables and the no-std list against `cargo metadata`
-      Status: Partial: the duplicate geometry row is removed. The `no_std` column and the `xtask` README check are not done.
+      Status: Done: `NO_STD_CRATES` now lists all 16 crates that declare `#![no_std]`
+      (the 8 missing ones build for `thumbv6m-none-eabi`). The README column matches.
+      `cargo xtask drift` compares the crate sources, the list and the README column
+      (it reads the sources and README directly rather than `cargo metadata`).
 - [ ] CI additions: rust-cache, `concurrency` cancel, `cargo doc` with
       `-D warnings`, cargo-semver-checks, coverage (llvm-cov), scheduled
       `cargo deny` / audit, wasm32 build, cargo-hack feature powerset for
       all crates, benches for every crate with a bench
-- [ ] Make `xtask check` equal CI; add `just ci`
+      Status: Partial: rust-cache, `concurrency` cancel, and a `docs` job with
+      `RUSTDOCFLAGS=-D warnings` are in. Doing that surfaced broken intra-doc links,
+      now fixed. Not done: cargo-semver-checks, coverage, scheduled audit, wasm32
+      build, powerset for all crates (it covers the 4 umbrellas only), benches for
+      every crate.
+- [x] Make `xtask check` equal CI; add `just ci`
+      Status: Done, with one exception: `cargo xtask check` runs fmt, clippy, tests,
+      doctests, rustdoc, the no_std build, the drift check and cargo-deny, matching
+      the CI jobs. The feature-powerset and bench-smoke jobs need `cargo-hack` and
+      are CI-only. `just ci` runs `check`.
 - [ ] Automation: release-plz (31-crate ordered publishing), Dependabot
       (group `tpt-*`), proptest, cargo-fuzz (symbolic, exact), typos, taplo
+      Status: Partial: Dependabot is configured (weekly, cargo and actions, `tpt-*`
+      grouped). Not done: release-plz, proptest, cargo-fuzz, typos, taplo.
 - [ ] `[package.metadata.docs.rs]` (`all-features`, `docsrs` cfg) in each
       crate; feature tables in READMEs; examples for geometry/spatial,
       graph, signal, sparse/complex linalg, `no_std`
@@ -1207,7 +1221,10 @@ tree.*
       still pins `num-traits = "0.2"` with default features, which differs from
       the workspace entry. Changing it would alter its feature set, so it was
       left alone.
-- [ ] `deny.toml`: set `[graph]` targets, tighten `wildcards`, enforce
+- [x] `deny.toml`: set `[graph]` targets, tighten `wildcards`, enforce
       `multiple-versions`; document the `registry.toml` external dependency
       in CONTRIBUTING.md
+      Status: Done: `[graph]` targets set; `wildcards = "deny"`; `multiple-versions = "deny"`
+      with one documented skip for `hashbrown` (`petgraph` and `indexmap` need
+      different majors); CONTRIBUTING has a section on the `registry.toml` dependency.
 
