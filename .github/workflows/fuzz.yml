@@ -17,7 +17,7 @@ jobs:
       matrix:
         target: [symbolic_simplify, exact_rational]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: ./.github/actions/checkout-tpt-simd
       - uses: dtolnay/rust-toolchain@nightly
       - uses: Swatinem/rust-cache@v2
