@@ -67,6 +67,7 @@ pub mod dimension;
 pub mod error;
 pub mod interop;
 pub mod quantity;
+pub mod solve;
 pub mod unit;
 
 pub use crate::dimension::{BaseDimension, Dimension, BASE_COUNT};

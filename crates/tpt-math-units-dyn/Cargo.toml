@@ -16,13 +16,29 @@ categories = ["mathematics", "science", "data-structures"]
 
 [dependencies]
 tpt-math-units = { workspace = true, features = ["std"] }
+tpt-math-numeric = { workspace = true, optional = true, features = ["std"] }
+tpt-math-optimize-general = { workspace = true, optional = true }
+tpt-math-autodiff-rev = { workspace = true, optional = true }
 
 [features]
 default = []
+# Units-aware ODE integration (`solve::dopri5_dimensioned`).
+ode = ["dep:tpt-math-numeric"]
+# Units-aware minimisation (`solve::minimize_dimensioned`).
+optimize = ["dep:tpt-math-optimize-general", "dep:tpt-math-numeric"]
+# Units-aware gradients (`solve::gradient_dimensioned`).
+autodiff = ["dep:tpt-math-autodiff-rev"]
 
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+criterion = { workspace = true }
+
+[[bench]]
+name = "units_dyn_bench"
+harness = false
 
 [package.metadata.docs.rs]
 all-features = true

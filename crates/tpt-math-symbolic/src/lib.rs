@@ -359,11 +359,14 @@ fn fold_add<C: Coefficient>(items: Vec<Expr<C>>) -> Expr<C> {
             None => groups.push((coef, base)),
         }
     }
-    let terms: Vec<Expr<C>> = groups
+    let mut terms: Vec<Expr<C>> = groups
         .into_iter()
         .filter(|(c, _)| !c.is_zero_value())
         .map(|(c, b)| join_coefficient(c, b))
         .collect();
+    // Sort by printed form, so the order does not depend on the input order. A
+    // second pass then reproduces the first pass's output (a normal form).
+    terms.sort_by_cached_key(|t| t.to_string());
     if terms.is_empty() {
         return Expr::Const(const_acc);
     }
@@ -438,6 +441,8 @@ fn fold_mul<C: Coefficient>(items: Vec<Expr<C>>) -> Expr<C> {
     if terms.is_empty() {
         return Expr::Const(const_acc);
     }
+    // Same canonical ordering as `fold_add`, for the same reason.
+    terms.sort_by_cached_key(|t| t.to_string());
     let mut iter = terms.into_iter();
     // Invariant-guarded: `terms` is non-empty because we early-returned above
     // when `terms.is_empty()`, so `iter.next()` is guaranteed `Some`.

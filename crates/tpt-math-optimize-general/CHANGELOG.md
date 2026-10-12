@@ -6,6 +6,11 @@ All notable changes to this crate are documented here. Format based on
 
 ## [Unreleased]
 
+### Fixed
+
+- `numerical_gradient` scales its step with the coordinate, `h · max(1, |xᵢ|)`. An absolute step rounded to zero far from the origin and reported a flat gradient, which made the optimiser declare false convergence. Results are unchanged for `|xᵢ| ≤ 1`.
+
+
 ### Added
 
 - `Solution::report()`, returning a `tpt_math_numeric::SolveReport`: `Converged`, `Breakdown` for a stalled line search, or `NotConverged`.

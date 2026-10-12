@@ -921,7 +921,8 @@ where
 }
 
 /// Central finite-difference approximation of the gradient of `cost` at `x`,
-/// with step `h` in each coordinate. Use it when no analytic gradient exists.
+/// with step `h · max(1, |xᵢ|)` in each coordinate. Use it when no analytic
+/// gradient exists.
 ///
 /// # Examples
 ///
@@ -942,14 +943,32 @@ where
     let mut probe = x.clone();
     for (i, gi) in g.iter_mut().enumerate() {
         let xi = x[i];
-        probe.as_mut_slice()[i] = xi + h;
+        // Scale the step with |xᵢ| so that the two probes stay distinct in floating
+        // point far from the origin. An absolute step rounds to zero there and
+        // reports a flat gradient.
+        let step = h * xi.abs().max(1.0);
+        probe.as_mut_slice()[i] = xi + step;
         let fp = cost(&probe);
-        probe.as_mut_slice()[i] = xi - h;
+        probe.as_mut_slice()[i] = xi - step;
         let fm = cost(&probe);
         probe.as_mut_slice()[i] = xi;
-        *gi = (fp - fm) / (2.0 * h);
+        *gi = (fp - fm) / (2.0 * step);
     }
     DVector::from_vec(g)
+}
+
+#[cfg(test)]
+mod numerical_gradient_scale_tests {
+    use super::*;
+
+    #[test]
+    fn gradient_is_resolved_far_from_the_origin() {
+        // d/dx (x) = 1 holds at every point, including |x| = 3e10, where an
+        // absolute step of 1e-6 would round to zero.
+        let cost = |p: &DVector<f64>| p[0];
+        let g = numerical_gradient(&cost, &DVector::from_vec(vec![-3.0e10]), 1e-6);
+        assert!((g[0] - 1.0).abs() < 1e-6, "{}", g[0]);
+    }
 }
 
 /// Minimize a derivative-free objective with the Nelder–Mead simplex method.

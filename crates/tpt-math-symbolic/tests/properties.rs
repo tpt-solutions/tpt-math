@@ -37,4 +37,11 @@ proptest! {
             }
         }
     }
+
+    #[test]
+    fn simplify_is_idempotent(e in expr_strategy()) {
+        let once = e.simplify();
+        let twice = once.clone().simplify();
+        prop_assert_eq!(once, twice);
+    }
 }

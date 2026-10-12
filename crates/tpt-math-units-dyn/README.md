@@ -19,12 +19,11 @@ crate; `tpt-math-units` is its only dependency.
 
 ## Features
 
-- No optional Cargo features — `default = []`, and the full API is always
-  available.
-- **Requires `std`.** Unlike the rest of the units layer this crate is not
-  `no_std`: the registry uses `std::collections::HashMap` and
-  `std::sync::OnceLock`, errors carry owned `String`s, and `UnitError`
-  implements `std::error::Error`.
+| Feature | Enables | Notes |
+|---|---|---|
+| `ode` | `["dep:tpt-math-numeric"]` | Units-aware ODE integration (`solve::dopri5_dimensioned`). |
+| `optimize` | `["dep:tpt-math-optimize-general", "dep:tpt-math-numeric"]` | Units-aware minimisation (`solve::minimize_dimensioned`). |
+| `autodiff` | `["dep:tpt-math-autodiff-rev"]` | Units-aware gradients (`solve::gradient_dimensioned`). |
 
 ## Quick start
 
