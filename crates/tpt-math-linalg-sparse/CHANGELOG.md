@@ -9,6 +9,12 @@ and this project adheres to SemVer.
 
 ### Added
 
+- `gmres_right_preconditioned_with_report`: GMRES returning a `SolveReport` for every outcome. The plain `gmres` and `gmres_right_preconditioned` report the same cases as errors, as before.
+- Benchmarks for CG and IC(0)-preconditioned CG on a 40x40 Laplacian.
+
+
+### Added
+
 - `conjugate_gradient_with_report` and `bicgstab_with_report`: return `(x, SolveReport)` for every outcome, including breakdown and non-convergence, which the plain solvers report as errors. Only a dimension mismatch is an `Err`.
 - `SparseLu`: left-looking sparse LU with partial pivoting (`P A = L U`), reusable across right-hand sides. Reports `Breakdown` on a singular matrix.
 - `Ic0` and `ic0_preconditioned_cg`: incomplete Cholesky with zero fill-in for SPD systems.

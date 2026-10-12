@@ -856,6 +856,32 @@ where
     T: Scalar + Copy + 'static,
     P: Fn(&[T]) -> Result<Vec<T>, SparseError>,
 {
+    let (x, report) =
+        gmres_right_preconditioned_with_report(a, b, x0, tol, restart, max_iter, precond)?;
+    report_to_result(x, report)
+}
+
+/// [`gmres_right_preconditioned`] with a [`SolveReport`] instead of an error
+/// for breakdown or non-convergence. Returns the last iterate with its report.
+///
+/// # Errors
+///
+/// Returns [`SparseError::DimensionMismatch`] for incompatible dimensions, and
+/// propagates any error from `precond`.
+#[cfg(feature = "alloc")]
+pub fn gmres_right_preconditioned_with_report<T, P>(
+    a: &CsrMatrix<T>,
+    b: &DVector<T>,
+    x0: Option<DVector<T>>,
+    tol: T,
+    restart: usize,
+    max_iter: usize,
+    precond: P,
+) -> Result<(DVector<T>, SolveReport<T>), SparseError>
+where
+    T: Scalar + Copy + 'static,
+    P: Fn(&[T]) -> Result<Vec<T>, SparseError>,
+{
     if a.nrows() != a.ncols() || b.len() != a.nrows() {
         return Err(SparseError::DimensionMismatch);
     }
@@ -881,10 +907,24 @@ where
         let r: Vec<T> = (0..n).map(|i| b_slice[i] - ax[i]).collect();
         let beta = slice_norm(&r);
         if beta <= target {
-            return Ok(DVector::from_vec(x));
+            return Ok((
+                DVector::from_vec(x),
+                SolveReport {
+                    status: SolveStatus::Converged,
+                    iterations,
+                    residual: beta,
+                },
+            ));
         }
         if iterations >= max_iter {
-            return Err(SparseError::NotConverged { iterations });
+            return Ok((
+                DVector::from_vec(x),
+                SolveReport {
+                    status: SolveStatus::NotConverged,
+                    iterations,
+                    residual: beta,
+                },
+            ));
         }
 
         // Arnoldi cycle on the preconditioned operator A M⁻¹. `basis[j]` is the
@@ -945,7 +985,14 @@ where
             }
             let diag = hess[i][i];
             if diag == T::zero() {
-                return Err(SparseError::Breakdown { iterations });
+                return Ok((
+                    DVector::from_vec(x),
+                    SolveReport {
+                        status: SolveStatus::Breakdown,
+                        iterations,
+                        residual: beta,
+                    },
+                ));
             }
             y[i] = s / diag;
         }
@@ -2633,5 +2680,53 @@ mod report_tests {
             conjugate_gradient_with_report(&a, &b, None, 1e-8, 10),
             Err(SparseError::DimensionMismatch)
         ));
+    }
+}
+
+#[cfg(test)]
+mod gmres_report_tests {
+    use super::*;
+
+    fn nonsymmetric(n: usize) -> CsrMatrix<f64> {
+        let mut coo = CooMatrix::<f64>::new(n, n);
+        for i in 0..n {
+            coo.push(i, i, 4.0);
+            if i + 1 < n {
+                coo.push(i, i + 1, -1.0);
+                coo.push(i + 1, i, -0.5);
+            }
+        }
+        coo.to_csr()
+    }
+
+    #[test]
+    fn gmres_report_converges_and_matches_plain_solver() {
+        let a = nonsymmetric(12);
+        let b = DVector::from_fn(12, |i| 1.0 + (i as f64) * 0.3);
+        let (x, report) =
+            gmres_right_preconditioned_with_report(&a, &b, None, 1e-10, 12, 200, |v: &[f64]| {
+                Ok(v.to_vec())
+            })
+            .unwrap();
+        assert!(report.status.is_converged());
+        assert!(report.iterations > 0);
+        assert!(report.residual <= 1e-10 * b.norm());
+        let plain = gmres(&a, &b, None, 1e-10, 12, 200).unwrap();
+        for i in 0..12 {
+            assert!((x[i] - plain[i]).abs() < 1e-9);
+        }
+    }
+
+    #[test]
+    fn gmres_report_on_budget_exhaustion_is_ok_with_status() {
+        let a = nonsymmetric(12);
+        let b = DVector::from_fn(12, |i| 1.0 + (i as f64) * 0.3);
+        let (_, report) =
+            gmres_right_preconditioned_with_report(&a, &b, None, 1e-14, 2, 2, |v: &[f64]| {
+                Ok(v.to_vec())
+            })
+            .unwrap();
+        assert_eq!(report.status, SolveStatus::NotConverged);
+        assert_eq!(report.iterations, 2);
     }
 }

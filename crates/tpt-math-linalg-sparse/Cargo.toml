@@ -27,6 +27,13 @@ alloc = ["tpt-math-numeric/alloc", "tpt-math-linalg-dense/alloc"]
 [lints]
 workspace = true
 
+[dev-dependencies]
+criterion = { workspace = true }
+
+[[bench]]
+name = "linalg_sparse_bench"
+harness = false
+
 [package.metadata.docs.rs]
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]

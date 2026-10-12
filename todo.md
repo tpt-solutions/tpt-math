@@ -1054,9 +1054,11 @@ tree.*
       `Div`/`inv`/`sqrt` stability (Smith's algorithm)
       Status: Partial: complex `Div`/`inv`/`norm` are overflow-safe (Smith, scaled
       hypot), and dense `norm` now scales by the largest magnitude (tests cover
-      entries near 1e200 and 1e-200). A relative dense LU threshold was tried and
-      reverted: the convex IPM factors KKT systems whose pivots are legitimately
-      small, so the threshold needs a per-caller decision.
+      entries near 1e200 and 1e-200). Dense LU has opt-in thresholds:
+      `Lu::with_pivot_tolerance` (absolute) and `Lu::with_relative_tolerance`
+      (scale-invariant). `Lu::new` keeps the absolute 1e-12 default, since the convex
+      IPM factors KKT systems with legitimately small pivots. Complex and fixed LU
+      still have only the absolute test.
 - [x] `tpt-math-prob-bayes` MCMC: validate initial log-density (NaN / -inf
       leaves chain stuck); `tpt-math-stats` `pearson_correlation`
       `sxx*syy` overflow; `tpt-math-exact` `Interval::new` only
@@ -1094,11 +1096,14 @@ tree.*
 - [x] `tpt-math-signal-filter`: FFT overlap-add for long FIR kernels; real-FFT
       path in `signal-fft`
       Status: Partial: `FirFilter::filter_overlap_add` is done, and matches the direct
-      `filter` to 1e-10. The real-FFT path is `Fft::rfft`/`irfft` in `signal-fft`.
-      The filter does not use it yet.
+      `filter` to 1e-10. The real-FFT path is `Fft::rfft`/`irfft` in `signal-fft`,
+      and the filter uses it.
 - [ ] Optional `rayon` feature: Monte Carlo, FIR, GEMM
 - [ ] Criterion benches for every numeric crate (only 5 have any); scheduled
       regression run in CI
+      Status: Partial: benches added for sparse solvers and FIR filtering (direct
+      against overlap-add), so 7 crates have benches. These cover the hot paths only,
+      per the recommendation. The scheduled regression run is not done.
 
 ### 7.3 Missing features
 
@@ -1174,9 +1179,11 @@ tree.*
 - [ ] Common `SolveReport { status, iters, residual }` across sparse, convex
       and general solvers
       Status: Partial: `tpt-math-numeric::report` defines `SolveStatus` and
-      `SolveReport<T>`. Sparse `conjugate_gradient_with_report` and
-      `bicgstab_with_report` return it for every outcome. Not done: GMRES, the
-      convex solver (it does not count iterations yet), and the general optimizers.
+      `SolveReport<T>`. Sparse `conjugate_gradient_with_report`,
+      `bicgstab_with_report` and `gmres_right_preconditioned_with_report` return it
+      for every outcome. The convex solver reports `iterations` on `QpSolution` but
+      not as a `SolveReport`, because its failures carry a reason string that does
+      not fit `SolveStatus`. Not done: the general optimizers.
 - [ ] Top-level `tpt-math` facade crate with `prelude` and short feature names
 
 ### 7.5 Repo hygiene, CI and automation
@@ -1191,6 +1198,13 @@ tree.*
 - [ ] CI MSRV job pinned to 1.84; resolve `simd` feature needing Rust 1.85+
       and the out-of-repo `tpt-simd-blas` path dependency that breaks
       `--all-features` and `cargo package`
+      Status: Blocked, needs a decision. `tpt-simd-blas` is a path dependency at
+      `../tpt-simd/tpt-simd-blas` with the workspace edition and `rust-version = 1.85`.
+      Cargo parses path dependencies during resolution, so a 1.84 toolchain cannot
+      load this workspace, and gating the dependency cannot avoid that. Options: publish
+      `tpt-simd-blas` and use a registry dependency, or move it out of the workspace
+      manifest. Either way, the docs.rs `all-features` item below waits on the same
+      decision.
 - [x] README: `tpt-math-geometry` listed twice; `no_std` column disagrees
       with `NO_STD_CRATES` in `xtask` (8 crates) — extend the CI list or
       correct the README; add an xtask check that validates the README
@@ -1223,14 +1237,13 @@ tree.*
       crate; feature tables in READMEs; examples for geometry/spatial,
       graph, signal, sparse/complex linalg, `no_std`
       Status: Partial: the docs.rs table is in all 31 crates. `tpt-math-linalg-dense` uses `features = ["alloc"]` instead of `all-features`, because its optional `simd` feature depends on the out-of-repo `tpt-simd-blas` path. The feature tables in READMEs and the examples are not done.
-- [ ] Move hard-coded external dep versions (`num-traits`, `uom`, `rand`,
+- [x] Move hard-coded external dep versions (`num-traits`, `uom`, `rand`,
       `criterion`) into `[workspace.dependencies]`; make `default-features`
       consistent
-      Status: Partial: `criterion`, `num-traits`, `rand`, `rand_distr`, `rustfft`
-      and `uom` are now inherited from `[workspace.dependencies]`. `symbolic`
-      still pins `num-traits = "0.2"` with default features, which differs from
-      the workspace entry. Changing it would alter its feature set, so it was
-      left alone.
+      Status: Done: `criterion`, `num-traits`, `rand`, `rand_distr`, `rustfft` and
+      `uom` are inherited from `[workspace.dependencies]`. `symbolic` now uses the
+      workspace `num-traits` entry too. It only needs `One` and `Zero`, and its tests
+      and no-default-features build pass.
 - [x] `deny.toml`: set `[graph]` targets, tighten `wildcards`, enforce
       `multiple-versions`; document the `registry.toml` external dependency
       in CONTRIBUTING.md

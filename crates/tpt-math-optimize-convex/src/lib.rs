@@ -118,6 +118,8 @@ pub struct QpSolution {
     pub objective: f64,
     /// The solve outcome. Usually [`QpStatus::Solved`].
     pub status: QpStatus,
+    /// Interior-point iterations performed before the solve was accepted.
+    pub iterations: usize,
 }
 
 /// Solve a QP with equality constraints and per-variable bounds (the most
@@ -219,7 +221,7 @@ pub fn solve_qp_internal(
     let a_eqv = matrix_to_vec(a_eq);
     let b_eqv = b_eq.iter().copied().collect::<Vec<f64>>();
 
-    let (x, status) = interior_point(&p_sym, &qv, &a_eqv, &b_eqv, &a, &b)?;
+    let (x, status, iterations) = interior_point(&p_sym, &qv, &a_eqv, &b_eqv, &a, &b)?;
 
     let xv = DVector::from_vec(x);
     let objective = qp_objective(&p_sym, &qv, &xv.iter().copied().collect::<Vec<f64>>());
@@ -227,6 +229,7 @@ pub fn solve_qp_internal(
         x: xv,
         objective,
         status,
+        iterations,
     })
 }
 
@@ -538,7 +541,7 @@ fn interior_point(
     b_eq: &[f64],
     a: &[Vec<f64>],
     b: &[f64],
-) -> Result<(Vec<f64>, QpStatus), ConvexError> {
+) -> Result<(Vec<f64>, QpStatus, usize), ConvexError> {
     let n = q.len();
     let m_eq = a_eq.len();
     let m_c = a.len();
@@ -567,7 +570,7 @@ fn interior_point(
         z[j] = 1.0;
     }
 
-    for _iter in 0..max_iter {
+    for iter in 0..max_iter {
         let r_dual = resid_dual(p, q, a_eq, &y, a, &z, &x);
         let r_pri_eq = resid_pri_eq(a_eq, &x, b_eq);
         let r_pri2 = resid_pri2(a, &x, &s, b);
@@ -585,13 +588,13 @@ fn interior_point(
         let obj_scale = 1.0 + qp_objective(p, q, &x).abs();
         let gap = m_c as f64 * mu;
         if prim < tol * scale_p && dual < tol * scale_d && (m_c == 0 || gap < tol * obj_scale) {
-            return Ok((x, QpStatus::Solved));
+            return Ok((x, QpStatus::Solved, iter + 1));
         }
         if prim < tol * 10.0 * scale_p
             && dual < tol * 10.0 * scale_d
             && (m_c == 0 || gap < tol * 10.0 * obj_scale)
         {
-            return Ok((x, QpStatus::AlmostSolved));
+            return Ok((x, QpStatus::AlmostSolved, iter + 1));
         }
 
         let sigma_vec: Vec<f64> = (0..m_c).map(|j| z[j] / s[j]).collect();
@@ -923,5 +926,25 @@ mod tests {
         assert_eq!(sol.status, QpStatus::Solved);
         assert!((sol.x[0] - 1.0).abs() < 1e-6, "x = {}", sol.x[0]);
         assert!((sol.x[1] + 2.0).abs() < 1e-6, "y = {}", sol.x[1]);
+    }
+}
+
+#[cfg(test)]
+mod iteration_count_tests {
+    use super::*;
+
+    #[test]
+    fn solution_reports_iterations_within_budget() {
+        // min ½(x₀² + x₁²) − x₀ − x₁ with x ≥ 0 has the optimum (1, 1).
+        let p = DMatrix::from_row_slice(2, 2, &[1.0, 0.0, 0.0, 1.0]);
+        let q = DVector::from_vec(vec![-1.0, -1.0]);
+        let a_eq = DMatrix::<f64>::zeros(0, 2);
+        let b_eq = DVector::<f64>::zeros(0);
+        let a_ineq = DMatrix::<f64>::zeros(0, 2);
+        let b_ineq = DVector::<f64>::zeros(0);
+        let bounds = [(0.0, f64::INFINITY), (0.0, f64::INFINITY)];
+        let sol = solve_qp_internal(&p, &q, &a_eq, &b_eq, &a_ineq, &b_ineq, &bounds).unwrap();
+        assert!(sol.iterations > 0 && sol.iterations <= 200);
+        assert!((sol.x[0] - 1.0).abs() < 1e-6 && (sol.x[1] - 1.0).abs() < 1e-6);
     }
 }

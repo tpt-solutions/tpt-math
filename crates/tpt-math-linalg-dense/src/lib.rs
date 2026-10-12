@@ -991,6 +991,40 @@ impl Lu {
         Ok(Lu { lu, piv })
     }
 
+    /// Factor `m`, treating a pivot as singular when its magnitude is below
+    /// `tol` (an absolute threshold).
+    ///
+    /// Use this when the matrix is legitimately small in scale, so the default
+    /// `1e-12` would reject it. `tol = 0.0` accepts any non-zero finite pivot.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`DenseError::DimensionMismatch`] if `m` is not square, and
+    /// [`DenseError::Singular`] if a pivot falls below `tol`.
+    pub fn with_pivot_tolerance(m: &DMatrix<f64>, tol: f64) -> Result<Self, DenseError> {
+        if m.nrows != m.ncols {
+            return Err(DenseError::DimensionMismatch {
+                what: format!("matrix is {}x{}, expected square", m.nrows, m.ncols),
+            });
+        }
+        let (lu, piv) = partial_pivot_lu_with(m, tol)?;
+        Ok(Lu { lu, piv })
+    }
+
+    /// Factor `m`, treating a pivot as singular when it is below `rel` times the
+    /// largest entry magnitude of `m`.
+    ///
+    /// This makes the singularity test scale-invariant: `A` and `1e-14 · A` are
+    /// accepted or rejected together. A zero matrix is always singular.
+    ///
+    /// # Errors
+    ///
+    /// As [`Lu::with_pivot_tolerance`].
+    pub fn with_relative_tolerance(m: &DMatrix<f64>, rel: f64) -> Result<Self, DenseError> {
+        let scale = m.iter().fold(0.0_f64, |acc, v| acc.max(v.abs()));
+        Self::with_pivot_tolerance(m, rel * scale)
+    }
+
     /// The dimension `n` of the factored `n × n` matrix.
     pub fn dim(&self) -> usize {
         self.lu.len()
@@ -1505,7 +1539,18 @@ impl DMatrix<f64> {
 
 /// Returns the LU factorization (in place) and the row permutation.
 #[cfg(feature = "alloc")]
+/// Pivot magnitude below which a matrix is reported singular by default.
+const DEFAULT_PIVOT_TOLERANCE: f64 = 1e-12;
+
 fn partial_pivot_lu(m: &DMatrix<f64>) -> Result<(Vec<Vec<f64>>, Vec<usize>), DenseError> {
+    partial_pivot_lu_with(m, DEFAULT_PIVOT_TOLERANCE)
+}
+
+/// [`partial_pivot_lu`] with an explicit absolute pivot tolerance.
+fn partial_pivot_lu_with(
+    m: &DMatrix<f64>,
+    tol: f64,
+) -> Result<(Vec<Vec<f64>>, Vec<usize>), DenseError> {
     let n = m.nrows;
     let mut a: Vec<Vec<f64>> = (0..n)
         .map(|i| (0..n).map(|j| m[(i, j)]).collect())
@@ -1522,7 +1567,7 @@ fn partial_pivot_lu(m: &DMatrix<f64>) -> Result<(Vec<Vec<f64>>, Vec<usize>), Den
                 p = i;
             }
         }
-        if !max.is_finite() || max < 1e-12 {
+        if !max.is_finite() || max == 0.0 || max < tol {
             return Err(DenseError::Singular {
                 what: "partial_pivot_lu",
             });
@@ -2097,5 +2142,40 @@ mod in_place_tests {
         let a = DMatrix::from_row_slice(2, 2, &[1.0_f64, 0.0, 0.0, 1.0]);
         let mut out = DMatrix::zeros(3, 2);
         a.mul_matrix_into(&a.clone(), &mut out);
+    }
+}
+
+#[cfg(test)]
+mod lu_tolerance_tests {
+    use super::*;
+
+    #[test]
+    fn default_rejects_small_scale_but_explicit_tolerance_accepts_it() {
+        // Well-conditioned, but every pivot is below the default 1e-12.
+        let m = DMatrix::from_row_slice(2, 2, &[1e-13, 0.0, 0.0, 2e-13]);
+        assert!(matches!(Lu::new(&m), Err(DenseError::Singular { .. })));
+        let lu = Lu::with_pivot_tolerance(&m, 0.0).unwrap();
+        let x = lu.solve(&DVector::from_vec(vec![1e-13, 2e-13])).unwrap();
+        assert!((x[0] - 1.0).abs() < 1e-12 && (x[1] - 1.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn relative_tolerance_is_scale_invariant() {
+        let a = DMatrix::from_row_slice(2, 2, &[4.0, 1.0, 2.0, 3.0]);
+        let scaled = a.clone() * 1e-14;
+        assert!(Lu::with_relative_tolerance(&a, 1e-10).is_ok());
+        assert!(Lu::with_relative_tolerance(&scaled, 1e-10).is_ok());
+        // The default absolute test rejects the scaled copy, as it did before.
+        assert!(Lu::new(&scaled).is_err());
+    }
+
+    #[test]
+    fn tolerance_constructors_still_reject_singular_and_zero_matrices() {
+        let singular = DMatrix::from_row_slice(2, 2, &[1.0, 2.0, 2.0, 4.0]);
+        assert!(Lu::with_relative_tolerance(&singular, 1e-10).is_err());
+        assert!(Lu::with_pivot_tolerance(&singular, 0.0).is_err());
+        let zero = DMatrix::zeros(3, 3);
+        assert!(Lu::with_relative_tolerance(&zero, 1e-10).is_err());
+        assert!(Lu::with_pivot_tolerance(&zero, 0.0).is_err());
     }
 }

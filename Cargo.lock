@@ -891,6 +891,7 @@ dependencies = [
 name = "tpt-math-linalg-sparse"
 version = "0.1.0"
 dependencies = [
+ "criterion",
  "tpt-math-linalg-dense",
  "tpt-math-numeric",
 ]
@@ -1004,6 +1005,7 @@ dependencies = [
 name = "tpt-math-signal-filter"
 version = "0.1.0"
 dependencies = [
+ "criterion",
  "tpt-math-numeric",
  "tpt-math-signal-fft",
 ]

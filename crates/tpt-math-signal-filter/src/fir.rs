@@ -270,23 +270,28 @@ impl FirFilter {
         let fft_len = (2 * m).next_power_of_two().max(64);
         let block = fft_len - m + 1;
 
+        // Real signals, so the half-spectrum transforms do the work.
         let mut engine = Fft::new();
-        let kernel_spectrum = engine.forward_n(&self.coeffs, fft_len);
+        let mut padded = vec![0.0; fft_len];
+        padded[..m].copy_from_slice(&self.coeffs);
+        let kernel_spectrum: Vec<Complex<f64>> = engine.rfft(&padded);
         let mut full = vec![0.0; n + m - 1];
         let mut start = 0;
         while start < n {
             let end = (start + block).min(n);
-            let spectrum = engine.forward_n(&signal[start..end], fft_len);
+            padded.fill(0.0);
+            padded[..end - start].copy_from_slice(&signal[start..end]);
+            let spectrum = engine.rfft(&padded);
             let product: Vec<Complex<f64>> = spectrum
                 .iter()
                 .zip(&kernel_spectrum)
                 .map(|(&a, &b)| a * b)
                 .collect();
-            let segment = engine.inverse_normalized(&product);
+            let segment = engine.irfft(&product, fft_len);
             // The block's linear convolution spans `end − start + m − 1` samples.
             let span = end - start + m - 1;
             for (acc, z) in full[start..start + span].iter_mut().zip(&segment) {
-                *acc += z.re;
+                *acc += z;
             }
             start += block;
         }

@@ -14,7 +14,7 @@ keywords = ["symbolic", "cas", "algebra", "expression", "symbolic-math"]
 categories = ["mathematics", "science", "algorithms"]
 
 [dependencies]
-num-traits = "0.2"
+num-traits = { workspace = true }
 tpt-math-exact = { workspace = true, optional = true }
 
 [features]

@@ -9,6 +9,12 @@ and this project adheres to SemVer.
 
 ### Added
 
+- `Lu::with_pivot_tolerance(m, tol)`: LU with an explicit absolute pivot threshold. `tol = 0` accepts any non-zero finite pivot. The default `Lu::new` keeps its `1e-12` threshold.
+- `Lu::with_relative_tolerance(m, rel)`: scale-invariant singularity test (threshold `rel` times the largest entry). A zero matrix is always rejected.
+
+
+### Added
+
 - In-place operators: `+=`/`-=` (with `&DVector`/`&DMatrix`), `*=`/`/=` by a scalar, and `axpy(α, x)` (`self ← self + α·x`) for `DVector` and `DMatrix`.
 - `DMatrix::mul_vector_into` and `DMatrix::mul_matrix_into`: products written into a caller-owned buffer, with no allocation.
 

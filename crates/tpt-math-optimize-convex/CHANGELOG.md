@@ -6,6 +6,11 @@ All notable changes to this crate are documented here. Format based on
 
 ## [Unreleased]
 
+### Added
+
+- `QpSolution::iterations`: interior-point iterations performed before the solve was accepted. Adding this field breaks code that builds `QpSolution` with a struct literal.
+
+
 - **`clarabel` backend replaced by an in-house dense primal-dual interior-point
   (Mehrotra predictor-corrector) QP solver.** `clarabel` is Apache-2.0-only and
   disqualified as a wrap target by the workspace license policy (ADR-0007). The
