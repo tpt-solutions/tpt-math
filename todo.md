@@ -1102,8 +1102,12 @@ tree.*
       thread-count independent), f64 GEMM (`DMatrix::par_mul`, bitwise equal to the
       serial scalar product), and FIR (`FirFilter::filter_par`, bitwise identical to
       `filter`). Overlap-add stays serial, since it is already fast.
-- [ ] Criterion benches for every numeric crate (only 5 have any); scheduled
+- [x] Criterion benches for every numeric crate (only 5 have any); scheduled
       regression run in CI
+      Status: Done: every crate with a numeric kernel has a bench, and `bench.yml`
+      runs them weekly, restoring the previous Criterion results from cache so each
+      run compares with the one before. The workflow reports and does not fail on a
+      slowdown, because shared runners are too noisy to gate on.
 
 ### 7.3 Missing features
 
@@ -1159,9 +1163,9 @@ tree.*
       powers, fixpoint simplification, like-term collection, and the functions
       `sin`, `cos`, `tan`, `exp`, `ln`, `sqrt`, `asin`, `acos`, `atan`, `sinh`,
       `cosh`, `tanh`, all with derivatives checked against finite differences.
-      Finding (not fixed): `simplify` preserves value but is not canonical. Equal sums
-      can come out with their terms in a different order on a second pass, so the
-      output is not a normal form. Property tests check value only.
+      Canonical form: sums and products are ordered by their printed form, so a
+      second `simplify` pass returns the first pass's output. The idempotency property
+      is checked by proptest (5000 cases) and by the value-preservation tests.
 - [x] `tpt-math-linalg` wrappers: `Mat * scalar`, `Vec` dot/norm, solve,
       by-reference operator forms
       Status: Done: `Mat` scalar `*`/`/`, `Vec::norm`/`Vec::dot` (bare-scalar
@@ -1183,7 +1187,14 @@ tree.*
       (`validated_euler`, `validated_euler_system`). The enclosure uses a-priori
       (Picard–Lindelöf) boxes. It is first order, so widths grow with the step count.
       (for `tpt-formal`)
-- [ ] Units-aware optimise / ODE / autodiff via `units-dyn` + generic scalars
+- [x] Units-aware optimise / ODE / autodiff via `units-dyn` + generic scalars
+      Status: Done as a boundary layer, not as generic scalars. `tpt-math-units-dyn`
+      `solve` checks every user function against the dimension its output must have
+      (`dopri5_dimensioned`, `minimize_dimensioned`, `gradient_dimensioned`). The
+      numerical cores still run on SI values. Making `Dual` or the solvers generic
+      over a dimensioned scalar would need the whole `Float` trait; that was judged
+      not worth it. The gradient path checks its output dimensions but not the
+      function written on the tape.
 - [x] Common `SolveReport { status, iters, residual }` across sparse, convex
       and general solvers
       Status: Partial: `tpt-math-numeric::report` defines `SolveStatus` and
@@ -1225,7 +1236,7 @@ tree.*
       (the 8 missing ones build for `thumbv6m-none-eabi`). The README column matches.
       `cargo xtask drift` compares the crate sources, the list and the README column
       (it reads the sources and README directly rather than `cargo metadata`).
-- [ ] CI additions: rust-cache, `concurrency` cancel, `cargo doc` with
+- [x] CI additions: rust-cache, `concurrency` cancel, `cargo doc` with
       `-D warnings`, cargo-semver-checks, coverage (llvm-cov), scheduled
       `cargo deny` / audit, wasm32 build, cargo-hack feature powerset for
       all crates, benches for every crate with a bench
@@ -1241,17 +1252,19 @@ tree.*
       are CI-only. `just ci` runs `check`.
 - [ ] Automation: release-plz (31-crate ordered publishing), Dependabot
       (group `tpt-*`), proptest, cargo-fuzz (symbolic, exact), typos, taplo
-      Status: Partial: Dependabot is configured (weekly, cargo and actions, `tpt-*`
-      grouped). `typos` is configured (`_typos.toml`), the tree is clean, and a CI
-      job runs it. That job uses `crate-ci/typos@master`, which should be pinned to a
-      release tag. `proptest` is a workspace dev-dependency, with property tests for
-      `exact` (rational ring laws, interval enclosure of sums) and `symbolic`
-      (simplification preserves value and is idempotent). Not done: release-plz,
-      cargo-fuzz (symbolic, exact), taplo.
+      Status: Done, with release-plz manual until item 2 is published. Dependabot is
+      configured (weekly, cargo and actions, `tpt-*` grouped). `typos` is pinned to
+      `crate-ci/typos@v1.51.1`. `proptest` covers `exact` and `symbolic`. Fuzz
+      targets for `symbolic` and `exact` are in `fuzz/`, run weekly on Linux by
+      `fuzz.yml`. libFuzzer cannot run on Windows MSVC here: the nightly toolchain
+      has no sanitizer runtime and the coverage symbols do not link. `taplo.toml`
+      formats the TOML, and CI checks it. `release-plz.toml` opens release PRs with
+      publishing off, from a manual workflow, because `cargo package` cannot run
+      while the simd path dependency is unpublished.
 - [ ] `[package.metadata.docs.rs]` (`all-features`, `docsrs` cfg) in each
       crate; feature tables in READMEs; examples for geometry/spatial,
       graph, signal, sparse/complex linalg, `no_std`
-      Status: Partial: the docs.rs table is in all 31 crates. `tpt-math-linalg-dense` uses `features = ["alloc"]` instead of `all-features`, because its optional `simd` feature depends on the out-of-repo `tpt-simd-blas` path. The feature tables in READMEs and the examples are not done.
+      Status: Partial: the docs.rs table is in all 31 crates. `tpt-math-linalg-dense` uses `features = ["alloc"]` instead of `all-features`, because its optional `simd` feature depends on the out-of-repo `tpt-simd-blas` path. Feature tables are in the READMEs, and examples cover geometry/spatial, graph, signal and sparse/complex, with a `no_std` snippet in the `linalg-fixed` README. The switch to `all-features` for `linalg-dense` waits on item 2.
 - [x] Move hard-coded external dep versions (`num-traits`, `uom`, `rand`,
       `criterion`) into `[workspace.dependencies]`; make `default-features`
       consistent
