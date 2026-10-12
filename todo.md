@@ -1134,11 +1134,12 @@ tree.*
       The bandpass is a high-pass stage cascaded with a low-pass stage, not an
       LP→BP prototype transform, so its band edges are only approximately −3 dB
       for narrow bands (documented).
-- [ ] Sparse LU/Cholesky, Jacobi/ILU/IC preconditioners, GMRES
-      Status: Partial: restarted GMRES (`gmres`), Jacobi-preconditioned CG
-      (`jacobi_preconditioned_cg`), sparse Cholesky (`SparseCholesky`, without
-      fill-reducing ordering), ILU(0) (`Ilu0`) and ILU-preconditioned GMRES
-      (`gmres_ilu0`) are done. Sparse LU and IC(0) are not.
+- [x] Sparse LU/Cholesky, Jacobi/ILU/IC preconditioners, GMRES
+      Status: Done: restarted GMRES (`gmres`), Jacobi-preconditioned CG
+      (`jacobi_preconditioned_cg`), IC(0)-preconditioned CG (`ic0_preconditioned_cg`),
+      ILU(0) (`Ilu0`) and ILU-preconditioned GMRES (`gmres_ilu0`), sparse Cholesky
+      (`SparseCholesky`, no fill-reducing ordering), and sparse LU with partial
+      pivoting (`SparseLu`, left-looking, no fill-reducing ordering).
 - [x] `autodiff-fwd`: sqrt, powi/powf, tan, tanh, atan, abs, `Dual op scalar`
 - [x] `prob-dist`: pdf / cdf / quantile / moments (currently sampling-only)
       Status: Done: `density` gives pdf/pmf, cdf, moments and quantiles for Normal,

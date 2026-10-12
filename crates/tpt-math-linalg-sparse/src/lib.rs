@@ -4,7 +4,8 @@
 //!
 //! This crate provides general-purpose sparse matrix storage — coordinate
 //! (triplet, [`CooMatrix`]), compressed-sparse-row ([`CsrMatrix`]) and
-//! compressed-sparse-column ([`CscMatrix`]) — plus a pair of iterative solvers:
+//! compressed-sparse-column ([`CscMatrix`]) — plus iterative solvers, preconditioners
+//! and direct LU / Cholesky factorisations:
 //! [`conjugate_gradient`] for symmetric positive-definite systems and
 //! [`bicgstab`] for general (non-symmetric) systems.
 //!
@@ -950,6 +951,121 @@ pub fn gmres_ilu0(
 /// let x = jacobi_preconditioned_cg(&a, &b, None, 1e-12, 10).unwrap();
 /// assert!((x[0] - 2.0).abs() < 1e-9 && (x[1] - 3.0).abs() < 1e-9);
 /// ```
+/// Solve `A x = b` with conjugate gradients under a caller-supplied SPD
+/// preconditioner `M`.
+///
+/// `precond` must return `M⁻¹ r` for a residual `r`, and `M` must be symmetric
+/// positive definite for the method to be sound. The tolerance and error
+/// conditions are those of [`conjugate_gradient`]. [`jacobi_preconditioned_cg`]
+/// and [`ic0_preconditioned_cg`] are this function with specific preconditioners.
+///
+/// # Errors
+///
+/// As [`conjugate_gradient`], plus any error returned by `precond`.
+#[cfg(feature = "alloc")]
+pub fn preconditioned_conjugate_gradient<T, P>(
+    a: &CsrMatrix<T>,
+    b: &DVector<T>,
+    x0: Option<DVector<T>>,
+    tol: T,
+    max_iter: usize,
+    precond: P,
+) -> Result<DVector<T>, SparseError>
+where
+    T: Scalar + Copy + 'static,
+    P: Fn(&DVector<T>) -> Result<DVector<T>, SparseError>,
+{
+    if a.nrows() != a.ncols() || b.len() != a.nrows() {
+        return Err(SparseError::DimensionMismatch);
+    }
+    let n = b.len();
+    let mut x: Vec<T> = match x0 {
+        Some(v) if v.len() == n => v.as_slice().to_vec(),
+        Some(_) => return Err(SparseError::DimensionMismatch),
+        None => vec![T::zero(); n],
+    };
+    let b_slice = b.as_slice();
+    let b_norm = slice_norm(b_slice);
+    let target = if b_norm > T::zero() {
+        tol * b_norm
+    } else {
+        tol
+    };
+
+    let mut ax = vec![T::zero(); n];
+    a.matvec_into(&x, &mut ax)?;
+    let mut r: Vec<T> = (0..n).map(|i| b_slice[i] - ax[i]).collect();
+    if slice_norm(&r) <= target {
+        return Ok(DVector::from_vec(x));
+    }
+    let mut z = precond(&DVector::from_vec(r.clone()))?.as_slice().to_vec();
+    let mut p = z.clone();
+    let mut rz = slice_dot(&r, &z);
+    let mut ap = vec![T::zero(); n];
+
+    for it in 0..max_iter {
+        a.matvec_into(&p, &mut ap)?;
+        let p_ap = slice_dot(&p, &ap);
+        if p_ap.is_nan() || p_ap <= T::zero() {
+            return Err(SparseError::Breakdown { iterations: it });
+        }
+        let alpha = rz / p_ap;
+        for (xi, &pi) in x.iter_mut().zip(&p) {
+            *xi = *xi + alpha * pi;
+        }
+        for (ri, &api) in r.iter_mut().zip(&ap) {
+            *ri = *ri - alpha * api;
+        }
+        if slice_norm(&r) <= target {
+            return Ok(DVector::from_vec(x));
+        }
+        z = precond(&DVector::from_vec(r.clone()))?.as_slice().to_vec();
+        let rz_new = slice_dot(&r, &z);
+        if !rz_new.is_finite() {
+            return Err(SparseError::Breakdown { iterations: it });
+        }
+        let beta = rz_new / rz;
+        for (pi, &zi) in p.iter_mut().zip(&z) {
+            *pi = zi + beta * *pi;
+        }
+        rz = rz_new;
+    }
+    Err(SparseError::NotConverged {
+        iterations: max_iter,
+    })
+}
+
+/// Solve `A x = b` with conjugate gradients preconditioned by the Jacobi
+/// (diagonal) preconditioner `M = diag(A)`.
+///
+/// Each iteration applies `M⁻¹ r` by dividing the residual by the diagonal
+/// entries. This is cheap and helps most when the diagonal varies widely in
+/// scale, as with badly scaled stiffness matrices. For SPD `A` with a constant
+/// diagonal it does nothing useful, and plain [`conjugate_gradient`] is
+/// equivalent.
+///
+/// The tolerance and error conditions are those of [`conjugate_gradient`].
+///
+/// # Errors
+///
+/// As [`conjugate_gradient`], plus [`SparseError::Breakdown`] at iteration zero
+/// if a diagonal entry is zero, since the preconditioner is then undefined.
+///
+/// # Examples
+///
+/// ```
+/// use tpt_math_linalg_sparse::{jacobi_preconditioned_cg, CooMatrix};
+/// use tpt_math_linalg_dense::DVector;
+///
+/// // Diagonal spans four orders of magnitude.
+/// let mut coo = CooMatrix::<f64>::new(2, 2);
+/// coo.push(0, 0, 1.0);
+/// coo.push(1, 1, 1e4);
+/// let a = coo.to_csr();
+/// let b = DVector::from_vec(vec![2.0, 3e4]);
+/// let x = jacobi_preconditioned_cg(&a, &b, None, 1e-12, 10).unwrap();
+/// assert!((x[0] - 2.0).abs() < 1e-9 && (x[1] - 3.0).abs() < 1e-9);
+/// ```
 #[cfg(feature = "alloc")]
 pub fn jacobi_preconditioned_cg<T: Scalar + Copy + 'static>(
     a: &CsrMatrix<T>,
@@ -973,62 +1089,10 @@ pub fn jacobi_preconditioned_cg<T: Scalar + Copy + 'static>(
     if diag.iter().any(|&d| d == T::zero()) {
         return Err(SparseError::Breakdown { iterations: 0 });
     }
-
-    let mut x: Vec<T> = match x0 {
-        Some(v) if v.len() == n => v.as_slice().to_vec(),
-        Some(_) => return Err(SparseError::DimensionMismatch),
-        None => vec![T::zero(); n],
-    };
-    let b_slice = b.as_slice();
-    let b_norm = slice_norm(b_slice);
-    let target = if b_norm > T::zero() {
-        tol * b_norm
-    } else {
-        tol
-    };
-
-    let mut ax = vec![T::zero(); n];
-    a.matvec_into(&x, &mut ax)?;
-    let mut r: Vec<T> = (0..n).map(|i| b_slice[i] - ax[i]).collect();
-    if slice_norm(&r) <= target {
-        return Ok(DVector::from_vec(x));
-    }
-    let mut z: Vec<T> = r.iter().zip(&diag).map(|(&ri, &di)| ri / di).collect();
-    let mut p = z.clone();
-    let mut rz = slice_dot(&r, &z);
-    let mut ap = vec![T::zero(); n];
-
-    for it in 0..max_iter {
-        a.matvec_into(&p, &mut ap)?;
-        let p_ap = slice_dot(&p, &ap);
-        if p_ap.is_nan() || p_ap <= T::zero() {
-            return Err(SparseError::Breakdown { iterations: it });
-        }
-        let alpha = rz / p_ap;
-        for (xi, &pi) in x.iter_mut().zip(&p) {
-            *xi = *xi + alpha * pi;
-        }
-        for (ri, &api) in r.iter_mut().zip(&ap) {
-            *ri = *ri - alpha * api;
-        }
-        if slice_norm(&r) <= target {
-            return Ok(DVector::from_vec(x));
-        }
-        for (zi, (&ri, &di)) in z.iter_mut().zip(r.iter().zip(&diag)) {
-            *zi = ri / di;
-        }
-        let rz_new = slice_dot(&r, &z);
-        if !rz_new.is_finite() {
-            return Err(SparseError::Breakdown { iterations: it });
-        }
-        let beta = rz_new / rz;
-        for (pi, &zi) in p.iter_mut().zip(&z) {
-            *pi = zi + beta * *pi;
-        }
-        rz = rz_new;
-    }
-    Err(SparseError::NotConverged {
-        iterations: max_iter,
+    preconditioned_conjugate_gradient(a, b, x0, tol, max_iter, |r: &DVector<T>| {
+        Ok(DVector::from_vec(
+            r.iter().zip(&diag).map(|(&ri, &di)| ri / di).collect(),
+        ))
     })
 }
 
@@ -1254,6 +1318,544 @@ impl Ilu0 {
             y[i] = s / self.rows[i][self.diagonal[i]].1;
         }
         Ok(DVector::from_vec(y))
+    }
+}
+
+/// Incomplete Cholesky factorisation with zero fill-in, IC(0).
+///
+/// For a symmetric positive-definite `A`, computes a lower-triangular `L` whose
+/// sparsity pattern is exactly the lower triangle of `A`, with `L Lᵀ ≈ A`. It is
+/// the symmetric counterpart of [`Ilu0`] and the usual preconditioner for CG.
+/// The product matches `A` on the pattern and differs elsewhere. For a matrix
+/// whose Cholesky factor has no fill-in, such as a tridiagonal one, it is exact.
+#[cfg(feature = "alloc")]
+#[derive(Clone, Debug, PartialEq)]
+pub struct Ic0 {
+    factor: SparseCholesky,
+}
+
+#[cfg(feature = "alloc")]
+impl Ic0 {
+    /// Compute the IC(0) factor of a symmetric positive-definite CSR matrix.
+    ///
+    /// Only the lower triangle of `a` is read; symmetry is assumed, not checked.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SparseError::DimensionMismatch`] if `a` is not square, and
+    /// [`SparseError::Breakdown`] if a column has no diagonal entry or a pivot is
+    /// not positive. A non-positive pivot means the incomplete factor does not
+    /// exist for this pattern, which can happen even for an SPD matrix.
+    pub fn factor(a: &CsrMatrix<f64>) -> Result<Self, SparseError> {
+        if a.nrows() != a.ncols() {
+            return Err(SparseError::DimensionMismatch);
+        }
+        let n = a.nrows();
+        // Lower-triangle columns of A: lower[j] holds (i, A_ij) for i ≥ j.
+        let mut lower: Vec<Vec<(usize, f64)>> = vec![Vec::new(); n];
+        for (r, c, &v) in a.iter() {
+            if r >= c {
+                lower[c].push((r, v));
+            }
+        }
+        for col in &mut lower {
+            col.sort_by_key(|&(i, _)| i);
+        }
+
+        let mut columns: Vec<Vec<(usize, f64)>> = Vec::with_capacity(n);
+        // contributors[i] lists the finished columns k < i with L(i, k) in their
+        // pattern, so column j only visits the columns that can update it.
+        let mut contributors: Vec<Vec<usize>> = vec![Vec::new(); n];
+        let mut work = vec![0.0; n];
+        let mut in_pattern = vec![false; n];
+
+        for j in 0..n {
+            for &(i, v) in &lower[j] {
+                work[i] = v;
+                in_pattern[i] = true;
+            }
+            for &k in &contributors[j] {
+                let col_k = &columns[k];
+                let Ok(pos) = col_k.binary_search_by_key(&j, |&(i, _)| i) else {
+                    continue;
+                };
+                let ljk = col_k[pos].1;
+                for &(i, lik) in &col_k[pos..] {
+                    if in_pattern[i] {
+                        work[i] -= lik * ljk;
+                    }
+                }
+            }
+            let pivot = work[j];
+            if pivot.is_nan() || pivot <= 0.0 {
+                for &(i, _) in &lower[j] {
+                    work[i] = 0.0;
+                    in_pattern[i] = false;
+                }
+                return Err(SparseError::Breakdown { iterations: j });
+            }
+            let diag = tpt_math_numeric::prelude::Float::sqrt(pivot);
+            let mut column = vec![(j, diag)];
+            for &(i, _) in lower[j].iter().skip(1) {
+                column.push((i, work[i] / diag));
+                contributors[i].push(j);
+            }
+            for &(i, _) in &lower[j] {
+                work[i] = 0.0;
+                in_pattern[i] = false;
+            }
+            columns.push(column);
+        }
+        Ok(Ic0 {
+            factor: SparseCholesky { n, columns },
+        })
+    }
+
+    /// Dimension of the factorised matrix.
+    pub fn dim(&self) -> usize {
+        self.factor.dim()
+    }
+
+    /// Apply the preconditioner: returns `(L Lᵀ)⁻¹ r`, an approximation to
+    /// `A⁻¹ r`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SparseError::DimensionMismatch`] if `r` has the wrong length.
+    pub fn apply(&self, r: &DVector<f64>) -> Result<DVector<f64>, SparseError> {
+        self.factor.solve(r)
+    }
+}
+
+/// Solve `A x = b` with conjugate gradients preconditioned by the IC(0) factor
+/// of `a`.
+///
+/// Factorises `a` once and then runs [`preconditioned_conjugate_gradient`]. Use
+/// it for sparse SPD systems where Jacobi scaling is not enough, such as the
+/// 2D Laplacian. The tolerance and error conditions are those of
+/// [`conjugate_gradient`].
+///
+/// # Errors
+///
+/// As [`Ic0::factor`] and [`conjugate_gradient`].
+#[cfg(feature = "alloc")]
+pub fn ic0_preconditioned_cg(
+    a: &CsrMatrix<f64>,
+    b: &DVector<f64>,
+    x0: Option<DVector<f64>>,
+    tol: f64,
+    max_iter: usize,
+) -> Result<DVector<f64>, SparseError> {
+    let ic = Ic0::factor(a)?;
+    preconditioned_conjugate_gradient(a, b, x0, tol, max_iter, |r: &DVector<f64>| ic.apply(r))
+}
+
+/// Sparse LU factorisation with partial pivoting, `P A = L U`.
+///
+/// Left-looking (Gilbert–Peierls) elimination: column `j` of `A` is solved
+/// against the already-computed `L` columns, touching only the pivot steps whose
+/// entries are non-zero, in increasing order. Pivoting picks the largest-magnitude
+/// candidate in the column, which keeps the factorisation stable for
+/// non-symmetric and indefinite matrices. Fill-in is not reduced by any ordering,
+/// so `L` and `U` can be much denser than `A` on unstructured problems.
+///
+/// The factor is reusable for any number of right-hand sides via [`SparseLu::solve`].
+#[cfg(feature = "alloc")]
+#[derive(Clone, Debug, PartialEq)]
+pub struct SparseLu {
+    n: usize,
+    /// `pivot_row[k]` is the original row chosen as the pivot at step `k`.
+    pivot_row: Vec<usize>,
+    /// `L` column `k`: unit lower entries `(row, value)` for rows that were not
+    /// pivots at steps `≤ k`. The unit diagonal is implicit.
+    l_cols: Vec<Vec<(usize, f64)>>,
+    /// `U` column `j`: strictly upper entries `(step, value)` with `step < j`.
+    u_cols: Vec<Vec<(usize, f64)>>,
+    /// `U` diagonal, one entry per step.
+    diag: Vec<f64>,
+}
+
+#[cfg(feature = "alloc")]
+impl SparseLu {
+    /// Factorise a square CSR matrix.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SparseError::DimensionMismatch`] if `a` is not square, and
+    /// [`SparseError::Breakdown`] at step `k` if column `k` has no usable pivot,
+    /// which means the matrix is singular (structurally or numerically).
+    pub fn factor(a: &CsrMatrix<f64>) -> Result<Self, SparseError> {
+        if a.nrows() != a.ncols() {
+            return Err(SparseError::DimensionMismatch);
+        }
+        let n = a.nrows();
+        // Column-wise copy of A.
+        let mut cols: Vec<Vec<(usize, f64)>> = vec![Vec::new(); n];
+        for (r, c, &v) in a.iter() {
+            cols[c].push((r, v));
+        }
+
+        const UNPIVOTED: usize = usize::MAX;
+        let mut pinv = vec![UNPIVOTED; n];
+        let mut pivot_row = Vec::with_capacity(n);
+        let mut l_cols: Vec<Vec<(usize, f64)>> = Vec::with_capacity(n);
+        let mut u_cols: Vec<Vec<(usize, f64)>> = Vec::with_capacity(n);
+        let mut diag = Vec::with_capacity(n);
+
+        // Dense accumulator for the current column, plus the list of rows it
+        // touches so that only those entries are visited and cleared.
+        let mut x = vec![0.0; n];
+        let mut touched = vec![false; n];
+        let mut nz: Vec<usize> = Vec::new();
+
+        for (j, col) in cols.iter().enumerate() {
+            nz.clear();
+            for &(r, v) in col {
+                x[r] = v;
+                if !touched[r] {
+                    touched[r] = true;
+                    nz.push(r);
+                }
+            }
+            // Pivot steps to apply, in increasing order.
+            let mut pending: alloc::collections::BTreeSet<usize> = nz
+                .iter()
+                .filter(|&&r| pinv[r] != UNPIVOTED)
+                .map(|&r| pinv[r])
+                .collect();
+            let mut u_col = Vec::new();
+            while let Some(k) = pending.pop_first() {
+                let xk = x[pivot_row[k]];
+                if xk == 0.0 {
+                    continue;
+                }
+                u_col.push((k, xk));
+                for &(i, l) in &l_cols[k] {
+                    if !touched[i] {
+                        touched[i] = true;
+                        nz.push(i);
+                    }
+                    x[i] -= l * xk;
+                    if pinv[i] != UNPIVOTED {
+                        pending.insert(pinv[i]);
+                    }
+                }
+            }
+
+            // Partial pivoting: largest magnitude among the unpivoted rows.
+            let mut best: Option<(usize, f64)> = None;
+            for &r in &nz {
+                if pinv[r] == UNPIVOTED && best.is_none_or(|(_, b)| x[r].abs() > b.abs()) {
+                    best = Some((r, x[r]));
+                }
+            }
+            let (p, pivot) = match best {
+                Some((p, v)) if v != 0.0 && v.is_finite() => (p, v),
+                _ => {
+                    for &r in &nz {
+                        x[r] = 0.0;
+                        touched[r] = false;
+                    }
+                    return Err(SparseError::Breakdown { iterations: j });
+                }
+            };
+            pinv[p] = j;
+            pivot_row.push(p);
+            diag.push(pivot);
+            let l_col: Vec<(usize, f64)> = nz
+                .iter()
+                .filter(|&&r| pinv[r] == UNPIVOTED && x[r] != 0.0)
+                .map(|&r| (r, x[r] / pivot))
+                .collect();
+            l_cols.push(l_col);
+            u_cols.push(u_col);
+
+            for &r in &nz {
+                x[r] = 0.0;
+                touched[r] = false;
+            }
+        }
+        Ok(SparseLu {
+            n,
+            pivot_row,
+            l_cols,
+            u_cols,
+            diag,
+        })
+    }
+
+    /// Dimension of the factorised matrix.
+    pub fn dim(&self) -> usize {
+        self.n
+    }
+
+    /// Stored entries in `L` and `U` together, counting the diagonal of `U`.
+    /// Comparing this with the entries of `A` shows how much fill-in occurred.
+    pub fn nnz(&self) -> usize {
+        self.l_cols.iter().map(Vec::len).sum::<usize>()
+            + self.u_cols.iter().map(Vec::len).sum::<usize>()
+            + self.n
+    }
+
+    /// Solve `A x = b` with the stored factor.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SparseError::DimensionMismatch`] if `b` has the wrong length.
+    pub fn solve(&self, b: &DVector<f64>) -> Result<DVector<f64>, SparseError> {
+        if b.len() != self.n {
+            return Err(SparseError::DimensionMismatch);
+        }
+        // Forward substitution L y = P b, in pivot-step order.
+        let mut w: Vec<f64> = b.as_slice().to_vec();
+        let mut z = vec![0.0; self.n];
+        for k in 0..self.n {
+            let yk = w[self.pivot_row[k]];
+            z[k] = yk;
+            for &(i, l) in &self.l_cols[k] {
+                w[i] -= l * yk;
+            }
+        }
+        // Back substitution U x = y. Column j of U holds the entries above its
+        // diagonal, so x_j is final once j is reached in descending order.
+        for j in (0..self.n).rev() {
+            let xj = z[j] / self.diag[j];
+            z[j] = xj;
+            for &(k, u) in &self.u_cols[j] {
+                z[k] -= u * xj;
+            }
+        }
+        Ok(DVector::from_vec(z))
+    }
+}
+
+#[cfg(test)]
+mod lu_tests {
+    use super::*;
+    use tpt_math_linalg_dense::DMatrix;
+
+    fn from_dense(rows: &[&[f64]]) -> CsrMatrix<f64> {
+        let mut coo = CooMatrix::<f64>::new(rows.len(), rows[0].len());
+        for (i, row) in rows.iter().enumerate() {
+            for (j, &v) in row.iter().enumerate() {
+                if v != 0.0 {
+                    coo.push(i, j, v);
+                }
+            }
+        }
+        coo.to_csr()
+    }
+
+    /// Non-symmetric, diagonally dominant band with an off-band coupling, so
+    /// the factor has real fill-in.
+    fn convection_like(n: usize) -> CsrMatrix<f64> {
+        let mut coo = CooMatrix::<f64>::new(n, n);
+        for i in 0..n {
+            coo.push(i, i, 4.0);
+            if i + 1 < n {
+                coo.push(i, i + 1, -1.3);
+                coo.push(i + 1, i, -0.7);
+            }
+            if i + 5 < n {
+                coo.push(i, i + 5, 0.4);
+            }
+            if i >= 3 {
+                coo.push(i, i - 3, -0.2);
+            }
+        }
+        coo.to_csr()
+    }
+
+    fn residual_norm(a: &CsrMatrix<f64>, x: &DVector<f64>, b: &DVector<f64>) -> f64 {
+        let ax = a.matvec(x).unwrap();
+        b.iter()
+            .zip(ax.iter())
+            .map(|(&bi, &ai)| (bi - ai) * (bi - ai))
+            .sum::<f64>()
+            .sqrt()
+    }
+
+    #[test]
+    fn solves_matrix_whose_leading_entry_is_zero() {
+        // A(0,0) = 0, so the first step must pivot on a different row.
+        let a = from_dense(&[&[0.0, 2.0, 1.0], &[1.0, 1.0, 0.0], &[2.0, 0.0, 3.0]]);
+        let x_true = DVector::from_vec(vec![1.0, -2.0, 0.5]);
+        let b = a.matvec(&x_true).unwrap();
+        let lu = SparseLu::factor(&a).unwrap();
+        let x = lu.solve(&b).unwrap();
+        for i in 0..3 {
+            assert!((x[i] - x_true[i]).abs() < 1e-12, "entry {i}: {}", x[i]);
+        }
+    }
+
+    #[test]
+    fn agrees_with_dense_lu_on_small_matrix() {
+        let rows: [&[f64]; 4] = [
+            &[1.0, 4.0, 0.0, 2.0],
+            &[3.0, 0.5, 1.0, 0.0],
+            &[0.0, 2.0, 6.0, 1.0],
+            &[5.0, 0.0, 1.0, 2.0],
+        ];
+        let a = from_dense(&rows);
+        let dense = DMatrix::from_fn(4, 4, |i, j| rows[i][j]);
+        let b = DVector::from_vec(vec![1.0, -1.0, 2.0, 0.25]);
+        let expected = dense.solve(&b).unwrap();
+        let x = SparseLu::factor(&a).unwrap().solve(&b).unwrap();
+        for i in 0..4 {
+            assert!((x[i] - expected[i]).abs() < 1e-12, "entry {i}");
+        }
+    }
+
+    #[test]
+    fn small_residual_on_nonsymmetric_band_system() {
+        let n = 120;
+        let a = convection_like(n);
+        let b = DVector::from_fn(n, |i| ((i as f64) * 0.21).cos());
+        let lu = SparseLu::factor(&a).unwrap();
+        let x = lu.solve(&b).unwrap();
+        let r = residual_norm(&a, &x, &b);
+        assert!(r < 1e-10, "residual {r}");
+        // The factor really is sparse-but-filled: more than A's entries.
+        assert!(lu.nnz() > a.nnz());
+    }
+
+    #[test]
+    fn factor_is_reusable_for_several_right_hand_sides() {
+        let n = 40;
+        let a = convection_like(n);
+        let lu = SparseLu::factor(&a).unwrap();
+        for seed in 0..3 {
+            let b = DVector::from_fn(n, |i| ((i + seed) as f64).sin());
+            let x = lu.solve(&b).unwrap();
+            assert!(residual_norm(&a, &x, &b) < 1e-10, "seed {seed}");
+        }
+    }
+
+    #[test]
+    fn singular_matrix_is_reported_as_breakdown() {
+        // The second row is twice the first.
+        let a = from_dense(&[&[1.0, 2.0], &[2.0, 4.0]]);
+        assert!(matches!(
+            SparseLu::factor(&a),
+            Err(SparseError::Breakdown { .. })
+        ));
+    }
+
+    #[test]
+    fn rejects_non_square_and_wrong_rhs_length() {
+        let rect = CooMatrix::<f64>::new(2, 3).to_csr();
+        assert!(matches!(
+            SparseLu::factor(&rect),
+            Err(SparseError::DimensionMismatch)
+        ));
+        let lu = SparseLu::factor(&from_dense(&[&[2.0, 0.0], &[0.0, 2.0]])).unwrap();
+        assert!(matches!(
+            lu.solve(&DVector::from_vec(vec![1.0])),
+            Err(SparseError::DimensionMismatch)
+        ));
+    }
+}
+
+#[cfg(test)]
+mod ic0_tests {
+    use super::*;
+
+    fn tridiagonal_spd(n: usize) -> CsrMatrix<f64> {
+        let mut coo = CooMatrix::<f64>::new(n, n);
+        for i in 0..n {
+            coo.push(i, i, 4.0);
+            if i + 1 < n {
+                coo.push(i, i + 1, -1.0);
+                coo.push(i + 1, i, -1.0);
+            }
+        }
+        coo.to_csr()
+    }
+
+    fn laplacian_2d(m: usize) -> CsrMatrix<f64> {
+        let n = m * m;
+        let mut coo = CooMatrix::<f64>::new(n, n);
+        for r in 0..m {
+            for c in 0..m {
+                let i = r * m + c;
+                coo.push(i, i, 4.0);
+                if c + 1 < m {
+                    coo.push(i, i + 1, -1.0);
+                    coo.push(i + 1, i, -1.0);
+                }
+                if r + 1 < m {
+                    coo.push(i, i + m, -1.0);
+                    coo.push(i + m, i, -1.0);
+                }
+            }
+        }
+        coo.to_csr()
+    }
+
+    #[test]
+    fn exact_when_cholesky_has_no_fill_in() {
+        // A tridiagonal SPD matrix has a bidiagonal Cholesky factor, so IC(0)
+        // is the exact factor and applying it inverts A.
+        let a = tridiagonal_spd(8);
+        let x_true = DVector::from_fn(8, |i| (i as f64 + 1.0).ln());
+        let b = a.matvec(&x_true).unwrap();
+        let ic = Ic0::factor(&a).unwrap();
+        let x = ic.apply(&b).unwrap();
+        for i in 0..8 {
+            assert!((x[i] - x_true[i]).abs() < 1e-12, "entry {i}");
+        }
+    }
+
+    #[test]
+    fn pcg_with_ic0_solves_2d_laplacian() {
+        let a = laplacian_2d(12);
+        let n = a.nrows();
+        let x_true = DVector::from_fn(n, |i| (i as f64 * 0.37).sin());
+        let b = a.matvec(&x_true).unwrap();
+        let x = ic0_preconditioned_cg(&a, &b, None, 1e-12, 500).unwrap();
+        for i in 0..n {
+            assert!((x[i] - x_true[i]).abs() < 1e-8, "entry {i}");
+        }
+    }
+
+    #[test]
+    fn ic0_preconditioning_needs_fewer_iterations_than_plain_cg() {
+        // Find the smallest iteration budget that solves the system: the
+        // preconditioned solve must need strictly fewer iterations.
+        let a = laplacian_2d(20);
+        let n = a.nrows();
+        let b = DVector::from_fn(n, |i| if i % 3 == 0 { 1.0 } else { -0.5 });
+        let budget = |solve: &dyn Fn(usize) -> bool| (1..=400).find(|&k| solve(k)).unwrap();
+        let plain = budget(&|k| conjugate_gradient(&a, &b, None, 1e-10, k).is_ok());
+        let precond = budget(&|k| ic0_preconditioned_cg(&a, &b, None, 1e-10, k).is_ok());
+        assert!(precond < plain, "preconditioned {precond} vs plain {plain}");
+    }
+
+    #[test]
+    fn rejects_non_positive_pivot() {
+        // Symmetric but indefinite: the second pivot is negative.
+        let mut coo = CooMatrix::<f64>::new(2, 2);
+        coo.push(0, 0, 1.0);
+        coo.push(0, 1, 2.0);
+        coo.push(1, 0, 2.0);
+        coo.push(1, 1, 1.0);
+        assert!(matches!(
+            Ic0::factor(&coo.to_csr()),
+            Err(SparseError::Breakdown { .. })
+        ));
+    }
+
+    #[test]
+    fn rejects_non_square_and_missing_diagonal() {
+        let rect = CooMatrix::<f64>::new(2, 3).to_csr();
+        assert!(matches!(
+            Ic0::factor(&rect),
+            Err(SparseError::DimensionMismatch)
+        ));
+        let mut coo = CooMatrix::<f64>::new(2, 2);
+        coo.push(0, 0, 2.0);
+        coo.push(1, 0, 0.5);
+        assert!(Ic0::factor(&coo.to_csr()).is_err());
     }
 }
 

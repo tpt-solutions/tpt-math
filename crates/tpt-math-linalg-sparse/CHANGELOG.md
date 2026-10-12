@@ -7,6 +7,12 @@ and this project adheres to SemVer.
 
 ## [Unreleased]
 
+### Added
+
+- `SparseLu`: left-looking sparse LU with partial pivoting (`P A = L U`), reusable across right-hand sides. Reports `Breakdown` on a singular matrix.
+- `Ic0` and `ic0_preconditioned_cg`: incomplete Cholesky with zero fill-in for SPD systems.
+- `preconditioned_conjugate_gradient`: CG under any caller-supplied SPD preconditioner. `jacobi_preconditioned_cg` is now a wrapper around it, with unchanged behaviour.
+
 ### Changed
 
 - `conjugate_gradient` and `bicgstab` update their vectors in place and reuse work buffers, so their iteration loops no longer allocate.

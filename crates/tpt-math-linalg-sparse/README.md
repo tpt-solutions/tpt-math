@@ -6,7 +6,8 @@ numeric substrate. It provides general-purpose sparse storage — coordinate
 (triplet, [`CooMatrix`]), compressed-sparse-row ([`CsrMatrix`]) and
 compressed-sparse-column ([`CscMatrix`]) — plus two iterative solvers:
 [`conjugate_gradient`] (symmetric positive-definite systems) and [`bicgstab`]
-(general / non-symmetric systems).
+(general / non-symmetric systems), with GMRES, several preconditioners, and
+direct LU and Cholesky factorisations.
 
 It deliberately carries **no `sprs` / `nalgebra` / `faer` dependency**, so there
 is no license exposure and the implementation is fully under workspace control.
@@ -56,12 +57,15 @@ let x = conjugate_gradient(&a, &b, None, 1e-12, 100).unwrap();
 * `CsrMatrix` / `CscMatrix`: `nrows` / `ncols` / `nnz`, `iter()` over stored
   entries, `transpose()` (CSR ↔ CSC), and `matvec` (`A * x`). The `*` operator
   form `csr * &x` is also provided for CSR.
-* Solvers: `conjugate_gradient(a, b, x0, tol, max_iter)` and
-  `bicgstab(a, b, x0, tol, max_iter)`, both returning
-  `Result<DVector<T>, SparseError>`.
-
-Direct sparse factorization (LU / Cholesky) is intentionally **out of scope**
-— only iterative solvers are provided.
+* Iterative solvers: `conjugate_gradient`, `bicgstab`, restarted `gmres`
+  (and `gmres_right_preconditioned`), each taking `(a, b, x0, tol, max_iter)`
+  and returning `Result<DVector<T>, SparseError>`.
+* Preconditioners: `jacobi_preconditioned_cg`, `ic0_preconditioned_cg` (IC(0)),
+  `gmres_ilu0` (ILU(0)), and `preconditioned_conjugate_gradient` for any SPD
+  preconditioner. The factors `Ilu0` and `Ic0` are also public.
+* Direct factorisations, reusable for many right-hand sides: `SparseLu` (LU with
+  partial pivoting, left-looking) and `SparseCholesky` (SPD). Neither applies a
+  fill-reducing ordering.
 
 ## License
 
