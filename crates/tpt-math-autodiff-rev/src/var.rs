@@ -149,7 +149,14 @@ impl<'t> Variable<'t> {
     /// `1 / self`, with local derivative `-1 / self²`.
     #[must_use]
     pub fn recip(self) -> Variable<'t> {
-        self.tape.constant(1.0) / self
+        self.unary(|a| Op::CDiv(1.0, a), 1.0 / self.value)
+    }
+
+    /// `|self|`. The derivative is `sign(self)`, with `0` at `self = 0`, which
+    /// is the usual subgradient choice at the kink.
+    #[must_use]
+    pub fn abs(self) -> Variable<'t> {
+        self.unary(Op::Abs, self.value.abs())
     }
 }
 
@@ -169,8 +176,12 @@ impl fmt::Display for Variable<'_> {
 }
 
 /// Implement `Variable op Variable`, `Variable op f64` and `f64 op Variable`.
+///
+/// The scalar forms record a single node that stores the literal, rather than
+/// a separate `Const` node. `$ScalarRhs` builds the op for `variable op c` and
+/// `$ScalarLhs` the op for `c op variable`, both from `(operand, c)`.
 macro_rules! impl_binop {
-    ($Trait:ident, $method:ident, $Variant:ident, $eval:expr) => {
+    ($Trait:ident, $method:ident, $Variant:ident, $eval:expr, $ScalarRhs:expr, $ScalarLhs:expr) => {
         impl<'t> $Trait<Variable<'t>> for Variable<'t> {
             type Output = Variable<'t>;
 
@@ -186,8 +197,9 @@ macro_rules! impl_binop {
 
             #[inline]
             fn $method(self, rhs: f64) -> Variable<'t> {
-                let rhs = self.tape().constant(rhs);
-                $Trait::$method(self, rhs)
+                let eval: fn(f64, f64) -> f64 = $eval;
+                let make: fn(usize, f64) -> Op = $ScalarRhs;
+                self.unary(|a| make(a, rhs), eval(self.value(), rhs))
             }
         }
 
@@ -196,17 +208,46 @@ macro_rules! impl_binop {
 
             #[inline]
             fn $method(self, rhs: Variable<'t>) -> Variable<'t> {
-                let lhs = rhs.tape().constant(self);
-                $Trait::$method(lhs, rhs)
+                let eval: fn(f64, f64) -> f64 = $eval;
+                let make: fn(usize, f64) -> Op = $ScalarLhs;
+                rhs.unary(|a| make(a, self), eval(self, rhs.value()))
             }
         }
     };
 }
 
-impl_binop!(Add, add, Add, |a, b| a + b);
-impl_binop!(Sub, sub, Sub, |a, b| a - b);
-impl_binop!(Mul, mul, Mul, |a, b| a * b);
-impl_binop!(Div, div, Div, |a, b| a / b);
+impl_binop!(
+    Add,
+    add,
+    Add,
+    |a, b| a + b,
+    |a, c| Op::AddC(a, c),
+    |a, c| Op::AddC(a, c)
+);
+impl_binop!(
+    Sub,
+    sub,
+    Sub,
+    |a, b| a - b,
+    |a, c| Op::SubC(a, c),
+    |a, c| Op::CSub(c, a)
+);
+impl_binop!(
+    Mul,
+    mul,
+    Mul,
+    |a, b| a * b,
+    |a, c| Op::MulC(a, c),
+    |a, c| Op::MulC(a, c)
+);
+impl_binop!(
+    Div,
+    div,
+    Div,
+    |a, b| a / b,
+    |a, c| Op::DivC(a, c),
+    |a, c| Op::CDiv(c, a)
+);
 
 /// Implement the `*Assign` counterpart of an already-implemented operator.
 macro_rules! impl_assign_op {
@@ -333,5 +374,55 @@ mod tests {
         let x = a.var(1.0);
         let y = b.var(2.0);
         let _ = x + y;
+    }
+}
+
+#[cfg(test)]
+mod scalar_op_tests {
+    use crate::GradientTape;
+
+    #[test]
+    fn scalar_operands_record_one_node_each() {
+        // Input plus one node per operation: no separate constant nodes.
+        let tape = GradientTape::new();
+        let x = tape.var(3.0);
+        let _ = x + 1.0;
+        let _ = 2.0 - x;
+        let _ = x * 4.0;
+        let _ = 6.0 / x;
+        assert_eq!(tape.len(), 5);
+    }
+
+    #[test]
+    fn scalar_operator_gradients() {
+        let check = |f: &dyn Fn(crate::Variable) -> crate::Variable, x0: f64, want: f64| {
+            let tape = GradientTape::new();
+            let x = tape.var(x0);
+            let y = f(x);
+            let g = tape.gradient(y, &[x]);
+            assert!((g[0] - want).abs() < 1e-12, "got {}, want {want}", g[0]);
+        };
+        check(&|x| x + 1.0, 2.0, 1.0);
+        check(&|x| x - 1.0, 2.0, 1.0);
+        check(&|x| 5.0 - x, 2.0, -1.0);
+        check(&|x| x * 3.0, 2.0, 3.0);
+        check(&|x| x / 4.0, 2.0, 0.25);
+        // d/dx (6 / x) = -6 / x², which is -1.5 at x = 2.
+        check(&|x| 6.0 / x, 2.0, -1.5);
+        check(&|x| x.recip(), 2.0, -0.25);
+    }
+
+    #[test]
+    fn abs_has_sign_derivative_and_zero_subgradient_at_zero() {
+        let grad_at = |x0: f64| {
+            let tape = GradientTape::new();
+            let x = tape.var(x0);
+            let y = x.abs();
+            assert_eq!(y.value(), x0.abs());
+            tape.gradient(y, &[x])[0]
+        };
+        assert_eq!(grad_at(2.5), 1.0);
+        assert_eq!(grad_at(-2.5), -1.0);
+        assert_eq!(grad_at(0.0), 0.0);
     }
 }

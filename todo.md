@@ -1035,18 +1035,18 @@ tree.*
 - [x] `tpt-math-linalg-sparse` CG/BiCGSTAB: absolute (not relative)
       tolerance; no NaN / negative-curvature / `omega == 0` breakdown
       detection; no half-step `‖s‖` check
-- [ ] `tpt-math-optimize-convex`: `AlmostSolved` returned at 10×tol and
+- [x] `tpt-math-optimize-convex`: `AlmostSolved` returned at 10×tol and
       dropped by `solve_qp`; absolute tolerances, no scaling; separate
       primal/dual step lengths for P ≠ 0
-      Status: Partial: tolerances are now scaled by the problem data, and the
-      complementarity gap is objective-relative. `AlmostSolved` is still
-      returned as `Ok` by `solve_qp` (now documented), not as an error.
+      Status: Done: tolerances are scaled by the problem data, and the
+      complementarity gap is objective-relative. `QpSolution.status` reports
+      `Solved` or `AlmostSolved`; `solve_qp` returns `Ok` for both and documents it.
       Primal/dual step lengths were already separate.
-- [ ] `tpt-math-autodiff-rev`: `Powi(a,0)` at 0 → NaN; extra `Const` node
+- [x] `tpt-math-autodiff-rev`: `Powi(a,0)` at 0 → NaN; extra `Const` node
       per scalar op doubles tape growth; no subgradient handling at 0
-      Status: Partial: the `Powi(a, 0)` and `Powf(a, 0)` NaN at 0 is fixed. The extra
-      `Const` node per scalar op and the subgradient handling at 0 are not
-      done.
+      Status: Done: `Powi(a, 0)` and `Powf(a, 0)` are 0 at 0. Scalar operators
+      record one node (`AddC`, `SubC`, `CSub`, `MulC`, `DivC`, `CDiv`). `abs` uses
+      the subgradient 0 at 0. The `Op` enum gained variants, so it is a minor-breaking change.
 - [x] `tpt-math-prob-monte-carlo`: naive one-pass variance (cancellation);
       unused `buf` allocation in importance sampling
 - [ ] Relative singularity thresholds in dense/complex/fixed LU (currently
@@ -1091,10 +1091,11 @@ tree.*
 - [x] `tpt-math-exact` intervals: add/sub in 2 ops, not 12 BigRational clones
       Status: Done for add/sub (two endpoint operations each). Multiplication still
       uses the four-corner rule, which is needed for mixed signs.
-- [ ] `tpt-math-signal-filter`: FFT overlap-add for long FIR kernels; real-FFT
+- [x] `tpt-math-signal-filter`: FFT overlap-add for long FIR kernels; real-FFT
       path in `signal-fft`
       Status: Partial: `FirFilter::filter_overlap_add` is done, and matches the direct
-      `filter` to 1e-10. The real-FFT path in `signal-fft` is not.
+      `filter` to 1e-10. The real-FFT path is `Fft::rfft`/`irfft` in `signal-fft`.
+      The filter does not use it yet.
 - [ ] Optional `rayon` feature: Monte Carlo, FIR, GEMM
 - [ ] Criterion benches for every numeric crate (only 5 have any); scheduled
       regression run in CI
@@ -1172,6 +1173,10 @@ tree.*
 - [ ] Units-aware optimise / ODE / autodiff via `units-dyn` + generic scalars
 - [ ] Common `SolveReport { status, iters, residual }` across sparse, convex
       and general solvers
+      Status: Partial: `tpt-math-numeric::report` defines `SolveStatus` and
+      `SolveReport<T>`. Sparse `conjugate_gradient_with_report` and
+      `bicgstab_with_report` return it for every outcome. Not done: GMRES, the
+      convex solver (it does not count iterations yet), and the general optimizers.
 - [ ] Top-level `tpt-math` facade crate with `prelude` and short feature names
 
 ### 7.5 Repo hygiene, CI and automation
@@ -1211,7 +1216,9 @@ tree.*
 - [ ] Automation: release-plz (31-crate ordered publishing), Dependabot
       (group `tpt-*`), proptest, cargo-fuzz (symbolic, exact), typos, taplo
       Status: Partial: Dependabot is configured (weekly, cargo and actions, `tpt-*`
-      grouped). Not done: release-plz, proptest, cargo-fuzz, typos, taplo.
+      grouped). `typos` is configured (`_typos.toml`), the tree is clean, and a CI
+      job runs it. That job uses `crate-ci/typos@master`, which should be pinned to a
+      release tag. Not done: release-plz, proptest, cargo-fuzz, taplo.
 - [ ] `[package.metadata.docs.rs]` (`all-features`, `docsrs` cfg) in each
       crate; feature tables in READMEs; examples for geometry/spatial,
       graph, signal, sparse/complex linalg, `no_std`

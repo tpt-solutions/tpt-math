@@ -18,7 +18,10 @@
 
 pub mod ode;
 pub mod quadrature;
+pub mod report;
 pub mod roots;
+
+pub use report::{SolveReport, SolveStatus};
 
 pub use num_traits::{
     cast, float::FloatConst, real::Real, CheckedAdd, CheckedDiv, CheckedMul, CheckedNeg,

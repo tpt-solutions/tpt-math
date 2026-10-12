@@ -651,7 +651,7 @@ mod tests {
 
     #[test]
     fn kriging_recovers_line() {
-        // y = x sampled at two colinear points; ordinary Kriging with the
+        // y = x sampled at two collinear points; ordinary Kriging with the
         // linear variogram reproduces the line everywhere inside the span.
         let xs = DVector::from_vec(vec![-1.0_f64, 1.0]);
         let ys = DVector::from_vec(vec![-1.0_f64, 1.0]);

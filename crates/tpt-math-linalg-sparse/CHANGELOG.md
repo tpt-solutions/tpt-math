@@ -9,6 +9,7 @@ and this project adheres to SemVer.
 
 ### Added
 
+- `conjugate_gradient_with_report` and `bicgstab_with_report`: return `(x, SolveReport)` for every outcome, including breakdown and non-convergence, which the plain solvers report as errors. Only a dimension mismatch is an `Err`.
 - `SparseLu`: left-looking sparse LU with partial pivoting (`P A = L U`), reusable across right-hand sides. Reports `Breakdown` on a singular matrix.
 - `Ic0` and `ic0_preconditioned_cg`: incomplete Cholesky with zero fill-in for SPD systems.
 - `preconditioned_conjugate_gradient`: CG under any caller-supplied SPD preconditioner. `jacobi_preconditioned_cg` is now a wrapper around it, with unchanged behaviour.

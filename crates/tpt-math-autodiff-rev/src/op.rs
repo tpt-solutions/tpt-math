@@ -66,6 +66,20 @@ pub enum Op {
     Powi(usize, i32),
     /// `a.powf(p)` for a real exponent `p`.
     Powf(usize, f64),
+    /// `|a|`. The derivative at `a = 0` is taken as `0` (a subgradient).
+    Abs(usize),
+    /// `a + c` for a literal `c`. Stored directly, so no `Const` node is needed.
+    AddC(usize, f64),
+    /// `a - c` for a literal `c`.
+    SubC(usize, f64),
+    /// `c - a` for a literal `c`.
+    CSub(f64, usize),
+    /// `a * c` for a literal `c`.
+    MulC(usize, f64),
+    /// `a / c` for a literal `c`.
+    DivC(usize, f64),
+    /// `c / a` for a literal `c`.
+    CDiv(f64, usize),
 }
 
 impl Op {
@@ -125,6 +139,27 @@ impl Op {
             }
             Op::Powf(a, 0.0) => Partials::unary(a, 0.0),
             Op::Powf(a, p) => Partials::unary(a, p * values[a].powf(p - 1.0)),
+            Op::Abs(a) => {
+                let x = values[a];
+                let sign = if x > 0.0 {
+                    1.0
+                } else if x < 0.0 {
+                    -1.0
+                } else {
+                    0.0
+                };
+                Partials::unary(a, sign)
+            }
+            Op::AddC(a, _) | Op::SubC(a, _) => Partials::unary(a, 1.0),
+            Op::CSub(_, a) => Partials::unary(a, -1.0),
+            Op::MulC(a, c) => Partials::unary(a, c),
+            Op::DivC(a, c) => Partials::unary(a, 1.0 / c),
+            // d/da (c / a) = -c / a², written from the operand so that the
+            // derivative is finite whenever the primal value is.
+            Op::CDiv(c, a) => {
+                let den = values[a];
+                Partials::unary(a, -c / (den * den))
+            }
         }
     }
 

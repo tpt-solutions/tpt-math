@@ -50,7 +50,7 @@ use alloc::vec;
 use alloc::vec::Vec;
 
 use tpt_math_linalg_dense::DVector;
-use tpt_math_numeric::Scalar;
+use tpt_math_numeric::{Scalar, SolveReport, SolveStatus};
 
 /// Errors returned by the sparse solvers and operators.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -523,6 +523,28 @@ pub fn conjugate_gradient<T: Scalar + Copy + 'static>(
     tol: T,
     max_iter: usize,
 ) -> Result<DVector<T>, SparseError> {
+    let (x, report) = conjugate_gradient_with_report(a, b, x0, tol, max_iter)?;
+    report_to_result(x, report)
+}
+
+/// [`conjugate_gradient`] with a [`SolveReport`] instead of an error for
+/// breakdown or non-convergence.
+///
+/// Returns the last iterate together with its report, so a caller can inspect
+/// how far the solve got. Only a dimension mismatch is an `Err`.
+///
+/// # Errors
+///
+/// Returns [`SparseError::DimensionMismatch`] if `a` is not square or `b`'s
+/// length does not match `a.nrows()`, or if a supplied `x0` has the wrong length.
+#[cfg(feature = "alloc")]
+pub fn conjugate_gradient_with_report<T: Scalar + Copy + 'static>(
+    a: &CsrMatrix<T>,
+    b: &DVector<T>,
+    x0: Option<DVector<T>>,
+    tol: T,
+    max_iter: usize,
+) -> Result<(DVector<T>, SolveReport<T>), SparseError> {
     if a.nrows() != a.ncols() || b.len() != a.nrows() {
         return Err(SparseError::DimensionMismatch);
     }
@@ -537,7 +559,7 @@ pub fn conjugate_gradient<T: Scalar + Copy + 'static>(
         tol
     };
     if r.norm() <= target {
-        return Ok(x);
+        return Ok(report(x, SolveStatus::Converged, 0, r.norm()));
     }
     let mut p = r.clone();
     // Work buffer reused across iterations: the loop allocates nothing.
@@ -549,25 +571,55 @@ pub fn conjugate_gradient<T: Scalar + Copy + 'static>(
         // For SPD A, pᵀAp > 0 until convergence; anything else (including NaN)
         // means the method cannot continue.
         if p_ap.is_nan() || p_ap <= T::zero() {
-            return Err(SparseError::Breakdown { iterations: it });
+            return Ok(report(x, SolveStatus::Breakdown, it, r.norm()));
         }
         let alpha = rs_old / p_ap;
         axpy_slice(x.as_mut_slice(), alpha, p.as_slice());
         axpy_slice(r.as_mut_slice(), -alpha, ap.as_slice());
         if r.norm() <= target {
-            return Ok(x);
+            return Ok(report(x, SolveStatus::Converged, it + 1, r.norm()));
         }
         let rs_new = r.dot(&r);
         if !rs_new.is_finite() {
-            return Err(SparseError::Breakdown { iterations: it });
+            return Ok(report(x, SolveStatus::Breakdown, it, r.norm()));
         }
         let beta = rs_new / rs_old;
         xpay_slice(p.as_mut_slice(), beta, r.as_slice());
         rs_old = rs_new;
     }
-    Err(SparseError::NotConverged {
-        iterations: max_iter,
-    })
+    Ok(report(x, SolveStatus::NotConverged, max_iter, r.norm()))
+}
+
+/// Build the `(iterate, report)` pair returned by the `*_with_report` solvers.
+#[cfg(feature = "alloc")]
+fn report<T>(
+    x: DVector<T>,
+    status: SolveStatus,
+    iterations: usize,
+    residual: T,
+) -> (DVector<T>, SolveReport<T>) {
+    (
+        x,
+        SolveReport {
+            status,
+            iterations,
+            residual,
+        },
+    )
+}
+
+/// Map a report back to the error-returning convention of the plain solvers.
+#[cfg(feature = "alloc")]
+fn report_to_result<T>(x: DVector<T>, report: SolveReport<T>) -> Result<DVector<T>, SparseError> {
+    match report.status {
+        SolveStatus::Converged => Ok(x),
+        SolveStatus::NotConverged => Err(SparseError::NotConverged {
+            iterations: report.iterations,
+        }),
+        SolveStatus::Breakdown => Err(SparseError::Breakdown {
+            iterations: report.iterations,
+        }),
+    }
 }
 
 /// Solve `A x = b` with the BiCGSTAB method for general (non-symmetric)
@@ -590,6 +642,24 @@ pub fn bicgstab<T: Scalar + Copy + 'static>(
     tol: T,
     max_iter: usize,
 ) -> Result<DVector<T>, SparseError> {
+    let (x, report) = bicgstab_with_report(a, b, x0, tol, max_iter)?;
+    report_to_result(x, report)
+}
+
+/// [`bicgstab`] with a [`SolveReport`] instead of an error for breakdown or
+/// non-convergence. Returns the last iterate with its report.
+///
+/// # Errors
+///
+/// Returns [`SparseError::DimensionMismatch`] for incompatible dimensions only.
+#[cfg(feature = "alloc")]
+pub fn bicgstab_with_report<T: Scalar + Copy + 'static>(
+    a: &CsrMatrix<T>,
+    b: &DVector<T>,
+    x0: Option<DVector<T>>,
+    tol: T,
+    max_iter: usize,
+) -> Result<(DVector<T>, SolveReport<T>), SparseError> {
     if a.nrows() != a.ncols() || b.len() != a.nrows() {
         return Err(SparseError::DimensionMismatch);
     }
@@ -604,7 +674,7 @@ pub fn bicgstab<T: Scalar + Copy + 'static>(
         tol
     };
     if r.norm() <= target {
-        return Ok(x);
+        return Ok(report(x, SolveStatus::Converged, 0, r.norm()));
     }
     let r0 = r.clone();
     // Work buffers reused across iterations: the loop allocates nothing.
@@ -618,7 +688,7 @@ pub fn bicgstab<T: Scalar + Copy + 'static>(
     for it in 0..max_iter {
         let rho_new = r0.dot(&r);
         if rho_new == T::zero() || !rho_new.is_finite() {
-            return Err(SparseError::Breakdown { iterations: it });
+            return Ok(report(x, SolveStatus::Breakdown, it, r.norm()));
         }
         let beta = (rho_new / rho) * (alpha / omega);
         // p = r + beta * (p - omega * v), using the previous v.
@@ -633,7 +703,7 @@ pub fn bicgstab<T: Scalar + Copy + 'static>(
         a.matvec_into(p.as_slice(), v.as_mut_slice())?;
         let r0_v = r0.dot(&v);
         if r0_v == T::zero() || !r0_v.is_finite() {
-            return Err(SparseError::Breakdown { iterations: it });
+            return Ok(report(x, SolveStatus::Breakdown, it, r.norm()));
         }
         alpha = rho_new / r0_v;
         // s = r - alpha * v
@@ -642,16 +712,16 @@ pub fn bicgstab<T: Scalar + Copy + 'static>(
         // Half-step exit: if s is already small enough, x + alpha·p is the answer.
         if s.norm() <= target {
             axpy_slice(x.as_mut_slice(), alpha, p.as_slice());
-            return Ok(x);
+            return Ok(report(x, SolveStatus::Converged, it + 1, s.norm()));
         }
         a.matvec_into(s.as_slice(), t.as_mut_slice())?;
         let t_sq = t.dot(&t);
         if t_sq == T::zero() {
-            return Err(SparseError::Breakdown { iterations: it });
+            return Ok(report(x, SolveStatus::Breakdown, it, r.norm()));
         }
         omega = t.dot(&s) / t_sq;
         if omega == T::zero() || !omega.is_finite() {
-            return Err(SparseError::Breakdown { iterations: it });
+            return Ok(report(x, SolveStatus::Breakdown, it, r.norm()));
         }
         // x += alpha * p + omega * s; r = s - omega * t.
         axpy_slice(x.as_mut_slice(), alpha, p.as_slice());
@@ -659,13 +729,11 @@ pub fn bicgstab<T: Scalar + Copy + 'static>(
         r.as_mut_slice().copy_from_slice(s.as_slice());
         axpy_slice(r.as_mut_slice(), -omega, t.as_slice());
         if r.norm() <= target {
-            return Ok(x);
+            return Ok(report(x, SolveStatus::Converged, it + 1, r.norm()));
         }
         rho = rho_new;
     }
-    Err(SparseError::NotConverged {
-        iterations: max_iter,
-    })
+    Ok(report(x, SolveStatus::NotConverged, max_iter, r.norm()))
 }
 
 /// Euclidean norm of a slice.
@@ -2487,5 +2555,83 @@ mod tests {
             bicgstab(&a, &b, None, 1e-12, 10),
             Err(SparseError::DimensionMismatch)
         );
+    }
+}
+
+#[cfg(test)]
+mod report_tests {
+    use super::*;
+
+    fn laplacian_1d(n: usize) -> CsrMatrix<f64> {
+        let mut coo = CooMatrix::<f64>::new(n, n);
+        for i in 0..n {
+            coo.push(i, i, 2.0);
+            if i + 1 < n {
+                coo.push(i, i + 1, -1.0);
+                coo.push(i + 1, i, -1.0);
+            }
+        }
+        coo.to_csr()
+    }
+
+    #[test]
+    fn cg_report_on_convergence_counts_iterations() {
+        let a = laplacian_1d(20);
+        let b = DVector::from_fn(20, |i| (i as f64).sin());
+        let (x, report) = conjugate_gradient_with_report(&a, &b, None, 1e-10, 500).unwrap();
+        assert_eq!(report.status, SolveStatus::Converged);
+        assert!(report.iterations > 0 && report.iterations <= 20);
+        assert!(report.residual <= 1e-10 * b.norm());
+        let ax = a.matvec(&x).unwrap();
+        assert!((ax[3] - b[3]).abs() < 1e-8);
+    }
+
+    #[test]
+    fn cg_report_on_budget_exhaustion_is_ok_not_err() {
+        let a = laplacian_1d(50);
+        let b = DVector::from_fn(50, |i| (i as f64 * 0.1).cos());
+        let (_, report) = conjugate_gradient_with_report(&a, &b, None, 1e-14, 2).unwrap();
+        assert_eq!(report.status, SolveStatus::NotConverged);
+        assert_eq!(report.iterations, 2);
+        // The plain solver reports the same situation as an error.
+        assert!(matches!(
+            conjugate_gradient(&a, &b, None, 1e-14, 2),
+            Err(SparseError::NotConverged { iterations: 2 })
+        ));
+    }
+
+    #[test]
+    fn cg_report_on_indefinite_matrix_is_breakdown() {
+        let mut coo = CooMatrix::<f64>::new(2, 2);
+        coo.push(0, 0, 1.0);
+        coo.push(1, 1, -1.0);
+        let a = coo.to_csr();
+        let b = DVector::from_vec(vec![1.0, 1.0]);
+        let (_, report) = conjugate_gradient_with_report(&a, &b, None, 1e-12, 10).unwrap();
+        assert_eq!(report.status, SolveStatus::Breakdown);
+    }
+
+    #[test]
+    fn bicgstab_report_matches_plain_solver() {
+        let a = laplacian_1d(15);
+        let b = DVector::from_fn(15, |i| 1.0 + i as f64);
+        let (x, report) = bicgstab_with_report(&a, &b, None, 1e-10, 200).unwrap();
+        assert!(report.status.is_converged());
+        let plain = bicgstab(&a, &b, None, 1e-10, 200).unwrap();
+        for i in 0..15 {
+            assert!((x[i] - plain[i]).abs() < 1e-12);
+        }
+        let (_, starved) = bicgstab_with_report(&a, &b, None, 1e-14, 1).unwrap();
+        assert_eq!(starved.status, SolveStatus::NotConverged);
+    }
+
+    #[test]
+    fn report_still_rejects_dimension_mismatch() {
+        let a = laplacian_1d(3);
+        let b = DVector::from_vec(vec![1.0, 2.0]);
+        assert!(matches!(
+            conjugate_gradient_with_report(&a, &b, None, 1e-8, 10),
+            Err(SparseError::DimensionMismatch)
+        ));
     }
 }

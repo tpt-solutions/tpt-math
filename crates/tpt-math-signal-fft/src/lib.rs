@@ -168,6 +168,130 @@ impl Fft {
         buffer
     }
 
+    /// Forward transform of a real signal, returning only the `n/2 + 1` bins that
+    /// are not redundant by conjugate symmetry (`n = signal.len()`).
+    ///
+    /// For even `n` this runs one complex transform of length `n/2`, packing the
+    /// even samples into the real part and the odd samples into the imaginary
+    /// part, and then separates the two half-spectra. The complex transform is
+    /// half the length of the full one. Odd `n` falls back to the full
+    /// transform and truncates it.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use tpt_math_signal_fft::Fft;
+    ///
+    /// let mut engine = Fft::new();
+    /// let x = [1.0, 2.0, 0.0, -1.0, 3.0, 0.5];
+    /// let half = engine.rfft(&x);
+    /// assert_eq!(half.len(), 4);
+    /// let full = engine.forward(&x);
+    /// for (a, b) in half.iter().zip(&full) {
+    ///     assert!((a - b).norm() < 1e-12);
+    /// }
+    /// ```
+    pub fn rfft(&mut self, signal: &[f64]) -> Vec<Complex<f64>> {
+        let n = signal.len();
+        if n == 0 {
+            return Vec::new();
+        }
+        if n % 2 == 1 {
+            let mut full = self.forward(signal);
+            full.truncate(n / 2 + 1);
+            return full;
+        }
+        let m = n / 2;
+        let packed: Vec<Complex<f64>> = (0..m)
+            .map(|k| Complex::new(signal[2 * k], signal[2 * k + 1]))
+            .collect();
+        let z = self.forward_cplx(&packed);
+        let step = -2.0 * core::f64::consts::PI / n as f64;
+        (0..=m)
+            .map(|k| {
+                // Z[k] and the conjugate of Z[m − k] give the even and odd
+                // sample transforms; indices wrap so that k = 0 and k = m agree.
+                let zk = z[k % m];
+                let zc = z[(m - k) % m].conj();
+                let even = (zk + zc) * 0.5;
+                let odd = (zk - zc) * Complex::new(0.0, -0.5);
+                let w = Complex::from_polar(1.0, step * k as f64);
+                even + w * odd
+            })
+            .collect()
+    }
+
+    /// Inverse of [`rfft`](Self::rfft): rebuild the real signal of length `n`
+    /// from its `n/2 + 1` non-redundant bins, scaled by `1/n` so that it undoes
+    /// `rfft` exactly.
+    ///
+    /// For even `n` this uses one complex inverse transform of length `n/2`. Odd
+    /// `n` reconstructs the full Hermitian spectrum and inverts that. Bins beyond
+    /// `n/2 + 1` are ignored, and missing bins count as zero.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use tpt_math_signal_fft::Fft;
+    ///
+    /// let mut engine = Fft::new();
+    /// let x = [0.5, -1.0, 2.0, 3.0, 1.5, 0.0];
+    /// let spectrum = engine.rfft(&x);
+    /// let back = engine.irfft(&spectrum, x.len());
+    /// for (got, want) in back.iter().zip(&x) {
+    ///     assert!((got - want).abs() < 1e-12);
+    /// }
+    /// ```
+    pub fn irfft(&mut self, spectrum: &[Complex<f64>], n: usize) -> Vec<f64> {
+        if n == 0 {
+            return Vec::new();
+        }
+        let half = n / 2 + 1;
+        let bin = |k: usize| {
+            spectrum
+                .get(k)
+                .copied()
+                .unwrap_or_else(|| Complex::new(0.0, 0.0))
+        };
+        if n % 2 == 1 {
+            let mut full = vec![Complex::new(0.0, 0.0); n];
+            for k in 0..half {
+                full[k] = bin(k);
+                if k > 0 {
+                    full[n - k] = bin(k).conj();
+                }
+            }
+            return self
+                .inverse_normalized(&full)
+                .into_iter()
+                .map(|z| z.re)
+                .collect();
+        }
+        let m = n / 2;
+        let step = -2.0 * core::f64::consts::PI / n as f64;
+        // Recover the half-length spectra of the even and odd samples, then
+        // pack them as E + iO. Its inverse has the even samples in the real
+        // part and the odd samples in the imaginary part.
+        let packed: Vec<Complex<f64>> = (0..m)
+            .map(|k| {
+                let xk = bin(k);
+                let xc = bin(m - k).conj();
+                let even = (xk + xc) * 0.5;
+                let w_inv = Complex::from_polar(1.0, -step * k as f64);
+                let odd = (xk - xc) * w_inv * 0.5;
+                even + Complex::new(0.0, 1.0) * odd
+            })
+            .collect();
+        let scale = 1.0 / m as f64;
+        let z = self.inverse_cplx(&packed);
+        let mut out = Vec::with_capacity(n);
+        for z_t in z {
+            out.push(z_t.re * scale);
+            out.push(z_t.im * scale);
+        }
+        out
+    }
+
     /// Forward transform of a complex-valued signal.
     ///
     /// This is the general case: unlike [`forward`](Self::forward) the
@@ -515,5 +639,64 @@ mod tests {
         let mags = magnitude(&spectrum);
         assert_close(mags[0], 5.0, TOL);
         assert_close(mags[1], 13.0, TOL);
+    }
+}
+
+#[cfg(test)]
+mod real_fft_tests {
+    use super::*;
+
+    fn signal(n: usize) -> Vec<f64> {
+        (0..n)
+            .map(|t| (t as f64 * 0.73).sin() + 0.3 * (t as f64 * 2.1).cos() - 0.1 * t as f64)
+            .collect()
+    }
+
+    #[test]
+    fn rfft_matches_first_half_of_full_transform() {
+        let mut engine = Fft::new();
+        for n in [1usize, 2, 3, 4, 5, 8, 9, 16, 17, 30, 64, 101] {
+            let x = signal(n);
+            let half = engine.rfft(&x);
+            let full = engine.forward(&x);
+            assert_eq!(half.len(), n / 2 + 1, "n = {n}");
+            for (k, (a, b)) in half.iter().zip(&full).enumerate() {
+                assert!((a - b).norm() < 1e-9, "n = {n}, bin {k}: {a} vs {b}");
+            }
+        }
+    }
+
+    #[test]
+    fn irfft_inverts_rfft_for_even_and_odd_lengths() {
+        let mut engine = Fft::new();
+        for n in [1usize, 2, 3, 6, 7, 16, 25, 128] {
+            let x = signal(n);
+            let spectrum = engine.rfft(&x);
+            let back = engine.irfft(&spectrum, n);
+            assert_eq!(back.len(), n);
+            for (t, (got, want)) in back.iter().zip(&x).enumerate() {
+                assert!((got - want).abs() < 1e-10, "n = {n}, sample {t}");
+            }
+        }
+    }
+
+    #[test]
+    fn irfft_of_empty_spectrum_is_zero() {
+        let mut engine = Fft::new();
+        assert_eq!(engine.irfft(&[], 4), vec![0.0; 4]);
+        assert!(engine.irfft(&[], 0).is_empty());
+        assert!(engine.rfft(&[]).is_empty());
+    }
+
+    #[test]
+    fn irfft_ignores_extra_bins() {
+        let mut engine = Fft::new();
+        let x = signal(8);
+        let mut spectrum = engine.rfft(&x);
+        spectrum.push(Complex::new(99.0, 99.0));
+        let back = engine.irfft(&spectrum, 8);
+        for (got, want) in back.iter().zip(&x) {
+            assert!((got - want).abs() < 1e-10);
+        }
     }
 }
