@@ -16,18 +16,9 @@ This is a leaf crate of the signal layer, sitting above `tpt-math-signal-fft`
 
 ## Features
 
-- No optional features: `default = []`, and the crate always builds the full
-  API.
-- Requires `std`. Every generator and filter operation returns an owned
-  `Vec<f64>`, and the transitive `tpt-math-signal-fft` / `rustfft` dependency is
-  `std`-only, so there is no `no_std` configuration.
-- Two areas of functionality:
-  - **FIR filtering** — `FirFilter`, with explicit taps (`FirFilter::new`) or
-    windowed-sinc `lowpass` / `highpass` designs, plus centred (`filter`,
-    `filter_in_place`), causal (`filter_causal`), and spectral
-    (`frequency_response`) evaluation.
-  - **Windowing** — `rectangular`, `hamming`, `hanning`, `blackman`,
-    `bartlett`, the run-time-dispatched `Window` enum, and `apply_window`.
+| Feature | Enables | Notes |
+|---|---|---|
+| `rayon` | `["dep:rayon"]` | Parallel direct filtering (`FirFilter::filter_par`). Same output as `filter`. |
 
 ## Quick start
 

@@ -1,0 +1,38 @@
+# Scheduled benchmark run. Criterion compares each run with the previous one
+# kept in the cache below, and the report is uploaded as an artifact.
+#
+# This job does not fail on a slowdown. Timings on shared CI runners are noisy,
+# so a hard threshold would flap. Read the comparison in the log and the report.
+name: Bench
+
+on:
+  schedule:
+    - cron: "0 3 * * 1"  # Mondays, 03:00 UTC
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  bench:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/checkout-tpt-simd
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Restore previous Criterion results
+        uses: actions/cache@v4
+        with:
+          path: target/criterion
+          key: criterion-${{ github.run_id }}
+          restore-keys: |
+            criterion-
+      - name: Run benchmarks
+        run: cargo bench --workspace
+      - name: Upload Criterion report
+        uses: actions/upload-artifact@v4
+        with:
+          name: criterion-report
+          path: target/criterion
+          retention-days: 90

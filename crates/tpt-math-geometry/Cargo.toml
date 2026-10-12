@@ -25,6 +25,14 @@ alloc = ["tpt-math-linalg-fixed/alloc", "tpt-math-numeric/alloc"]
 [lints]
 workspace = true
 
+[dev-dependencies]
+tpt-math-linalg-fixed = { workspace = true }
+criterion = { workspace = true }
+
+[[bench]]
+name = "geometry_bench"
+harness = false
+
 [package.metadata.docs.rs]
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]

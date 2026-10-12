@@ -17,10 +17,13 @@ implementation dropped that dependency for a zero-license-risk, in-repo design.)
 
 ## Features
 
-* `std` (default) — the allocator plus `std` support of deps.
-* `alloc` — signal allocator availability (dynamic vectors need it).
-* `argmin` — `ArgminMath`-family trait impls for `DVector<f64>` / `DMatrix<f64>`,
-  so they can drive `argmin` solvers without the `nalgebra` backend.
+| Feature | Enables | Notes |
+|---|---|---|
+| `std` | `["tpt-math-numeric/std", "alloc"]` | `std` pulls in the allocator (dynamic vectors need a heap). |
+| `alloc` | `["tpt-math-numeric/alloc"]` | Dynamic vectors/matrices always need an allocator. |
+| `simd` | `["alloc", "dep:tpt-simd-blas"]` | Route `DMatrix * DMatrix`, `DMatrix * DVector`, `DVector::dot` and `norm` to tpt-simd-blas for `f32`/`f64` (other scalar types use the generic loops). Off by default: results reassociate sums, so they can differ from the scalar loops by a few ulps (tpt-simd ADR 0003, tier 2). Adds a `T: 'static` bound to those operations. Enable `simd-runtime` to detect AVX2+FMA at run time. |
+| `rayon` | `["std", "dep:rayon"]` | Multi-threaded `DMatrix::<f64>::par_mul`. Results are bitwise equal to `*`. |
+| `simd-runtime` | `["simd", "tpt-simd-blas/runtime-dispatch"]` |  |
 
 ## Example
 

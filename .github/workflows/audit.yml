@@ -1,0 +1,19 @@
+# Scheduled security audit. The same advisory check runs on every push through the
+# cargo-deny job in ci.yml, but dependencies can gain advisories without a push, so
+# this runs weekly as well.
+name: Audit
+
+on:
+  schedule:
+    - cron: "0 4 * * 2"  # Tuesdays, 04:00 UTC
+  workflow_dispatch:
+
+jobs:
+  advisories:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/checkout-tpt-simd
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          command: check advisories

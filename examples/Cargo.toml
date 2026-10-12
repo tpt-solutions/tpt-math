@@ -22,7 +22,30 @@ path = "src/bin/autodiff_optimize.rs"
 name = "symbolic_exact"
 path = "src/bin/symbolic_exact.rs"
 
+[[bin]]
+name = "geometry_spatial"
+path = "src/bin/geometry_spatial.rs"
+
+[[bin]]
+name = "graph_paths"
+path = "src/bin/graph_paths.rs"
+
+[[bin]]
+name = "signal_fft"
+path = "src/bin/signal_fft.rs"
+
+[[bin]]
+name = "sparse_complex"
+path = "src/bin/sparse_complex.rs"
+
 [dependencies]
+tpt-math-geometry = { workspace = true }
+tpt-math-spatial = { workspace = true }
+tpt-math-linalg-fixed = { workspace = true }
+tpt-math-graph = { workspace = true }
+tpt-math-signal = { workspace = true }
+tpt-math-linalg-sparse = { workspace = true, features = ["alloc"] }
+tpt-math-linalg-complex = { workspace = true, features = ["alloc"] }
 tpt-math-units = { workspace = true, features = ["std"] }
 tpt-math-linalg = { workspace = true }
 tpt-math-linalg-dense = { workspace = true }

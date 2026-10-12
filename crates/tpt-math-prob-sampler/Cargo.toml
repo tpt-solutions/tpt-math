@@ -25,6 +25,14 @@ alloc = ["tpt-math-prob-core/alloc"]
 [lints]
 workspace = true
 
+[dev-dependencies]
+criterion = { workspace = true }
+tpt-math-prob-core = { workspace = true }
+
+[[bench]]
+name = "sampler_bench"
+harness = false
+
 [package.metadata.docs.rs]
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]

@@ -31,7 +31,11 @@ enum Cmd {
     /// Run `cargo deny check`.
     Deny,
     /// Build the `no_std = true` crates for `thumbv6m-none-eabi`.
-    NoStd,
+    NoStd {
+        /// Target triple to build for. Defaults to the bare-metal `thumbv6m-none-eabi`.
+        #[arg(long)]
+        target: Option<String>,
+    },
     /// Check that the no_std list, the crates declaring `#![no_std]`, and the
     /// README `no_std` column agree.
     Drift,
@@ -85,7 +89,7 @@ fn run() -> Result<(), String> {
         ]),
         Cmd::Test => cargo(&["test", "--workspace", "--all-features"]),
         Cmd::Deny => cargo_deny(&["check"]),
-        Cmd::NoStd => no_std(),
+        Cmd::NoStd { target } => no_std(target.as_deref().unwrap_or(NO_STD_TARGET)),
         Cmd::Drift => drift(),
         Cmd::Check => {
             cargo(&["fmt", "--all", "--", "--check"])?;
@@ -104,7 +108,7 @@ fn run() -> Result<(), String> {
                 &["doc", "--workspace", "--no-deps", "--all-features"],
                 &[("RUSTDOCFLAGS", "-D warnings")],
             )?;
-            no_std()?;
+            no_std(NO_STD_TARGET)?;
             drift()?;
             cargo_deny(&["check"])?;
             Ok(())
@@ -226,10 +230,10 @@ fn drift() -> Result<(), String> {
     }
 }
 
-fn no_std() -> Result<(), String> {
+fn no_std(target: &str) -> Result<(), String> {
     // Best-effort: ensure the bare-metal target is available locally.
     let _ = Command::new("rustup")
-        .args(["target", "add", NO_STD_TARGET])
+        .args(["target", "add", target])
         .status();
     for (name, features) in NO_STD_CRATES {
         let mut args: Vec<String> = vec![
@@ -238,7 +242,7 @@ fn no_std() -> Result<(), String> {
             (*name).into(),
             "--no-default-features".into(),
             "--target".into(),
-            NO_STD_TARGET.into(),
+            target.into(),
         ];
         if !features.is_empty() {
             args.push("--features".into());

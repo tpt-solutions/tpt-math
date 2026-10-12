@@ -18,6 +18,7 @@ tpt-math-linalg-dense = { workspace = true, default-features = false }
 tpt-math-numeric = { workspace = true, default-features = false }
 
 [dev-dependencies]
+criterion = { workspace = true }
 approx = "0.5"
 
 [features]
@@ -27,6 +28,10 @@ alloc = ["tpt-math-linalg-dense/alloc", "tpt-math-numeric/alloc"]
 
 [lints]
 workspace = true
+
+[[bench]]
+name = "interpolate_bench"
+harness = false
 
 [package.metadata.docs.rs]
 all-features = true

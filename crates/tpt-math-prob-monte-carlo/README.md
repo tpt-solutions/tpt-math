@@ -16,10 +16,9 @@ in the probability layer: every routine is generic over the `Rng` and
 
 ## Features
 
-- `default = []` — the crate declares no optional features; the full API is
-  always available.
-- **`std` required.** This crate is not `no_std`: estimators buffer samples in
-  `Vec` and use `std` float math.
+| Feature | Enables | Notes |
+|---|---|---|
+| `rayon` | `["dep:rayon"]` | Parallel `integrate_par`. Results depend only on the seed, not the thread count. |
 
 ## Quick start
 

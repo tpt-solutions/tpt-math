@@ -21,7 +21,13 @@ tpt-math-prob-markov = { workspace = true, optional = true }
 tpt-math-prob-dist = { workspace = true, optional = true }
 
 [features]
-default = ["tpt-math-prob-monte-carlo", "tpt-math-prob-bayes", "tpt-math-prob-sampler", "tpt-math-prob-markov", "tpt-math-prob-dist"]
+default = [
+    "tpt-math-prob-monte-carlo",
+    "tpt-math-prob-bayes",
+    "tpt-math-prob-sampler",
+    "tpt-math-prob-markov",
+    "tpt-math-prob-dist",
+]
 tpt-math-prob-monte-carlo = ["dep:tpt-math-prob-monte-carlo"]
 tpt-math-prob-bayes = ["dep:tpt-math-prob-bayes"]
 tpt-math-prob-sampler = ["dep:tpt-math-prob-sampler"]

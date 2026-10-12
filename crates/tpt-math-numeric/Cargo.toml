@@ -27,6 +27,13 @@ libm = ["dep:libm"]
 [lints]
 workspace = true
 
+[dev-dependencies]
+criterion = { workspace = true }
+
+[[bench]]
+name = "quadrature_ode_bench"
+harness = false
+
 [package.metadata.docs.rs]
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]

@@ -1,0 +1,31 @@
+[package]
+name = "tpt-math-fuzz"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+tpt-math-symbolic = { path = "../crates/tpt-math-symbolic" }
+tpt-math-exact = { path = "../crates/tpt-math-exact" }
+
+# Separate workspace, so the main workspace does not build the fuzzers.
+[workspace]
+members = ["."]
+
+[[bin]]
+name = "symbolic_simplify"
+path = "fuzz_targets/symbolic_simplify.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "exact_rational"
+path = "fuzz_targets/exact_rational.rs"
+test = false
+doc = false
+bench = false

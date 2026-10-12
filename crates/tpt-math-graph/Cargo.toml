@@ -25,6 +25,13 @@ alloc = ["tpt-math-numeric/alloc"]
 [lints]
 workspace = true
 
+[dev-dependencies]
+criterion = { workspace = true }
+
+[[bench]]
+name = "graph_bench"
+harness = false
+
 [package.metadata.docs.rs]
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]

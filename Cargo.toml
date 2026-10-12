@@ -36,7 +36,8 @@ members = [
     "xtask",
     "examples",
 ]
-exclude = []
+# The fuzz crate is a separate workspace (see fuzz/Cargo.toml).
+exclude = ["fuzz"]
 
 [workspace.package]
 description = "tpt-math — the numeric substrate for tpt-science/tpt-engineering/tpt-formal"
@@ -89,7 +90,12 @@ num-traits = { version = "0.2.19", default-features = false, features = ["libm"]
 rand = { version = "0.9", default-features = false }
 rand_distr = { version = "0.5.1", default-features = false }
 rustfft = "6.4.1"
-uom = { version = "0.38.0", default-features = false, features = ["si", "f32", "f64", "autoconvert"] }
+uom = { version = "0.38.0", default-features = false, features = [
+    "si",
+    "f32",
+    "f64",
+    "autoconvert",
+] }
 
 [workspace.lints.rust]
 unsafe_op_in_unsafe_fn = "warn"

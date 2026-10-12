@@ -1071,6 +1071,7 @@ dependencies = [
 name = "tpt-math-autodiff-fwd"
 version = "0.1.0"
 dependencies = [
+ "criterion",
  "tpt-math-numeric",
 ]
 
@@ -1078,6 +1079,7 @@ dependencies = [
 name = "tpt-math-autodiff-rev"
 version = "0.1.0"
 dependencies = [
+ "criterion",
  "tpt-math-autodiff-fwd",
 ]
 
@@ -1099,10 +1101,17 @@ version = "0.1.0"
 dependencies = [
  "tpt-math-autodiff",
  "tpt-math-exact",
+ "tpt-math-geometry",
+ "tpt-math-graph",
  "tpt-math-linalg",
+ "tpt-math-linalg-complex",
  "tpt-math-linalg-dense",
+ "tpt-math-linalg-fixed",
+ "tpt-math-linalg-sparse",
  "tpt-math-optimize",
  "tpt-math-prob",
+ "tpt-math-signal",
+ "tpt-math-spatial",
  "tpt-math-stats",
  "tpt-math-symbolic",
  "tpt-math-units",
@@ -1112,6 +1121,7 @@ dependencies = [
 name = "tpt-math-geometry"
 version = "0.1.1"
 dependencies = [
+ "criterion",
  "tpt-math-linalg-fixed",
  "tpt-math-numeric",
 ]
@@ -1120,6 +1130,7 @@ dependencies = [
 name = "tpt-math-graph"
 version = "0.1.0"
 dependencies = [
+ "criterion",
  "petgraph",
  "tpt-math-numeric",
 ]
@@ -1129,6 +1140,7 @@ name = "tpt-math-interpolate"
 version = "0.1.0"
 dependencies = [
  "approx",
+ "criterion",
  "tpt-math-linalg-dense",
  "tpt-math-numeric",
 ]
@@ -1167,6 +1179,7 @@ dependencies = [
 name = "tpt-math-linalg-fixed"
 version = "0.1.0"
 dependencies = [
+ "criterion",
  "tpt-math-numeric",
 ]
 
@@ -1183,6 +1196,7 @@ dependencies = [
 name = "tpt-math-numeric"
 version = "0.1.0"
 dependencies = [
+ "criterion",
  "libm",
  "num-traits",
 ]
@@ -1208,6 +1222,7 @@ dependencies = [
 name = "tpt-math-optimize-general"
 version = "0.1.0"
 dependencies = [
+ "criterion",
  "tpt-math-linalg",
  "tpt-math-linalg-dense",
  "tpt-math-numeric",
@@ -1228,6 +1243,7 @@ dependencies = [
 name = "tpt-math-prob-bayes"
 version = "0.1.0"
 dependencies = [
+ "criterion",
  "tpt-math-prob-core",
 ]
 
@@ -1235,6 +1251,7 @@ dependencies = [
 name = "tpt-math-prob-core"
 version = "0.1.0"
 dependencies = [
+ "criterion",
  "tpt-math-numeric",
 ]
 
@@ -1242,6 +1259,7 @@ dependencies = [
 name = "tpt-math-prob-dist"
 version = "0.1.0"
 dependencies = [
+ "criterion",
  "rand 0.9.5",
  "rand_distr",
  "tpt-math-prob-core",
@@ -1251,6 +1269,7 @@ dependencies = [
 name = "tpt-math-prob-markov"
 version = "0.1.1"
 dependencies = [
+ "criterion",
  "tpt-math-prob-core",
 ]
 
@@ -1258,6 +1277,7 @@ dependencies = [
 name = "tpt-math-prob-monte-carlo"
 version = "0.1.0"
 dependencies = [
+ "criterion",
  "rayon",
  "tpt-math-prob-core",
 ]
@@ -1266,6 +1286,7 @@ dependencies = [
 name = "tpt-math-prob-sampler"
 version = "0.1.0"
 dependencies = [
+ "criterion",
  "tpt-math-prob-core",
 ]
 
@@ -1300,6 +1321,7 @@ dependencies = [
 name = "tpt-math-spatial"
 version = "0.1.0"
 dependencies = [
+ "criterion",
  "tpt-math-geometry",
  "tpt-math-linalg-fixed",
  "tpt-math-numeric",
@@ -1309,6 +1331,7 @@ dependencies = [
 name = "tpt-math-stats"
 version = "0.1.0"
 dependencies = [
+ "criterion",
  "tpt-math-prob-core",
 ]
 
@@ -1316,6 +1339,7 @@ dependencies = [
 name = "tpt-math-symbolic"
 version = "0.1.0"
 dependencies = [
+ "criterion",
  "num-traits",
  "proptest",
  "tpt-math-exact",
@@ -1333,6 +1357,10 @@ dependencies = [
 name = "tpt-math-units-dyn"
 version = "0.1.0"
 dependencies = [
+ "criterion",
+ "tpt-math-autodiff-rev",
+ "tpt-math-numeric",
+ "tpt-math-optimize-general",
  "tpt-math-units",
 ]
 

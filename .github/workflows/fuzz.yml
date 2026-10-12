@@ -1,0 +1,36 @@
+# Coverage-guided fuzzing of the symbolic simplifier and exact rational arithmetic.
+# Runs weekly and on demand, not on every push: each target runs for a fixed time.
+# libFuzzer needs Linux or macOS with a nightly toolchain, so it cannot run on
+# Windows MSVC.
+name: Fuzz
+
+on:
+  schedule:
+    - cron: "0 5 * * 3"  # Wednesdays, 05:00 UTC
+  workflow_dispatch:
+
+jobs:
+  fuzz:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [symbolic_simplify, exact_rational]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/checkout-tpt-simd
+      - uses: dtolnay/rust-toolchain@nightly
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: fuzz
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-fuzz
+      - name: Fuzz ${{ matrix.target }}
+        run: cargo fuzz run --fuzz-dir fuzz ${{ matrix.target }} -- -max_total_time=300
+      - name: Keep any crash reproducer
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: crash-${{ matrix.target }}
+          path: fuzz/artifacts

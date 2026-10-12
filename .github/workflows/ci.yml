@@ -91,6 +91,9 @@ jobs:
       - run: >
           cargo hack test --feature-powerset --all-targets
           -p tpt-math-prob -p tpt-math-autodiff -p tpt-math-optimize -p tpt-math-signal
+          -p tpt-math-units-dyn -p tpt-math-numeric -p tpt-math-exact -p tpt-math-prob-monte-carlo
+          -p tpt-math-signal-filter -p tpt-math-optimize-general
+          --exclude-features simd simd-runtime
 
   # Compile-only smoke test for the criterion benchmark targets. Benches are not
   # run to pass/fail in CI (timing noise); we only confirm they build.
@@ -122,4 +125,52 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: crate-ci/typos@master
+      - uses: crate-ci/typos@v1.51.1
+
+  # Every `no_std = true` crate also builds for WebAssembly.
+  wasm:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/checkout-tpt-simd
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo xtask no-std --target wasm32-unknown-unknown
+
+  # Line coverage, uploaded as an artifact. Not a gate: it reports, it does not fail.
+  coverage:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/checkout-tpt-simd
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: llvm-tools-preview
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-llvm-cov
+      - run: cargo llvm-cov --workspace --all-features --lcov --output-path lcov.info
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lcov
+          path: lcov.info
+
+  # Pull requests only: flag breaking public-API changes against the base branch.
+  # Crates that do not exist on the base branch are skipped by the tool.
+  semver-checks:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/checkout-tpt-simd
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-semver-checks
+      - run: cargo semver-checks check-release --workspace --baseline-rev ${{ github.event.pull_request.base.sha }}

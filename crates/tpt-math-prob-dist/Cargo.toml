@@ -29,6 +29,13 @@ alloc = ["rand/alloc", "rand_distr/alloc", "tpt-math-prob-core/alloc"]
 [lints]
 workspace = true
 
+[dev-dependencies]
+criterion = { workspace = true }
+
+[[bench]]
+name = "density_bench"
+harness = false
+
 [package.metadata.docs.rs]
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]

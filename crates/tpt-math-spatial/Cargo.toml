@@ -20,19 +20,19 @@ tpt-math-numeric = { workspace = true, default-features = false }
 
 [features]
 default = ["std"]
-std = [
-    "tpt-math-geometry/std",
-    "tpt-math-linalg-fixed/std",
-    "tpt-math-numeric/std",
-]
-alloc = [
-    "tpt-math-geometry/alloc",
-    "tpt-math-linalg-fixed/alloc",
-    "tpt-math-numeric/alloc",
-]
+std = ["tpt-math-geometry/std", "tpt-math-linalg-fixed/std", "tpt-math-numeric/std"]
+alloc = ["tpt-math-geometry/alloc", "tpt-math-linalg-fixed/alloc", "tpt-math-numeric/alloc"]
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+criterion = { workspace = true }
+tpt-math-geometry = { workspace = true }
+
+[[bench]]
+name = "spatial_bench"
+harness = false
 
 [package.metadata.docs.rs]
 all-features = true

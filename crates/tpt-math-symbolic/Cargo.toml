@@ -24,10 +24,15 @@ alloc = []
 exact = ["dep:tpt-math-exact"]
 
 [dev-dependencies]
+criterion = { workspace = true }
 proptest = { workspace = true }
 
 [lints]
 workspace = true
+
+[[bench]]
+name = "symbolic_bench"
+harness = false
 
 [package.metadata.docs.rs]
 all-features = true

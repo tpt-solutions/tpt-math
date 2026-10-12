@@ -41,6 +41,27 @@ let m = Matrix3::identity();
 assert_eq!(m * a, a);
 ```
 
+## `no_std` example
+
+The crate needs no allocator, so it runs on bare-metal targets. This program
+uses only `core` types and the crate's fixed-size API:
+
+```rust,ignore
+#![no_std]
+#![no_main]
+
+use tpt_math_linalg_fixed::Matrix;
+
+/// Solve a 2x2 system by inverting its matrix. Returns `None` if singular.
+fn solve_2x2(a: [[f64; 2]; 2], b: [f64; 2]) -> Option<[f64; 2]> {
+    let inv = Matrix::<f64, 2, 2>::new(a).inverse()?;
+    Some([
+        inv.data[0][0] * b[0] + inv.data[0][1] * b[1],
+        inv.data[1][0] * b[0] + inv.data[1][1] * b[1],
+    ])
+}
+```
+
 ## License
 
 Licensed under either of MIT or Apache-2.0 at your option.

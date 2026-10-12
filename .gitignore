@@ -9,3 +9,8 @@ Thumbs.db
 .kilo/
 # tpt-weave working state
 /.tpt-weave/
+
+# cargo-fuzz build output and generated inputs.
+fuzz/target/
+fuzz/artifacts/
+fuzz/corpus/

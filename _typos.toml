@@ -1,10 +1,10 @@
 # Spell-check configuration. Words below are deliberate: abbreviations, variable
 # names, or unit names, not misspellings.
 [default.extend-words]
-lik = "lik"          # likelihood, as in `lik` variables in prob-bayes and sparse
-smoot = "smoot"      # the unit "smoot" in tpt-math-units-dyn
-nd = "nd"            # n-dimensional shorthand in graph tests
-numer = "numer"      # numerator, in symbolic
-ba = "ba"            # two-point t-test locals in stats
-ttest = "ttest"      # function-name fragment in stats
-unparseable = "unparseable"  # accepted spelling used in error text
+lik = "lik"                 # likelihood, as in `lik` variables in prob-bayes and sparse
+smoot = "smoot"             # the unit "smoot" in tpt-math-units-dyn
+nd = "nd"                   # n-dimensional shorthand in graph tests
+numer = "numer"             # numerator, in symbolic
+ba = "ba"                   # two-point t-test locals in stats
+ttest = "ttest"             # function-name fragment in stats
+unparseable = "unparseable" # accepted spelling used in error text

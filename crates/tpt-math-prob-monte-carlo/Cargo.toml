@@ -29,6 +29,14 @@ rayon = ["dep:rayon"]
 [lints]
 workspace = true
 
+[dev-dependencies]
+criterion = { workspace = true }
+tpt-math-prob-core = { workspace = true }
+
+[[bench]]
+name = "monte_carlo_bench"
+harness = false
+
 [package.metadata.docs.rs]
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]

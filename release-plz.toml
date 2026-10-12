@@ -1,0 +1,8 @@
+# release-plz: opens release pull requests with version bumps and changelog entries.
+# Publishing stays off until the first release has been reviewed by hand, so that
+# the 31-crate ordered publish is never a surprise.
+[workspace]
+publish = false
+git_release_enable = false
+# The simd dependency is a path dependency on a sibling checkout, so `cargo package`
+# cannot run for the crates that depend on it. Leave those to a manual release.
