@@ -8,6 +8,11 @@ All notable changes to this crate are documented here. Format based on
 
 ### Added
 
+- `FirFilter::filter_par` behind the new `rayon` feature. The output is bitwise identical to `filter`.
+
+
+### Added
+
 - Benchmarks for direct and overlap-add filtering at 9 and 255 taps.
 
 ### Changed

@@ -8,6 +8,13 @@ All notable changes to this crate are documented here. Format based on
 
 ### Added
 
+- `Interval::div_nonzero`: interval division, defined only when the divisor excludes zero.
+- `roots::newton_refine`: interval Newton refinement of a root enclosure, returning `None` when a box is proven root-free.
+- `roots::validated_euler` and `roots::validated_euler_system`: rigorous enclosures of the solution of a scalar ODE, or of a system, at the end of an interval, using an a-priori (Picard–Lindelöf) box per step.
+
+
+### Added
+
 - `roots` module: `isolate_roots` bisects on an interval extension and returns boxes that provably contain every root. `poly_enclosure` builds a valid extension for a polynomial. `poly_eval` and `has_sign_change` give point evaluation and a Bolzano certificate.
 
 

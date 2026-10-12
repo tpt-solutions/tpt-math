@@ -517,7 +517,25 @@ impl<T: Scalar, const N: usize> Matrix<T, N, N> {
     /// Inverse via Gauss–Jordan elimination with partial pivoting. Returns
     /// `None` if the matrix is (numerically) singular.
     pub fn inverse(&self) -> Option<Matrix<T, N, N>> {
-        let eps = T::from(1e-12).unwrap_or(T::zero());
+        self.inverse_with_tolerance(T::from(1e-12).unwrap_or(T::zero()))
+    }
+
+    /// [`Matrix::inverse`] with a scale-invariant threshold: a pivot below `rel`
+    /// times the largest entry magnitude counts as singular.
+    pub fn inverse_with_relative_tolerance(&self, rel: T) -> Option<Matrix<T, N, N>> {
+        let scale = self
+            .data
+            .iter()
+            .flat_map(|row| row.iter())
+            .fold(T::zero(), |acc, &x| acc.max(x.abs()));
+        self.inverse_with_tolerance(rel * scale)
+    }
+
+    /// [`Matrix::inverse`] with an absolute pivot threshold: a pivot with
+    /// magnitude below `tol` counts as singular. `tol = 0` accepts any non-zero
+    /// pivot.
+    pub fn inverse_with_tolerance(&self, tol: T) -> Option<Matrix<T, N, N>> {
+        let eps = tol;
         let mut a = self.data;
         let mut inv = [[T::zero(); N]; N];
         for i in 0..N {
@@ -533,7 +551,7 @@ impl<T: Scalar, const N: usize> Matrix<T, N, N> {
                     piv = i;
                 }
             }
-            if mx < eps {
+            if mx == T::zero() || mx < eps {
                 return None;
             }
             if piv != k {
@@ -799,5 +817,26 @@ mod tests {
         let m = Matrix::<f64, 3, 2>::from_columns(&cols).unwrap();
         assert_eq!(m.data, [[1.0, 4.0], [2.0, 5.0], [3.0, 6.0]]);
         assert!(Matrix::<f64, 3, 2>::from_columns(&cols[0..1]).is_none());
+    }
+}
+
+#[cfg(test)]
+mod inverse_threshold_tests {
+    use super::*;
+
+    #[test]
+    fn relative_threshold_inverts_small_scale_matrix_that_default_rejects() {
+        let diag = [1e-13, 2e-13];
+        let m = Matrix::<f64, 2, 2>::from_fn(|r, c| if r == c { diag[r] } else { 0.0 });
+        assert!(m.inverse().is_none());
+        let inv = m.inverse_with_relative_tolerance(1e-10).unwrap();
+        assert!((inv.data[0][0] - 1e13).abs() < 1e1);
+        assert!((inv.data[1][1] - 5e12).abs() < 1e1);
+    }
+
+    #[test]
+    fn zero_matrix_is_rejected_with_zero_tolerance() {
+        let z = Matrix::<f64, 3, 3>::from_fn(|_, _| 0.0);
+        assert!(z.inverse_with_tolerance(0.0).is_none());
     }
 }

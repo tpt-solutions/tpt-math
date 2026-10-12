@@ -6,6 +6,16 @@ All notable changes to this crate are documented here. Format based on
 
 ## [Unreleased]
 
+### Added
+
+- `Solution::report()`, returning a `tpt_math_numeric::SolveReport`: `Converged`, `Breakdown` for a stalled line search, or `NotConverged`.
+- `Solution::residual`: the gradient norm at the answer, or the cost spread over the simplex for Nelder–Mead.
+
+### Changed
+
+- `Solution` has a new public field `residual`. Code that builds a `Solution` with a struct literal must set it.
+
+
 - **`argmin`/`argmin-math` dependency removed entirely.** The solvers behind
   `minimize_gradient_descent`, `minimize_conjugate_gradient` and
   `minimize_newton` (steepest descent, nonlinear CG, Newton's method) are now

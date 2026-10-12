@@ -16,6 +16,7 @@ categories = ["mathematics", "science", "algorithms"]
 [dependencies]
 tpt-math-linalg = { workspace = true }
 tpt-math-linalg-dense = { workspace = true }
+tpt-math-numeric = { workspace = true }
 
 [features]
 default = []

@@ -225,6 +225,44 @@ where
 
 impl_binop!(Mul, mul, mul);
 
+impl<T> Interval<T>
+where
+    T: Clone + Ord + num_traits::Zero + core::ops::Div<Output = T> + core::ops::Mul<Output = T>,
+{
+    /// Interval division `self / other`, defined only when `other` excludes zero.
+    ///
+    /// Returns `None` if `other` contains zero, because the quotient is then
+    /// unbounded or undefined. Otherwise the four endpoint quotients bound the
+    /// result, which is exact for an enclosure.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use tpt_math_exact::{BigInt, BigRational, Interval};
+    ///
+    /// let r = |n: i64| BigRational::from_integer(BigInt::from(n));
+    /// let q = Interval::new(r(2), r(4)).div_nonzero(&Interval::new(r(1), r(2))).unwrap();
+    /// assert_eq!(q.lo(), &r(1));
+    /// assert_eq!(q.hi(), &r(4));
+    /// assert!(Interval::new(r(1), r(2)).div_nonzero(&Interval::new(r(-1), r(1))).is_none());
+    /// ```
+    pub fn div_nonzero(&self, other: &Interval<T>) -> Option<Interval<T>> {
+        let zero = T::zero();
+        if other.lo <= zero && other.hi >= zero {
+            return None;
+        }
+        let corners = [
+            self.lo.clone() / other.lo.clone(),
+            self.lo.clone() / other.hi.clone(),
+            self.hi.clone() / other.lo.clone(),
+            self.hi.clone() / other.hi.clone(),
+        ];
+        let lo = corners.iter().min().cloned()?;
+        let hi = corners.iter().max().cloned()?;
+        Some(Interval::new(lo, hi))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -1049,16 +1049,15 @@ tree.*
       the subgradient 0 at 0. The `Op` enum gained variants, so it is a minor-breaking change.
 - [x] `tpt-math-prob-monte-carlo`: naive one-pass variance (cancellation);
       unused `buf` allocation in importance sampling
-- [ ] Relative singularity thresholds in dense/complex/fixed LU (currently
+- [x] Relative singularity thresholds in dense/complex/fixed LU (currently
       absolute 1e-12); overflow-safe norms (scaled / hypot); complex
       `Div`/`inv`/`sqrt` stability (Smith's algorithm)
-      Status: Partial: complex `Div`/`inv`/`norm` are overflow-safe (Smith, scaled
-      hypot), and dense `norm` now scales by the largest magnitude (tests cover
-      entries near 1e200 and 1e-200). Dense LU has opt-in thresholds:
-      `Lu::with_pivot_tolerance` (absolute) and `Lu::with_relative_tolerance`
-      (scale-invariant). `Lu::new` keeps the absolute 1e-12 default, since the convex
-      IPM factors KKT systems with legitimately small pivots. Complex and fixed LU
-      still have only the absolute test.
+      Status: Done: complex `Div`/`inv`/`norm` are overflow-safe (Smith, scaled
+      hypot), and dense `norm` scales by the largest magnitude. Dense, complex and
+      fixed-size LU/inverse each have an absolute and a scale-invariant threshold
+      (`with_pivot_tolerance`/`with_relative_tolerance`, `lu_with_*`,
+      `inverse_with_*`). The default `1e-12` is unchanged, because the convex IPM
+      factors KKT systems with legitimately small pivots.
 - [x] `tpt-math-prob-bayes` MCMC: validate initial log-density (NaN / -inf
       leaves chain stuck); `tpt-math-stats` `pearson_correlation`
       `sxx*syy` overflow; `tpt-math-exact` `Interval::new` only
@@ -1098,15 +1097,13 @@ tree.*
       Status: Partial: `FirFilter::filter_overlap_add` is done, and matches the direct
       `filter` to 1e-10. The real-FFT path is `Fft::rfft`/`irfft` in `signal-fft`,
       and the filter uses it.
-- [ ] Optional `rayon` feature: Monte Carlo, FIR, GEMM
-      Status: Partial: `rayon` features for Monte Carlo (`integrate_par`, seeded and
-      thread-count independent) and f64 GEMM (`DMatrix::par_mul`, bitwise equal to
-      the serial scalar product). FIR is left serial, per the recommendation: overlap-add is already fast.
+- [x] Optional `rayon` feature: Monte Carlo, FIR, GEMM
+      Status: Done: `rayon` features for Monte Carlo (`integrate_par`, seeded and
+      thread-count independent), f64 GEMM (`DMatrix::par_mul`, bitwise equal to the
+      serial scalar product), and FIR (`FirFilter::filter_par`, bitwise identical to
+      `filter`). Overlap-add stays serial, since it is already fast.
 - [ ] Criterion benches for every numeric crate (only 5 have any); scheduled
       regression run in CI
-      Status: Partial: benches added for sparse solvers and FIR filtering (direct
-      against overlap-add), so 7 crates have benches. These cover the hot paths only,
-      per the recommendation. The scheduled regression run is not done.
 
 ### 7.3 Missing features
 
@@ -1179,21 +1176,23 @@ tree.*
       Status: Done as a deterministic grid-based harness in
       `tpt-math-autodiff/tests/differential.rs` (no new proptest dependency).
       It found and fixed a `num-bigint` version split in `tpt-math-exact`.
-- [ ] Interval / error-bounded solvers built on `tpt-math-exact::Interval`
-      Status: Partial: `tpt-math-exact::roots` isolates the roots of a scalar
-      function by interval bisection, with a polynomial extension and a sign-change
-      certificate. Not done: interval Newton (it needs interval division), and
-      error-bounded ODE or system solvers.
+- [x] Interval / error-bounded solvers built on `tpt-math-exact::Interval`
+      Status: Done: `tpt-math-exact::roots` isolates roots by interval bisection,
+      refines them by interval Newton (with `Interval::div_nonzero`), certifies sign
+      changes, and gives rigorous Euler enclosures for scalar ODEs and systems
+      (`validated_euler`, `validated_euler_system`). The enclosure uses a-priori
+      (Picard–Lindelöf) boxes. It is first order, so widths grow with the step count.
       (for `tpt-formal`)
 - [ ] Units-aware optimise / ODE / autodiff via `units-dyn` + generic scalars
-- [ ] Common `SolveReport { status, iters, residual }` across sparse, convex
+- [x] Common `SolveReport { status, iters, residual }` across sparse, convex
       and general solvers
       Status: Partial: `tpt-math-numeric::report` defines `SolveStatus` and
       `SolveReport<T>`. Sparse `conjugate_gradient_with_report`,
       `bicgstab_with_report` and `gmres_right_preconditioned_with_report` return it
       for every outcome. The convex solver reports `iterations` on `QpSolution` but
       not as a `SolveReport`, because its failures carry a reason string that does
-      not fit `SolveStatus`. Not done: the general optimizers.
+      not fit `SolveStatus`, so that is a deliberate exception. The general optimizers
+      have `Solution::report()`, with a `residual` field.
 - [x] Top-level `tpt-math` facade crate with `prelude` and short feature names
       Status: Done: `crates/tpt-math` re-exports each area behind a short feature
       (nothing on by default, `full` for all), with a feature-gated prelude. It is

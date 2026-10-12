@@ -69,6 +69,7 @@ pub use tpt_math_linalg;
 pub use tpt_math_linalg::tpt_math_linalg_dense;
 
 use tpt_math_linalg_dense::{DMatrix, DVector};
+use tpt_math_numeric::{SolveReport, SolveStatus};
 
 /// Default iteration budget used by [`Options::default`].
 pub const DEFAULT_MAX_ITERS: u64 = 100;
@@ -153,6 +154,31 @@ pub struct Solution {
     pub converged: bool,
     /// Human-readable reason the solver stopped.
     pub termination: String,
+    /// The solver's residual at the returned point: the gradient norm for the
+    /// gradient-based methods, and the cost spread over the simplex for
+    /// Nelder–Mead.
+    pub residual: f64,
+}
+
+impl Solution {
+    /// The outcome as a [`SolveReport`]. `Converged` when the solver met its
+    /// tolerance, `Breakdown` when the line search stalled, and `NotConverged`
+    /// when the iteration budget ran out.
+    #[must_use]
+    pub fn report(&self) -> SolveReport<f64> {
+        let status = if self.converged {
+            SolveStatus::Converged
+        } else if self.termination == "LineSearchStalled" {
+            SolveStatus::Breakdown
+        } else {
+            SolveStatus::NotConverged
+        };
+        SolveReport {
+            status,
+            iterations: self.iters as usize,
+            residual: self.residual,
+        }
+    }
 }
 
 /// Copy a unit-tagged [`tpt_math_linalg::Vec`] into a raw parameter vector.
@@ -579,12 +605,14 @@ where
     }
 
     fn finish(self, iters: u64, converged: bool, termination: &'static str) -> Solution {
+        let residual = self.grad_norm();
         Solution {
             param: self.param,
             cost: self.cost_cache,
             iters,
             converged,
             termination: termination.to_string(),
+            residual,
         }
     }
 }
@@ -788,10 +816,17 @@ where
     let mut iters: u64 = 0;
     loop {
         if g.norm() <= options.gradient_tolerance {
-            return Ok(lbfgs_solution(&cost, x, iters, true, "GradientTolerance"));
+            return Ok(lbfgs_solution(
+                &cost,
+                x,
+                iters,
+                true,
+                "GradientTolerance",
+                g.norm(),
+            ));
         }
         if iters >= options.max_iters {
-            return Ok(lbfgs_solution(&cost, x, iters, false, "MaxIters"));
+            return Ok(lbfgs_solution(&cost, x, iters, false, "MaxIters", g.norm()));
         }
 
         // Two-loop recursion: d = −H g with H the implicit inverse Hessian.
@@ -821,14 +856,28 @@ where
         let mut alpha = line_search(&cost, &grad, &x, &dir);
         if alpha == 0.0 {
             if pairs.is_empty() {
-                return Ok(lbfgs_solution(&cost, x, iters, false, "LineSearchStalled"));
+                return Ok(lbfgs_solution(
+                    &cost,
+                    x,
+                    iters,
+                    false,
+                    "LineSearchStalled",
+                    g.norm(),
+                ));
             }
             // A stale quasi-Newton direction stalled: restart from steepest descent.
             pairs.clear();
             dir = -g.clone();
             alpha = line_search(&cost, &grad, &x, &dir);
             if alpha == 0.0 {
-                return Ok(lbfgs_solution(&cost, x, iters, false, "LineSearchStalled"));
+                return Ok(lbfgs_solution(
+                    &cost,
+                    x,
+                    iters,
+                    false,
+                    "LineSearchStalled",
+                    g.norm(),
+                ));
             }
         }
 
@@ -856,6 +905,7 @@ fn lbfgs_solution<F>(
     iters: u64,
     converged: bool,
     termination: &str,
+    residual: f64,
 ) -> Solution
 where
     F: Fn(&DVector<f64>) -> f64,
@@ -866,6 +916,7 @@ where
         iters,
         converged,
         termination: termination.to_string(),
+        residual,
     }
 }
 
@@ -1043,6 +1094,13 @@ fn nelder_mead_solution(
     converged: bool,
     termination: &'static str,
 ) -> Solution {
+    // The residual is the cost spread over the simplex, measured before the
+    // sort because it is the same either way.
+    let best = simplex.iter().map(|v| v.1).fold(f64::INFINITY, f64::min);
+    let worst = simplex
+        .iter()
+        .map(|v| v.1)
+        .fold(f64::NEG_INFINITY, f64::max);
     simplex.sort_by(|a, b| a.1.total_cmp(&b.1));
     let (param, cost) = simplex.swap_remove(0);
     Solution {
@@ -1051,6 +1109,7 @@ fn nelder_mead_solution(
         iters,
         converged,
         termination: termination.to_string(),
+        residual: worst - best,
     }
 }
 
@@ -1402,5 +1461,54 @@ mod tests {
     #[test]
     fn lbfgs_rejects_zero_memory() {
         assert!(minimize_lbfgs(bowl_cost, bowl_grad, DVector::zeros(2), 0, 10).is_err());
+    }
+}
+
+#[cfg(test)]
+mod report_tests {
+    use super::*;
+    use tpt_math_numeric::SolveStatus;
+
+    fn quadratic_cost(x: &DVector<f64>) -> f64 {
+        (x[0] - 1.0).powi(2) + 2.0 * (x[1] + 2.0).powi(2)
+    }
+
+    fn quadratic_grad(x: &DVector<f64>) -> DVector<f64> {
+        DVector::from_vec(vec![2.0 * (x[0] - 1.0), 4.0 * (x[1] + 2.0)])
+    }
+
+    #[test]
+    fn converged_run_reports_converged_with_small_residual() {
+        let (f, g) = (quadratic_cost, quadratic_grad);
+        let opts = Options::new(500);
+        let sol = minimize_lbfgs_with(f, g, DVector::from_vec(vec![5.0, 5.0]), 5, &opts).unwrap();
+        let report = sol.report();
+        assert_eq!(report.status, SolveStatus::Converged);
+        assert!(report.residual <= opts.gradient_tolerance);
+        assert_eq!(report.iterations, sol.iters as usize);
+    }
+
+    #[test]
+    fn exhausted_budget_reports_not_converged() {
+        let (f, g) = (quadratic_cost, quadratic_grad);
+        let sol = minimize_gradient_descent_with(
+            f,
+            g,
+            DVector::from_vec(vec![5.0, 5.0]),
+            &Options::new(1),
+        )
+        .unwrap();
+        assert_eq!(sol.report().status, SolveStatus::NotConverged);
+        assert!(sol.report().residual > 0.0);
+    }
+
+    #[test]
+    fn nelder_mead_residual_is_cost_spread() {
+        let f = |x: &DVector<f64>| (x[0] - 3.0).powi(2);
+        let sol =
+            minimize_nelder_mead_with(f, DVector::from_vec(vec![0.0]), 1.0, &Options::new(400))
+                .unwrap();
+        assert!(sol.residual >= 0.0);
+        assert!(sol.residual < 1e-6, "{}", sol.residual);
     }
 }

@@ -17,8 +17,14 @@ categories = ["mathematics", "science", "algorithms"]
 tpt-math-numeric = { workspace = true, features = ["std"] }
 tpt-math-signal-fft = { workspace = true }
 
+[dependencies.rayon]
+workspace = true
+optional = true
+
 [features]
 default = []
+# Parallel direct filtering (`FirFilter::filter_par`). Same output as `filter`.
+rayon = ["dep:rayon"]
 
 
 [lints]

@@ -218,6 +218,31 @@ impl FirFilter {
     /// assert!((out[2] - 1.0).abs() < 1e-12);
     /// assert!((out[0] - 2.0 / 3.0).abs() < 1e-12);
     /// ```
+    /// [`filter`](Self::filter) with output samples computed in parallel.
+    ///
+    /// Each output sample is summed in the same order as in `filter`, so the
+    /// result is bitwise identical. Parallelism pays off only for long signals
+    /// with long kernels; for short inputs the thread overhead dominates.
+    #[cfg(feature = "rayon")]
+    pub fn filter_par(&self, signal: &[f64]) -> Vec<f64> {
+        use rayon::prelude::*;
+
+        let m = self.coeffs.len();
+        let n = signal.len();
+        let delay = self.group_delay();
+        let mut out = vec![0.0; n];
+        out.par_iter_mut().enumerate().for_each(|(i, y)| {
+            let first = (i + delay + 1).saturating_sub(n);
+            let last = (i + delay + 1).min(m);
+            let mut acc = 0.0;
+            for k in first..last {
+                acc += self.coeffs[k] * signal[i + delay - k];
+            }
+            *y = acc;
+        });
+        out
+    }
+
     pub fn filter(&self, signal: &[f64]) -> Vec<f64> {
         let m = self.coeffs.len();
         let n = signal.len();
@@ -671,5 +696,26 @@ mod overlap_add_tests {
         assert!(fir.filter_overlap_add(&[]).is_empty());
         let empty = FirFilter::new(Vec::new());
         assert_eq!(empty.filter_overlap_add(&[1.0, 2.0]), vec![0.0, 0.0]);
+    }
+}
+
+#[cfg(all(test, feature = "rayon"))]
+mod par_filter_tests {
+    use super::*;
+
+    #[test]
+    fn parallel_filter_matches_serial_bitwise() {
+        let fir = FirFilter::lowpass(63, 0.15);
+        let x: Vec<f64> = (0..4000)
+            .map(|t| (t as f64 * 0.21).sin() + 0.1 * (t as f64).cos())
+            .collect();
+        assert_eq!(fir.filter_par(&x), fir.filter(&x));
+    }
+
+    #[test]
+    fn parallel_filter_handles_empty_and_short_inputs() {
+        let fir = FirFilter::lowpass(9, 0.2);
+        assert!(fir.filter_par(&[]).is_empty());
+        assert_eq!(fir.filter_par(&[1.0]), fir.filter(&[1.0]));
     }
 }

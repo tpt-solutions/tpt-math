@@ -1210,6 +1210,7 @@ version = "0.1.0"
 dependencies = [
  "tpt-math-linalg",
  "tpt-math-linalg-dense",
+ "tpt-math-numeric",
 ]
 
 [[package]]
@@ -1290,6 +1291,7 @@ name = "tpt-math-signal-filter"
 version = "0.1.0"
 dependencies = [
  "criterion",
+ "rayon",
  "tpt-math-numeric",
  "tpt-math-signal-fft",
 ]

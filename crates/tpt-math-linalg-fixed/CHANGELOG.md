@@ -7,6 +7,11 @@ and this project adheres to SemVer.
 
 ## [Unreleased]
 
+### Added
+
+- `Matrix::inverse_with_tolerance` and `inverse_with_relative_tolerance`. `inverse()` keeps its `1e-12` default.
+
+
 ### Changed
 
 - **Breaking:** `Matrix::from_columns` takes `C` columns, each of length `R`. The old signature had the dimensions swapped, so it only worked for square matrices.

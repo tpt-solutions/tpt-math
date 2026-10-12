@@ -687,12 +687,43 @@ impl core::error::Error for ComplexDenseError {}
 
 #[cfg(feature = "alloc")]
 impl ComplexDMatrix<f64> {
+    /// [`ComplexDMatrix::lu`] with a scale-invariant threshold: a pivot below
+    /// `rel` times the largest entry modulus counts as singular. Scaling the
+    /// matrix by any non-zero constant does not change the outcome.
+    ///
+    /// # Errors
+    ///
+    /// As [`ComplexDMatrix::lu`].
+    pub fn lu_with_relative_tolerance(
+        &self,
+        rel: f64,
+    ) -> Result<(Vec<Vec<Complex<f64>>>, Vec<Vec<Complex<f64>>>, Vec<usize>), ComplexDenseError>
+    {
+        let scale = self.iter().fold(0.0_f64, |acc, z| acc.max(z.norm()));
+        self.lu_with_tolerance(rel * scale)
+    }
+
     /// Compute the partial-pivot LU factorisation of `self`.
     ///
     /// Returns the unit-lower and upper triangular factors `(L, U)` and the
     /// row permutation `p` such that `P A = L U`.
     pub fn lu(
         &self,
+    ) -> Result<(Vec<Vec<Complex<f64>>>, Vec<Vec<Complex<f64>>>, Vec<usize>), ComplexDenseError>
+    {
+        self.lu_with_tolerance(1e-12)
+    }
+
+    /// [`ComplexDMatrix::lu`] with an absolute pivot threshold: a pivot whose
+    /// modulus is below `tol` counts as singular. `tol = 0.0` accepts any
+    /// non-zero finite pivot.
+    ///
+    /// # Errors
+    ///
+    /// As [`ComplexDMatrix::lu`].
+    pub fn lu_with_tolerance(
+        &self,
+        tol: f64,
     ) -> Result<(Vec<Vec<Complex<f64>>>, Vec<Vec<Complex<f64>>>, Vec<usize>), ComplexDenseError>
     {
         let n = self.nrows;
@@ -716,7 +747,7 @@ impl ComplexDMatrix<f64> {
                     p = i;
                 }
             }
-            if !max.is_finite() || max < 1e-12 {
+            if !max.is_finite() || max == 0.0 || max < tol {
                 return Err(ComplexDenseError::Singular { what: "lu" });
             }
             a.swap(k, p);
@@ -1444,5 +1475,27 @@ mod tests {
     fn find(ev: &[Complex<f64>], target_re: f64, target_im: f64) -> bool {
         ev.iter()
             .any(|z| (z.re - target_re).abs() < 1e-9 && (z.im - target_im).abs() < 1e-9)
+    }
+}
+
+#[cfg(test)]
+mod lu_threshold_tests {
+    use super::*;
+
+    #[test]
+    fn relative_threshold_is_scale_invariant() {
+        let a = ComplexDMatrix::from_real_row_slice(2, 2, &[4.0_f64, 1.0, 2.0, 3.0]);
+        let tiny = ComplexDMatrix::from_real_row_slice(2, 2, &[4e-14, 1e-14, 2e-14, 3e-14]);
+        assert!(a.lu_with_relative_tolerance(1e-10).is_ok());
+        assert!(tiny.lu_with_relative_tolerance(1e-10).is_ok());
+        // The default absolute test rejects the scaled copy.
+        assert!(tiny.lu().is_err());
+    }
+
+    #[test]
+    fn zero_matrix_is_singular_for_any_threshold() {
+        let zero = ComplexDMatrix::<f64>::zeros(2, 2);
+        assert!(zero.lu_with_tolerance(0.0).is_err());
+        assert!(zero.lu_with_relative_tolerance(1e-10).is_err());
     }
 }
