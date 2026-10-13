@@ -49,6 +49,7 @@ Crates are organised into layers; lower layers never depend on higher ones.
 | Crate | Wraps / consolidates | `no_std` | Notes |
 |-------|----------------------|----------|-------|
 | `tpt-math-graph` | `petgraph` (dual `Apache-2.0 OR MIT`) | yes (alloc) | Thin wrap for adjacency / toposort / Dijkstra / A*; in-house max-flow on top. |
+| `tpt-math-fba` | in-house (`serde_json` for model loading) | no | Flux balance analysis: sparse bounded revised-simplex LP, BiGG/COBRA JSON models, theoretical yield. |
 | `tpt-math-interpolate` | — (in-house) | yes (alloc) | RBF, ordinary Kriging, PCHIP, B-spline basis for scattered data / surrogates. |
 
 ### Probability

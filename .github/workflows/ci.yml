@@ -92,7 +92,7 @@ jobs:
           cargo hack test --feature-powerset --all-targets
           -p tpt-math-prob -p tpt-math-autodiff -p tpt-math-optimize -p tpt-math-signal
           -p tpt-math-units-dyn -p tpt-math-numeric -p tpt-math-exact -p tpt-math-prob-monte-carlo
-          -p tpt-math-signal-filter -p tpt-math-optimize-general
+          -p tpt-math-signal-filter -p tpt-math-optimize-general -p tpt-math-fba
           --exclude-features simd simd-runtime
 
   # Compile-only smoke test for the criterion benchmark targets. Benches are not
@@ -106,7 +106,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: >
           cargo bench --no-run
-          -p tpt-math-linalg -p tpt-math-signal-fft -p tpt-math-optimize-convex -p tpt-math-exact
+          -p tpt-math-linalg -p tpt-math-signal-fft -p tpt-math-optimize-convex -p tpt-math-exact -p tpt-math-fba
 
   # Rustdoc must build with no warnings, so broken intra-doc links fail CI.
   docs:

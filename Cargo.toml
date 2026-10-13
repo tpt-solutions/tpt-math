@@ -6,6 +6,7 @@ members = [
     "crates/tpt-math-linalg-sparse",
     "crates/tpt-math-linalg-complex",
     "crates/tpt-math-graph",
+    "crates/tpt-math-fba",
     "crates/tpt-math-units",
     "crates/tpt-math-units-dyn",
     "crates/tpt-math-exact",
@@ -81,11 +82,13 @@ tpt-math-signal-filter = { version = "0.1.0", path = "crates/tpt-math-signal-fil
 tpt-math-signal = { version = "0.1.0", path = "crates/tpt-math-signal" }
 tpt-math-interpolate = { version = "0.1.0", path = "crates/tpt-math-interpolate" }
 tpt-math-graph = { version = "0.1.0", path = "crates/tpt-math-graph" }
+tpt-math-fba = { version = "0.1.0", path = "crates/tpt-math-fba" }
 
 # External dependency versions, pinned once and inherited by member crates.
 criterion = "0.5"
 proptest = "1"
 rayon = "1"
+serde_json = "1"
 num-traits = { version = "0.2.19", default-features = false, features = ["libm"] }
 rand = { version = "0.9", default-features = false }
 rand_distr = { version = "0.5.1", default-features = false }
