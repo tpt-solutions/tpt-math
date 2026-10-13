@@ -1,0 +1,39 @@
+[package]
+name = "tpt-math-pde-operators"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "Discrete gradient, divergence, Laplacian and central-difference operators on structured grids, with structural contracts (adjointness, discrete conservation, sign of the Laplacian) checked in debug builds. no_std + alloc."
+readme = "README.md"
+repository.workspace = true
+homepage.workspace = true
+documentation = "https://docs.rs/tpt-math-pde-operators"
+keywords = ["pde", "finite-difference", "staggered-grid", "laplacian", "numerics"]
+categories = ["mathematics", "science", "algorithms", "no-std"]
+
+[dependencies]
+tpt-math-numeric = { workspace = true, default-features = false }
+
+[dev-dependencies]
+criterion = { workspace = true }
+proptest = { workspace = true }
+
+[features]
+default = ["std"]
+std = ["alloc", "tpt-math-numeric/std"]
+alloc = ["tpt-math-numeric/alloc"]
+# Keep the structural contracts active in release builds too.
+contracts = []
+
+[lints]
+workspace = true
+
+[[bench]]
+name = "pde_operators_bench"
+harness = false
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]

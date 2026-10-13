@@ -32,6 +32,7 @@ members = [
     "crates/tpt-math-signal-filter",
     "crates/tpt-math-signal",
     "crates/tpt-math-interpolate",
+    "crates/tpt-math-pde-operators",
     "crates/tpt-math",
     "xtask",
     "examples",
@@ -80,6 +81,7 @@ tpt-math-signal-fft = { version = "0.1.0", path = "crates/tpt-math-signal-fft" }
 tpt-math-signal-filter = { version = "0.1.0", path = "crates/tpt-math-signal-filter" }
 tpt-math-signal = { version = "0.1.0", path = "crates/tpt-math-signal" }
 tpt-math-interpolate = { version = "0.1.0", path = "crates/tpt-math-interpolate" }
+tpt-math-pde-operators = { version = "0.1.0", path = "crates/tpt-math-pde-operators", default-features = false }
 tpt-math-graph = { version = "0.1.0", path = "crates/tpt-math-graph" }
 
 # External dependency versions, pinned once and inherited by member crates.
