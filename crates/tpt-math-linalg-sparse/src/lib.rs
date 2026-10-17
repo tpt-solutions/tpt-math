@@ -192,7 +192,9 @@ pub struct CsrMatrix<T> {
     nrows: usize,
     ncols: usize,
     row_ptr: Vec<usize>,
-    col_idx: Vec<usize>,
+    // `u32` halves the index traffic and matches tpt-simd-sparse's CSR view.
+    // Construction checks that every column fits (see `to_csr_impl`).
+    col_idx: Vec<u32>,
     values: Vec<T>,
 }
 
@@ -218,7 +220,7 @@ impl<T> CsrMatrix<T> {
         (0..nrows).flat_map(move |i| {
             let start = self.row_ptr[i];
             let end = self.row_ptr[i + 1];
-            (start..end).map(move |k| (i, self.col_idx[k], &self.values[k]))
+            (start..end).map(move |k| (i, self.col_idx[k] as usize, &self.values[k]))
         })
     }
 }
@@ -267,7 +269,7 @@ impl<T: Scalar> CsrMatrix<T> {
         for (i, yi) in y.iter_mut().enumerate() {
             let mut s = T::zero();
             for k in self.row_ptr[i]..self.row_ptr[i + 1] {
-                s = s + self.values[k] * x[self.col_idx[k]];
+                s = s + self.values[k] * x[self.col_idx[k] as usize];
             }
             *yi = s;
         }
@@ -442,6 +444,10 @@ fn to_csr_impl<T: Scalar + Copy>(
 ) -> CsrMatrix<T> {
     // Column-bucket first, then stable row-bucket: the result is row-major with
     // columns ascending inside each row, so duplicates are adjacent.
+    assert!(
+        ncols <= u32::MAX as usize + 1,
+        "CsrMatrix supports at most 2^32 columns"
+    );
     let entries = zip_triplets(rows, cols, vals);
     let by_col = bucket_by(&entries, |e| e.1, ncols);
     let by_row = bucket_by(&by_col, |e| e.0, nrows);
@@ -453,7 +459,7 @@ fn to_csr_impl<T: Scalar + Copy>(
     let mut col_idx = Vec::with_capacity(merged.len());
     let mut values = Vec::with_capacity(merged.len());
     for (_, c, v) in merged {
-        col_idx.push(c);
+        col_idx.push(c as u32);
         values.push(v);
     }
     CsrMatrix {
@@ -548,6 +554,12 @@ pub fn conjugate_gradient_with_report<T: Scalar + Copy + 'static>(
     if a.nrows() != a.ncols() || b.len() != a.nrows() {
         return Err(SparseError::DimensionMismatch);
     }
+    #[cfg(feature = "simd")]
+    {
+        if simd::applies::<T>() {
+            return Ok(simd::cg(a, b, x0, tol, max_iter));
+        }
+    }
     let n = b.len();
     let mut x = x0.unwrap_or_else(|| DVector::zeros(n));
     let mut r = b.clone() - a.matvec(&x)?;
@@ -588,6 +600,248 @@ pub fn conjugate_gradient_with_report<T: Scalar + Copy + 'static>(
         rs_old = rs_new;
     }
     Ok(report(x, SolveStatus::NotConverged, max_iter, r.norm()))
+}
+
+/// f32/f64 kernels for CG and BiCGSTAB (feature `simd`).
+///
+/// The generic solvers reach these through `Any` downcasts, which need no
+/// `unsafe`. The loops mirror the scalar ones step for step (same breakdown
+/// checks, same exit points), so the two paths make the same decisions and
+/// differ only in rounding.
+#[cfg(feature = "simd")]
+mod simd {
+    use alloc::boxed::Box;
+    use alloc::vec::Vec;
+    use core::any::{Any, TypeId};
+    use tpt_math_linalg_dense::DVector;
+    use tpt_math_numeric::{Scalar, SolveReport, SolveStatus};
+    use tpt_simd_sparse::{
+        axpy, axpy_sqnorm, bicgstab_p_update, cg_update, dot, spmv_csr, sqnorm, xpay, CsrView, Real,
+    };
+
+    use super::CsrMatrix;
+
+    /// `true` when `T` is `f32` or `f64`, the types with tpt-simd kernels.
+    pub(crate) fn applies<T: 'static>() -> bool {
+        TypeId::of::<T>() == TypeId::of::<f64>() || TypeId::of::<T>() == TypeId::of::<f32>()
+    }
+
+    /// Converts an owned value to a type it is known to have.
+    fn convert<U: 'static, V: 'static>(u: U) -> V {
+        *(Box::new(u) as Box<dyn Any>)
+            .downcast::<V>()
+            .unwrap_or_else(|_| unreachable!("checked by `applies`"))
+    }
+
+    /// Borrowed form of [`convert`].
+    fn view_as<U: 'static, V: 'static>(u: &U) -> &V {
+        (u as &dyn Any)
+            .downcast_ref::<V>()
+            .unwrap_or_else(|| unreachable!("checked by `applies`"))
+    }
+
+    /// Validated CSR view over the matrix storage. The invariants hold by
+    /// construction (`to_csr_impl`), so validation cannot fail.
+    fn csr_view<R: Real>(a: &CsrMatrix<R>) -> CsrView<'_, R> {
+        CsrView::try_new(a.nrows, a.ncols, &a.row_ptr, &a.col_idx, &a.values)
+            .unwrap_or_else(|_| unreachable!("CsrMatrix invariants hold by construction"))
+    }
+
+    fn finish<T: 'static, R: 'static>(
+        x: Vec<R>,
+        rep: SolveReport<R>,
+    ) -> (DVector<T>, SolveReport<T>) {
+        (
+            DVector::from_vec(convert::<Vec<R>, Vec<T>>(x)),
+            SolveReport {
+                status: rep.status,
+                iterations: rep.iterations,
+                residual: convert(rep.residual),
+            },
+        )
+    }
+
+    /// Solver core for one concrete float type `R`.
+    type Core<R> = fn(&CsrMatrix<R>, &[R], Option<Vec<R>>, R, usize) -> (Vec<R>, SolveReport<R>);
+
+    /// Runs a core on the caller's data, which is of type `T` = `R`.
+    fn run<T: Copy + 'static, R: Scalar + Real + 'static>(
+        a: &CsrMatrix<T>,
+        b: &DVector<T>,
+        x0: Option<DVector<T>>,
+        tol: T,
+        max_iter: usize,
+        core: Core<R>,
+    ) -> (DVector<T>, SolveReport<T>) {
+        let a = view_as::<CsrMatrix<T>, CsrMatrix<R>>(a);
+        let b = view_as::<DVector<T>, DVector<R>>(b).as_slice();
+        let x0 = x0.map(|v| convert::<DVector<T>, DVector<R>>(v).as_slice().to_vec());
+        let (x, rep) = core(a, b, x0, convert::<T, R>(tol), max_iter);
+        finish(x, rep)
+    }
+
+    /// Conjugate gradients for `T` = `f32` or `f64`.
+    pub(crate) fn cg<T: Copy + 'static>(
+        a: &CsrMatrix<T>,
+        b: &DVector<T>,
+        x0: Option<DVector<T>>,
+        tol: T,
+        max_iter: usize,
+    ) -> (DVector<T>, SolveReport<T>) {
+        if TypeId::of::<T>() == TypeId::of::<f64>() {
+            run::<T, f64>(a, b, x0, tol, max_iter, cg_core::<f64>)
+        } else {
+            run::<T, f32>(a, b, x0, tol, max_iter, cg_core::<f32>)
+        }
+    }
+
+    /// BiCGSTAB for `T` = `f32` or `f64`.
+    pub(crate) fn bicgstab<T: Copy + 'static>(
+        a: &CsrMatrix<T>,
+        b: &DVector<T>,
+        x0: Option<DVector<T>>,
+        tol: T,
+        max_iter: usize,
+    ) -> (DVector<T>, SolveReport<T>) {
+        if TypeId::of::<T>() == TypeId::of::<f64>() {
+            run::<T, f64>(a, b, x0, tol, max_iter, bicgstab_core::<f64>)
+        } else {
+            run::<T, f32>(a, b, x0, tol, max_iter, bicgstab_core::<f32>)
+        }
+    }
+
+    fn cg_core<R: Scalar + Real + 'static>(
+        a: &CsrMatrix<R>,
+        b: &[R],
+        x0: Option<Vec<R>>,
+        tol: R,
+        max_iter: usize,
+    ) -> (Vec<R>, SolveReport<R>) {
+        let n = b.len();
+        let view = csr_view(a);
+        let mut x = x0.unwrap_or_else(|| alloc::vec![R::zero(); n]);
+        // r = b - A x, as one SpMV: y = -1 * A x + 1 * b.
+        let mut r = b.to_vec();
+        spmv_csr(-R::one(), &view, &x, R::one(), &mut r);
+        // Relative tolerance: stop when ‖r‖ ≤ tol·‖b‖ (absolute tol if b = 0).
+        let b_norm = sqnorm(b).sqrt();
+        let target = if b_norm > R::zero() {
+            tol * b_norm
+        } else {
+            tol
+        };
+        let mut rs_old = sqnorm(&r);
+        if rs_old.sqrt() <= target {
+            return (x, rep(SolveStatus::Converged, 0, rs_old.sqrt()));
+        }
+        let mut p = r.clone();
+        let mut ap = alloc::vec![R::zero(); n];
+        for it in 0..max_iter {
+            spmv_csr(R::one(), &view, &p, R::zero(), &mut ap);
+            let p_ap = dot(&p, &ap);
+            // For SPD A, pᵀAp > 0 until convergence; anything else (including
+            // NaN) means the method cannot continue.
+            if p_ap.is_nan() || p_ap <= R::zero() {
+                return (x, rep(SolveStatus::Breakdown, it, rs_old.sqrt()));
+            }
+            let alpha = rs_old / p_ap;
+            // x += alpha p, r -= alpha ap, and the new r·r, in one pass.
+            let rs_new = cg_update(alpha, &p, &ap, &mut x, &mut r);
+            if rs_new.sqrt() <= target {
+                return (x, rep(SolveStatus::Converged, it + 1, rs_new.sqrt()));
+            }
+            if !rs_new.is_finite() {
+                return (x, rep(SolveStatus::Breakdown, it, rs_new.sqrt()));
+            }
+            let beta = rs_new / rs_old;
+            xpay(&r, beta, &mut p);
+            rs_old = rs_new;
+        }
+        (x, rep(SolveStatus::NotConverged, max_iter, rs_old.sqrt()))
+    }
+
+    fn bicgstab_core<R: Scalar + Real + 'static>(
+        a: &CsrMatrix<R>,
+        b: &[R],
+        x0: Option<Vec<R>>,
+        tol: R,
+        max_iter: usize,
+    ) -> (Vec<R>, SolveReport<R>) {
+        let n = b.len();
+        let view = csr_view(a);
+        let mut x = x0.unwrap_or_else(|| alloc::vec![R::zero(); n]);
+        let mut r = b.to_vec();
+        spmv_csr(-R::one(), &view, &x, R::one(), &mut r);
+        let b_norm = sqnorm(b).sqrt();
+        let target = if b_norm > R::zero() {
+            tol * b_norm
+        } else {
+            tol
+        };
+        let mut r_norm = sqnorm(&r).sqrt();
+        if r_norm <= target {
+            return (x, rep(SolveStatus::Converged, 0, r_norm));
+        }
+        let r0 = r.clone();
+        let mut p = alloc::vec![R::zero(); n];
+        let mut v = alloc::vec![R::zero(); n];
+        let mut s = alloc::vec![R::zero(); n];
+        let mut t = alloc::vec![R::zero(); n];
+        let mut rho = R::one();
+        let mut alpha = R::one();
+        let mut omega = R::one();
+        for it in 0..max_iter {
+            let rho_new = dot(&r0, &r);
+            if rho_new == R::zero() || !rho_new.is_finite() {
+                return (x, rep(SolveStatus::Breakdown, it, r_norm));
+            }
+            let beta = (rho_new / rho) * (alpha / omega);
+            // p = r + beta * (p - omega * v)
+            bicgstab_p_update(beta, omega, &r, &v, &mut p);
+            spmv_csr(R::one(), &view, &p, R::zero(), &mut v);
+            let r0_v = dot(&r0, &v);
+            if r0_v == R::zero() || !r0_v.is_finite() {
+                return (x, rep(SolveStatus::Breakdown, it, r_norm));
+            }
+            alpha = rho_new / r0_v;
+            // s = r - alpha v
+            s.copy_from_slice(&r);
+            axpy(-alpha, &v, &mut s);
+            let s_norm = sqnorm(&s).sqrt();
+            // Half-step exit: if s is already small enough, x + alpha p is the answer.
+            if s_norm <= target {
+                axpy(alpha, &p, &mut x);
+                return (x, rep(SolveStatus::Converged, it + 1, s_norm));
+            }
+            spmv_csr(R::one(), &view, &s, R::zero(), &mut t);
+            let t_sq = dot(&t, &t);
+            if t_sq == R::zero() {
+                return (x, rep(SolveStatus::Breakdown, it, r_norm));
+            }
+            omega = dot(&t, &s) / t_sq;
+            if omega == R::zero() || !omega.is_finite() {
+                return (x, rep(SolveStatus::Breakdown, it, r_norm));
+            }
+            // x += alpha p + omega s; r = s - omega t (with its new r·r).
+            axpy(alpha, &p, &mut x);
+            axpy(omega, &s, &mut x);
+            r.copy_from_slice(&s);
+            r_norm = axpy_sqnorm(-omega, &t, &mut r).sqrt();
+            if r_norm <= target {
+                return (x, rep(SolveStatus::Converged, it + 1, r_norm));
+            }
+            rho = rho_new;
+        }
+        (x, rep(SolveStatus::NotConverged, max_iter, r_norm))
+    }
+
+    fn rep<R>(status: SolveStatus, iterations: usize, residual: R) -> SolveReport<R> {
+        SolveReport {
+            status,
+            iterations,
+            residual,
+        }
+    }
 }
 
 /// Build the `(iterate, report)` pair returned by the `*_with_report` solvers.
@@ -662,6 +916,12 @@ pub fn bicgstab_with_report<T: Scalar + Copy + 'static>(
 ) -> Result<(DVector<T>, SolveReport<T>), SparseError> {
     if a.nrows() != a.ncols() || b.len() != a.nrows() {
         return Err(SparseError::DimensionMismatch);
+    }
+    #[cfg(feature = "simd")]
+    {
+        if simd::applies::<T>() {
+            return Ok(simd::bicgstab(a, b, x0, tol, max_iter));
+        }
     }
     let n = b.len();
     let mut x = x0.unwrap_or_else(|| DVector::zeros(n));
@@ -2728,5 +2988,133 @@ mod gmres_report_tests {
             .unwrap();
         assert_eq!(report.status, SolveStatus::NotConverged);
         assert_eq!(report.iterations, 2);
+    }
+}
+
+#[cfg(test)]
+mod solver_path_tests {
+    //! The f32/f64 solver paths (tpt-simd-sparse with the `simd` feature, the
+    //! scalar loops otherwise) must agree on the solution, the iteration count
+    //! to within one, and the exit status. These run in both configurations.
+    use super::*;
+    use tpt_math_numeric::SolveStatus;
+
+    fn laplacian(m: usize) -> CsrMatrix<f64> {
+        let n = m * m;
+        let mut coo = CooMatrix::<f64>::new(n, n);
+        for r in 0..m {
+            for c in 0..m {
+                let i = r * m + c;
+                coo.push(i, i, 4.0);
+                if c + 1 < m {
+                    coo.push(i, i + 1, -1.0);
+                    coo.push(i + 1, i, -1.0);
+                }
+                if r + 1 < m {
+                    coo.push(i, i + m, -1.0);
+                    coo.push(i + m, i, -1.0);
+                }
+            }
+        }
+        coo.to_csr()
+    }
+
+    fn to_f32(a: &CsrMatrix<f64>) -> CsrMatrix<f32> {
+        let mut coo = CooMatrix::<f32>::new(a.nrows(), a.ncols());
+        for (r, c, v) in a.iter() {
+            coo.push(r, c, *v as f32);
+        }
+        coo.to_csr()
+    }
+
+    /// `b = A x*` for a known `x*`, so the solution can be checked directly.
+    fn known_system(a: &CsrMatrix<f64>) -> (DVector<f64>, DVector<f64>) {
+        let n = a.nrows();
+        let xs = DVector::from_fn(n, |i| 1.0 + (i % 5) as f64 * 0.25);
+        let b = a.matvec(&xs).unwrap();
+        (xs, b)
+    }
+
+    #[test]
+    fn cg_f64_recovers_known_solution() {
+        let a = laplacian(12);
+        let (xs, b) = known_system(&a);
+        let (x, rep) = conjugate_gradient_with_report(&a, &b, None, 1e-12, 1000).unwrap();
+        assert_eq!(rep.status, SolveStatus::Converged);
+        assert!(
+            rep.iterations > 0 && rep.iterations < 200,
+            "iters {}",
+            rep.iterations
+        );
+        for (g, w) in x.as_slice().iter().zip(xs.as_slice()) {
+            assert!((g - w).abs() < 1e-8, "{g} vs {w}");
+        }
+    }
+
+    #[test]
+    fn bicgstab_f64_recovers_known_solution() {
+        let a = laplacian(12);
+        let (xs, b) = known_system(&a);
+        let (x, rep) = bicgstab_with_report(&a, &b, None, 1e-12, 1000).unwrap();
+        assert_eq!(rep.status, SolveStatus::Converged);
+        for (g, w) in x.as_slice().iter().zip(xs.as_slice()) {
+            assert!((g - w).abs() < 1e-8, "{g} vs {w}");
+        }
+    }
+
+    #[test]
+    fn cg_and_bicgstab_f32_recover_known_solution() {
+        let a64 = laplacian(10);
+        let a = to_f32(&a64);
+        let (xs64, b64) = known_system(&a64);
+        let b = DVector::from_fn(b64.len(), |i| b64.as_slice()[i] as f32);
+        let (cg_x, cg_rep) = conjugate_gradient_with_report(&a, &b, None, 1e-5, 1000).unwrap();
+        let (bi_x, bi_rep) = bicgstab_with_report(&a, &b, None, 1e-5, 1000).unwrap();
+        for (x, rep) in [(cg_x, cg_rep), (bi_x, bi_rep)] {
+            assert_eq!(rep.status, SolveStatus::Converged);
+            for (g, w) in x.as_slice().iter().zip(xs64.as_slice()) {
+                assert!((f64::from(*g) - w).abs() < 1e-3, "{g} vs {w}");
+            }
+        }
+    }
+
+    #[test]
+    fn not_converged_reports_max_iterations() {
+        let a = laplacian(12);
+        let (_, b) = known_system(&a);
+        let (_, rep) = conjugate_gradient_with_report(&a, &b, None, 1e-14, 1).unwrap();
+        assert_eq!(rep.status, SolveStatus::NotConverged);
+        assert_eq!(rep.iterations, 1);
+        let (_, rep) = bicgstab_with_report(&a, &b, None, 1e-14, 1).unwrap();
+        assert_eq!(rep.status, SolveStatus::NotConverged);
+        assert_eq!(rep.iterations, 1);
+    }
+
+    #[test]
+    fn negative_definite_breaks_down_cg_on_both_paths() {
+        // A = -I: pᵀAp < 0 on the first step.
+        let mut coo = CooMatrix::<f64>::new(3, 3);
+        for i in 0..3 {
+            coo.push(i, i, -1.0);
+        }
+        let a = coo.to_csr();
+        let b = DVector::from_fn(3, |_| 1.0);
+        let (_, rep) = conjugate_gradient_with_report(&a, &b, None, 1e-10, 10).unwrap();
+        assert_eq!(rep.status, SolveStatus::Breakdown);
+        assert_eq!(rep.iterations, 0);
+    }
+
+    #[test]
+    fn zero_rhs_and_exact_start_converge_immediately() {
+        let a = laplacian(6);
+        let n = a.nrows();
+        let zero = DVector::zeros(n);
+        let (x, rep) = conjugate_gradient_with_report(&a, &zero, None, 1e-10, 10).unwrap();
+        assert_eq!((rep.status, rep.iterations), (SolveStatus::Converged, 0));
+        assert!(x.as_slice().iter().all(|&v| v == 0.0));
+
+        let (xs, b) = known_system(&a);
+        let (_, rep) = conjugate_gradient_with_report(&a, &b, Some(xs), 1e-10, 10).unwrap();
+        assert_eq!((rep.status, rep.iterations), (SolveStatus::Converged, 0));
     }
 }

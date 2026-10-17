@@ -16,6 +16,9 @@ categories = ["mathematics", "science", "algorithms", "no-std"]
 [dependencies]
 tpt-math-numeric = { workspace = true, default-features = false }
 tpt-math-linalg-dense = { workspace = true, default-features = false }
+# Optional f32/f64 kernels for CG and BiCGSTAB. Path dependency on the sibling
+# tpt-simd repo until tpt-simd is published.
+tpt-simd-sparse = { path = "../../../tpt-simd/tpt-simd-sparse", version = "0.1.0", optional = true, default-features = false }
 
 [features]
 default = ["std"]
@@ -23,6 +26,9 @@ default = ["std"]
 std = ["alloc", "tpt-math-numeric/std", "tpt-math-linalg-dense/std"]
 # All sparse containers and the dense RHS/solution type need an allocator.
 alloc = ["tpt-math-numeric/alloc", "tpt-math-linalg-dense/alloc"]
+# f32/f64 CG and BiCGSTAB use tpt-simd-sparse (fused vector updates, SpMV).
+# Results agree with the scalar loops to rounding; the scalar path is the default.
+simd = ["alloc", "dep:tpt-simd-sparse"]
 
 [lints]
 workspace = true

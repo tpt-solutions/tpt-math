@@ -42,5 +42,29 @@ fn bench_solvers(c: &mut Criterion) {
     });
 }
 
-criterion_group!(benches, bench_solvers);
+/// Larger grid (40 000 unknowns): the matvec and CG costs are no longer
+/// dominated by call overhead, so the kernel differences show.
+fn bench_large(c: &mut Criterion) {
+    let a = laplacian_2d(200);
+    let n = a.nrows();
+    let b = DVector::from_fn(n, |i| if i % 3 == 0 { 1.0 } else { -0.5 });
+    let x = DVector::from_fn(n, |i| (i % 7) as f64 * 0.25 - 0.75);
+    let mut y = DVector::zeros(n);
+
+    c.bench_function("matvec laplacian 200x200", |bch| {
+        bch.iter(|| {
+            a.matvec_into(black_box(x.as_slice()), y.as_mut_slice())
+                .unwrap();
+            black_box(y.as_slice()[0])
+        })
+    });
+    c.bench_function("cg laplacian 200x200", |bch| {
+        bch.iter(|| {
+            let x = conjugate_gradient(black_box(&a), black_box(&b), None, 1e-8, 5000);
+            black_box(x.is_ok())
+        })
+    });
+}
+
+criterion_group!(benches, bench_solvers, bench_large);
 criterion_main!(benches);
