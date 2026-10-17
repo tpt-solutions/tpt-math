@@ -1,6 +1,5 @@
-# Opens a release pull request. Manual trigger only: `cargo package` cannot run until
-# tpt-simd-blas is published, because the simd feature is a path dependency on a
-# sibling checkout. Once it is on crates.io, enable the push trigger.
+# Opens a release pull request. Manual trigger only, so release PRs are opened on
+# purpose. Enable the push trigger once the release process is settled.
 name: Release-plz
 
 on:
@@ -16,7 +15,6 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - uses: ./.github/actions/checkout-tpt-simd
       - uses: dtolnay/rust-toolchain@stable
       - uses: release-plz/action@v0.5.141
         with:

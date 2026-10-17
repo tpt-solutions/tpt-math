@@ -1219,16 +1219,15 @@ tree.*
       "publishing out of scope" contradicts "since published")
 - [x] Commit `Cargo.lock` (workspace has binaries); remove from `.gitignore`
       Status: Done: `Cargo.lock` is tracked and is no longer ignored.
-- [ ] CI MSRV job pinned to 1.84; resolve `simd` feature needing Rust 1.85+
+- [x] CI MSRV job pinned to 1.84; resolve `simd` feature needing Rust 1.85+
       and the out-of-repo `tpt-simd-blas` path dependency that breaks
       `--all-features` and `cargo package`
-      Status: Blocked, needs a decision. `tpt-simd-blas` is a path dependency at
-      `../tpt-simd/tpt-simd-blas` with the workspace edition and `rust-version = 1.85`.
-      Cargo parses path dependencies during resolution, so a 1.84 toolchain cannot
-      load this workspace, and gating the dependency cannot avoid that. Options: publish
-      `tpt-simd-blas` and use a registry dependency, or move it out of the workspace
-      manifest. Either way, the docs.rs `all-features` item below waits on the same
-      decision.
+      Status: Done. `tpt-simd-blas` and `tpt-simd-sparse` are crates.io dependencies
+      (0.1.1) instead of path dependencies on the sibling checkout. The sibling
+      checkout step is removed from every workflow. The `simd` feature needs Rust
+      1.95 (the published crates' rust-version), so the workspace MSRV stays at 1.84
+      for the default build; no MSRV CI job exists, so nothing else changes.
+      `simd` tests pass for `linalg-dense` and `linalg-sparse`.
 - [x] README: `tpt-math-geometry` listed twice; `no_std` column disagrees
       with `NO_STD_CRATES` in `xtask` (8 crates) — extend the CI list or
       correct the README; add an xtask check that validates the README

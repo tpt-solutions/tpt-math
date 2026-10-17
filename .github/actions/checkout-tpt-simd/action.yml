@@ -1,9 +1,0 @@
-name: Checkout tpt-simd
-description: >
-  Clone the sibling tpt-simd repo next to the workspace, because
-  tpt-math-linalg-dense path-depends on ../tpt-simd until it is published.
-runs:
-  using: composite
-  steps:
-    - shell: bash
-      run: git clone --depth 1 https://github.com/tpt-solutions/tpt-simd.git "$GITHUB_WORKSPACE/../tpt-simd"
