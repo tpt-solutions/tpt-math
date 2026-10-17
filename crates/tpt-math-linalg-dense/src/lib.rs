@@ -37,11 +37,15 @@
 //! assert_eq!(mv[1], 7.0);
 //! ```
 
+#[cfg(feature = "alloc")]
 extern crate alloc;
 
+#[cfg(feature = "alloc")]
 use core::fmt;
+#[cfg(feature = "alloc")]
 use core::ops::{Add, Div, Index, Mul, Neg, Sub};
 
+#[cfg(feature = "alloc")]
 use tpt_math_numeric::Scalar;
 
 #[cfg(feature = "alloc")]
@@ -52,6 +56,7 @@ use alloc::{format, string::String, vec};
 
 /// A dynamically-sized column vector of `T`, stored as a contiguous `Vec`.
 #[derive(Clone)]
+#[cfg(feature = "alloc")]
 pub struct DVector<T = f64> {
     data: Vec<T>,
 }
@@ -59,6 +64,7 @@ pub struct DVector<T = f64> {
 /// A dynamically-sized matrix of `T`, stored column-major in a contiguous `Vec`
 /// (`(i, j)` lives at `i + j * nrows`).
 #[derive(Clone)]
+#[cfg(feature = "alloc")]
 pub struct DMatrix<T = f64> {
     nrows: usize,
     ncols: usize,
@@ -176,6 +182,7 @@ impl<T> DMatrix<T> {
 // Accessors
 // ---------------------------------------------------------------------------
 
+#[cfg(feature = "alloc")]
 impl<T> DVector<T> {
     /// Number of components.
     pub fn len(&self) -> usize {
@@ -203,6 +210,7 @@ impl<T> DVector<T> {
     }
 }
 
+#[cfg(feature = "alloc")]
 impl<T> DMatrix<T> {
     /// Number of rows.
     pub fn nrows(&self) -> usize {
@@ -245,6 +253,7 @@ impl<T> DMatrix<T> {
 // Indexing
 // ---------------------------------------------------------------------------
 
+#[cfg(feature = "alloc")]
 impl<T> Index<usize> for DVector<T> {
     type Output = T;
     /// # Panics
@@ -255,6 +264,7 @@ impl<T> Index<usize> for DVector<T> {
     }
 }
 
+#[cfg(feature = "alloc")]
 impl<T> Index<(usize, usize)> for DMatrix<T> {
     type Output = T;
     /// # Panics
@@ -278,6 +288,7 @@ impl<T> Index<(usize, usize)> for DMatrix<T> {
 // ---------------------------------------------------------------------------
 
 #[cfg(not(feature = "simd"))]
+#[cfg(feature = "alloc")]
 impl<T: Scalar> DVector<T> {
     /// The Euclidean (L2) norm.
     pub fn norm(&self) -> T {
@@ -319,6 +330,7 @@ impl<T: Scalar + 'static> DVector<T> {
     }
 }
 
+#[cfg(feature = "alloc")]
 impl<T: Scalar> DVector<T> {
     fn norm_generic(&self) -> T {
         // Scale by the largest magnitude so squaring cannot overflow or underflow
@@ -511,6 +523,7 @@ impl<T: Scalar> Sub<T> for DMatrix<T> {
 // In-place operators and `*_into` products (no allocation)
 // ---------------------------------------------------------------------------
 
+#[cfg(feature = "alloc")]
 impl<T: Scalar> DVector<T> {
     /// `self ← self + α·x` in place.
     ///
@@ -525,6 +538,7 @@ impl<T: Scalar> DVector<T> {
     }
 }
 
+#[cfg(feature = "alloc")]
 impl<T: Scalar> DMatrix<T> {
     /// `self ← self + α·x` in place.
     ///
@@ -603,6 +617,7 @@ impl<T: Scalar> DMatrix<T> {
     }
 }
 
+#[cfg(feature = "alloc")]
 macro_rules! impl_assign_ops {
     ($type:ident) => {
         impl<T: Scalar> core::ops::AddAssign<&$type<T>> for $type<T> {
@@ -640,7 +655,9 @@ macro_rules! impl_assign_ops {
         }
     };
 }
+#[cfg(feature = "alloc")]
 impl_assign_ops!(DVector);
+#[cfg(feature = "alloc")]
 impl_assign_ops!(DMatrix);
 
 #[cfg(feature = "rayon")]
@@ -903,24 +920,28 @@ mod simd {
 // Equality + Debug
 // ---------------------------------------------------------------------------
 
+#[cfg(feature = "alloc")]
 impl<T: PartialEq> PartialEq for DVector<T> {
     fn eq(&self, other: &Self) -> bool {
         self.data == other.data
     }
 }
 
+#[cfg(feature = "alloc")]
 impl<T: PartialEq> PartialEq for DMatrix<T> {
     fn eq(&self, other: &Self) -> bool {
         self.nrows == other.nrows && self.ncols == other.ncols && self.data == other.data
     }
 }
 
+#[cfg(feature = "alloc")]
 impl<T: fmt::Debug> fmt::Debug for DVector<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_list().entries(self.iter()).finish()
     }
 }
 
+#[cfg(feature = "alloc")]
 impl<T: fmt::Debug> fmt::Debug for DMatrix<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("DMatrix")
@@ -980,9 +1001,43 @@ impl DMatrix<f64> {
             });
         }
 
-        let (lu, piv) = partial_pivot_lu(self)?;
-        let x = solve_with_lu(&lu, &piv, b);
-        Ok(DVector::from_vec(x))
+        #[cfg(feature = "simd")]
+        {
+            let (lu, ipiv) = self.lu_factor_simd()?;
+            let mut x = b.as_slice().to_vec();
+            tpt_simd_blas::getrs_f64(n, 1, &lu, n.max(1), &ipiv, &mut x, n.max(1));
+            return Ok(DVector::from_vec(x));
+        }
+
+        #[cfg(not(feature = "simd"))]
+        {
+            let (lu, piv) = partial_pivot_lu(self)?;
+            let x = solve_with_lu(&lu, &piv, b);
+            Ok(DVector::from_vec(x))
+        }
+    }
+
+    /// LU factorisation through `tpt-simd-blas` (`getrf`), in LAPACK's
+    /// column-major layout. Applies the same singularity rule as
+    /// [`partial_pivot_lu`]: a pivot that is non-finite or below
+    /// [`DEFAULT_PIVOT_TOLERANCE`] is an error.
+    #[cfg(feature = "simd")]
+    fn lu_factor_simd(&self) -> Result<(Vec<f64>, Vec<usize>), DenseError> {
+        let n = self.nrows;
+        let mut a = self.data.clone();
+        let mut ipiv = vec![0usize; n];
+        // `getrf` only reports exact zero pivots and still completes the
+        // factorisation, so the diagonal check below covers that case too.
+        let _ = tpt_simd_blas::getrf_f64(n, n, &mut a, n.max(1), &mut ipiv);
+        for i in 0..n {
+            let d = a[i + i * n];
+            if !d.is_finite() || d.abs() < DEFAULT_PIVOT_TOLERANCE {
+                return Err(DenseError::Singular {
+                    what: "partial_pivot_lu",
+                });
+            }
+        }
+        Ok((a, ipiv))
     }
 
     /// Compute the inverse of `self`. Errors if `self` is singular.
@@ -993,15 +1048,30 @@ impl DMatrix<f64> {
                 what: format!("matrix is {}x{}, expected square", n, self.ncols),
             });
         }
-        let (lu, piv) = partial_pivot_lu(self)?;
-        let mut out = Vec::with_capacity(n * n);
-        for col in 0..n {
-            let mut e = vec![0.0_f64; n];
-            e[col] = 1.0;
-            let x = solve_with_lu(&lu, &piv, &DVector::from_vec(e));
-            out.extend(x);
+        #[cfg(feature = "simd")]
+        {
+            // A^-1 = getrs applied to the identity.
+            let (lu, ipiv) = self.lu_factor_simd()?;
+            let mut x = vec![0.0_f64; n * n];
+            for i in 0..n {
+                x[i + i * n] = 1.0;
+            }
+            tpt_simd_blas::getrs_f64(n, n, &lu, n.max(1), &ipiv, &mut x, n.max(1));
+            return Ok(DMatrix::from_vec(n, n, x));
         }
-        Ok(DMatrix::from_vec(n, n, out))
+
+        #[cfg(not(feature = "simd"))]
+        {
+            let (lu, piv) = partial_pivot_lu(self)?;
+            let mut out = Vec::with_capacity(n * n);
+            for col in 0..n {
+                let mut e = vec![0.0_f64; n];
+                e[col] = 1.0;
+                let x = solve_with_lu(&lu, &piv, &DVector::from_vec(e));
+                out.extend(x);
+            }
+            Ok(DMatrix::from_vec(n, n, out))
+        }
     }
 }
 
@@ -1585,11 +1655,13 @@ impl DMatrix<f64> {
 /// Pivot magnitude below which a matrix is reported singular by default.
 const DEFAULT_PIVOT_TOLERANCE: f64 = 1e-12;
 
+#[cfg(feature = "alloc")]
 fn partial_pivot_lu(m: &DMatrix<f64>) -> Result<(Vec<Vec<f64>>, Vec<usize>), DenseError> {
     partial_pivot_lu_with(m, DEFAULT_PIVOT_TOLERANCE)
 }
 
 /// [`partial_pivot_lu`] with an explicit absolute pivot tolerance.
+#[cfg(feature = "alloc")]
 fn partial_pivot_lu_with(
     m: &DMatrix<f64>,
     tol: f64,

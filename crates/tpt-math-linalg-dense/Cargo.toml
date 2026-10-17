@@ -25,15 +25,17 @@ tpt-simd-blas = { path = "../../../tpt-simd/tpt-simd-blas", version = "0.1.0", o
 
 [features]
 default = ["std"]
-# `std` pulls in the allocator (dynamic vectors need a heap).
-std = ["tpt-math-numeric/std", "alloc"]
+# `std` pulls in the allocator (dynamic vectors need a heap). With `simd` on, it
+# also enables tpt-simd-blas run-time AVX2/FMA detection; the `?` makes that a
+# no-op when `simd` is off. no_std builds keep compile-time dispatch.
+std = ["tpt-math-numeric/std", "alloc", "tpt-simd-blas?/runtime-dispatch"]
 # Dynamic vectors/matrices always need an allocator.
 alloc = ["tpt-math-numeric/alloc"]
 # Route `DMatrix * DMatrix`, `DMatrix * DVector`, `DVector::dot` and `norm` to
 # tpt-simd-blas for `f32`/`f64` (other scalar types use the generic loops).
 # Off by default: results reassociate sums, so they can differ from the scalar
 # loops by a few ulps (tpt-simd ADR 0003, tier 2). Adds a `T: 'static` bound to
-# those operations. Enable `simd-runtime` to detect AVX2+FMA at run time.
+# those operations. On std builds AVX2+FMA is detected at run time (see `std`).
 simd = ["alloc", "dep:tpt-simd-blas"]
 # Multi-threaded `DMatrix::<f64>::par_mul`. Results are bitwise equal to `*`.
 rayon = ["std", "dep:rayon"]
