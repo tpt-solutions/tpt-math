@@ -50,6 +50,7 @@ Crates are organised into layers; lower layers never depend on higher ones.
 |-------|----------------------|----------|-------|
 | `tpt-math-graph` | `petgraph` (dual `Apache-2.0 OR MIT`) | yes (alloc) | Thin wrap for adjacency / toposort / Dijkstra / A*; in-house max-flow on top. |
 | `tpt-math-interpolate` | — (in-house) | yes (alloc) | RBF, ordinary Kriging, PCHIP, B-spline basis for scattered data / surrogates. |
+| `tpt-math-pde-operators` | — (in-house) | yes (alloc) | Gradient, divergence, Laplacian on structured grids (staggered layout); adjointness, conservation and Laplacian-sign contracts checked in debug builds. |
 
 ### Probability
 | Crate | Wraps / consolidates | `no_std` | Notes |

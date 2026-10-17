@@ -1280,3 +1280,29 @@ tree.*
       with one documented skip for `hashbrown` (`petgraph` and `indexmap` need
       different majors); CONTRIBUTING has a section on the `registry.toml` dependency.
 
+
+### Phase PDE — tpt-math-pde-operators
+
+*Discrete gradient, divergence, Laplacian and central difference on uniform
+structured grids (1–3D), staggered (MAC) layout. Structural contracts
+(adjointness, discrete conservation, skew-symmetry, Laplacian sign/symmetry,
+constant kernel) are checked in debug builds, and in release with the
+`contracts` feature. no_std + alloc. Depends on: `tpt-math-numeric`.*
+
+- [x] Scaffold `crates/tpt-math-pde-operators/` (`Grid`, `Field`, `Boundary`,
+      `Operators`, contracts)
+- [x] Wire deps: `tpt-math-numeric`; `default = ["std"]`, `std`/`alloc`,
+      `contracts` features; `[lints] workspace = true`
+- [x] Unit tests (interior Dirichlet Laplacian exact on quadratics, Neumann
+      constant kernel, contract-report tolerance) and integration tests
+      (periodic second-order convergence, mixed 3D `verify`)
+- [x] Property tests (proptest) over random 1–3D shapes and boundary mixes
+- [x] Rustdoc (crate-level + public API) and README.md + CHANGELOG.md
+- [x] `cargo fmt --check` / `cargo clippy --all-targets --all-features -- -D warnings` clean
+- [x] no_std+alloc verify (`thumbv6m-none-eabi`)
+- [x] Add to root `Cargo.toml` `[workspace] members` + `[workspace.dependencies]`;
+      `NO_STD_CRATES` entry in `xtask`; README crate-map row
+- [ ] Add `tpt-rust-map/registry.toml` entry (sibling repo, not available here):
+      `domain = "math.pde"`, `no_std = true`, `wraps = []`; `status = "planned"` → `"git"`
+- [ ] Refresh `Cargo.lock` with `cargo update -p tpt-math-pde-operators` once the
+      `tpt-simd` sibling checkout is available (CI runs against it)

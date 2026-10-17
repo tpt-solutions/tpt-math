@@ -63,6 +63,7 @@ const NO_STD_CRATES: &[(&str, &str)] = &[
     ("tpt-math-spatial", ""),
     ("tpt-math-graph", ""),
     ("tpt-math-interpolate", "alloc"),
+    ("tpt-math-pde-operators", "alloc"),
 ];
 
 const NO_STD_TARGET: &str = "thumbv6m-none-eabi";
