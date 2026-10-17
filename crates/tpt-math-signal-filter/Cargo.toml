@@ -16,6 +16,10 @@ categories = ["mathematics", "science", "algorithms"]
 [dependencies]
 tpt-math-numeric = { workspace = true, features = ["std"] }
 tpt-math-signal-fft = { workspace = true }
+# Path dependency on the sibling tpt-simd repo (same layout as tpt-math-linalg-dense).
+tpt-simd-blas = { path = "../../../tpt-simd/tpt-simd-blas", version = "0.1.0", optional = true, default-features = false, features = [
+    "alloc",
+] }
 
 [dependencies.rayon]
 workspace = true
@@ -25,6 +29,12 @@ optional = true
 default = []
 # Parallel direct filtering (`FirFilter::filter_par`). Same output as `filter`.
 rayon = ["dep:rayon"]
+# Direct FIR (`filter`, `filter_par`, `filter_in_place`, `filter_causal`) uses
+# tpt-simd-blas `dot_f64` per output for kernels of 16+ taps, with run-time
+# AVX2/FMA detection. Those paths reassociate sums, so they can differ from the
+# scalar loops by a few ulps (tpt-simd ADR 0003, tier 2). Shorter kernels and
+# the FFT paths are unchanged.
+simd = ["dep:tpt-simd-blas", "tpt-simd-blas/runtime-dispatch"]
 
 
 [lints]

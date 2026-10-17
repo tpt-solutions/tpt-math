@@ -53,7 +53,19 @@ pub struct FirFilter {
     coeffs: Vec<f64>,
 }
 
+/// With `simd`, kernels of at least this many taps use the `dot_f64` path.
+/// Shorter kernels stay scalar: a dot call per output costs more than it saves.
+#[cfg(feature = "simd")]
+const SIMD_MIN_TAPS: usize = 16;
+
 impl FirFilter {
+    /// The taps in reverse order, so that the window of signal samples read by
+    /// each output is contiguous (`simd` only).
+    #[cfg(feature = "simd")]
+    fn reversed_taps(&self) -> Vec<f64> {
+        self.coeffs.iter().rev().copied().collect()
+    }
+
     /// Build a filter from an explicit list of tap weights.
     ///
     /// The taps are the filter's impulse response, in order: `coeffs[0]`
@@ -231,6 +243,17 @@ impl FirFilter {
         let n = signal.len();
         let delay = self.group_delay();
         let mut out = vec![0.0; n];
+        #[cfg(feature = "simd")]
+        if m >= SIMD_MIN_TAPS {
+            let rev = self.reversed_taps();
+            out.par_iter_mut().enumerate().for_each(|(i, y)| {
+                let first = (i + delay + 1).saturating_sub(n);
+                let last = (i + delay + 1).min(m);
+                let lo = i + delay + 1 - last;
+                *y = tpt_simd_blas::dot_f64(&rev[m - last..m - first], &signal[lo..lo + (last - first)]);
+            });
+            return out;
+        }
         out.par_iter_mut().enumerate().for_each(|(i, y)| {
             let first = (i + delay + 1).saturating_sub(n);
             let last = (i + delay + 1).min(m);
@@ -244,6 +267,10 @@ impl FirFilter {
     }
 
     pub fn filter(&self, signal: &[f64]) -> Vec<f64> {
+        #[cfg(feature = "simd")]
+        if self.coeffs.len() >= SIMD_MIN_TAPS {
+            return self.filter_dot(signal);
+        }
         let m = self.coeffs.len();
         let n = signal.len();
         let delay = self.group_delay();
@@ -259,6 +286,26 @@ impl FirFilter {
                 acc += self.coeffs[k] * signal[i + delay - k];
             }
             *y = acc;
+        }
+        out
+    }
+
+    /// [`filter`](Self::filter) with each output a `dot_f64` over a contiguous
+    /// window of the signal (`simd`, for kernels of at least `SIMD_MIN_TAPS` taps).
+    #[cfg(feature = "simd")]
+    fn filter_dot(&self, signal: &[f64]) -> Vec<f64> {
+        let m = self.coeffs.len();
+        let n = signal.len();
+        let delay = self.group_delay();
+        let mut out = vec![0.0; n];
+        let rev = self.reversed_taps();
+
+        for (i, y) in out.iter_mut().enumerate() {
+            let first = (i + delay + 1).saturating_sub(n);
+            let last = (i + delay + 1).min(m);
+            // Tap k = last-1 .. first meets signal index i+delay+1-last .. i+delay-first.
+            let lo = i + delay + 1 - last;
+            *y = tpt_simd_blas::dot_f64(&rev[m - last..m - first], &signal[lo..lo + (last - first)]);
         }
         out
     }
@@ -348,6 +395,10 @@ impl FirFilter {
             signal.fill(0.0);
             return;
         }
+        #[cfg(feature = "simd")]
+        if m >= SIMD_MIN_TAPS {
+            return self.filter_in_place_dot(signal);
+        }
         let n = signal.len();
         let delay = self.group_delay();
 
@@ -369,6 +420,48 @@ impl FirFilter {
         }
     }
 
+    /// [`filter_in_place`](Self::filter_in_place) for long kernels (`simd`). The
+    /// window is gathered into a contiguous buffer and dotted with the reversed
+    /// taps, the same kernel as [`filter`](Self::filter), so the bits match.
+    #[cfg(feature = "simd")]
+    fn filter_in_place_dot(&self, signal: &mut [f64]) {
+        let m = self.coeffs.len();
+        let n = signal.len();
+        let delay = self.group_delay();
+        let rev = self.reversed_taps();
+        let mut win = vec![0.0; m];
+        let mut history = vec![0.0; m];
+        for i in 0..n {
+            let first = (i + delay + 1).saturating_sub(n);
+            let last = (i + delay + 1).min(m);
+            let lo = i + delay + 1 - last;
+            let len = last - first;
+            for (j, w) in win[..len].iter_mut().enumerate() {
+                let t = lo + j;
+                *w = if t >= i { signal[t] } else { history[t % m] };
+            }
+            let acc = tpt_simd_blas::dot_f64(&rev[m - last..m - first], &win[..len]);
+            history[i % m] = signal[i];
+            signal[i] = acc;
+        }
+    }
+
+    /// [`filter_causal`](Self::filter_causal) with a `dot_f64` per output (`simd`).
+    #[cfg(feature = "simd")]
+    fn filter_causal_dot(&self, signal: &[f64]) -> Vec<f64> {
+        let m = self.coeffs.len();
+        let n = signal.len();
+        let mut out = vec![0.0; n];
+        let rev = self.reversed_taps();
+
+        for (i, y) in out.iter_mut().enumerate() {
+            let last = (i + 1).min(m);
+            // Tap k = last-1 .. 0 meets signal index i+1-last .. i.
+            *y = tpt_simd_blas::dot_f64(&rev[m - last..], &signal[i + 1 - last..=i]);
+        }
+        out
+    }
+
     /// Filter a signal with the plain causal convolution, delay included.
     ///
     /// `y[i] = sum_k h[k] * x[i - k]`, with zeros assumed before the start of
@@ -385,6 +478,10 @@ impl FirFilter {
     /// assert_eq!(fir.filter_causal(&[1.0, 2.0, 3.0]), vec![0.0, 1.0, 2.0]);
     /// ```
     pub fn filter_causal(&self, signal: &[f64]) -> Vec<f64> {
+        #[cfg(feature = "simd")]
+        if self.coeffs.len() >= SIMD_MIN_TAPS {
+            return self.filter_causal_dot(signal);
+        }
         let m = self.coeffs.len();
         let n = signal.len();
         let mut out = vec![0.0; n];
