@@ -79,6 +79,7 @@ fn minimise_rejects_a_cost_whose_dimension_changes_between_points() {
         }
     };
     let result = minimize_dimensioned(cost, [q(0.0, Dimension::LENGTH)], &Options::new(200));
+    eprintln!("DEBUG {result:?}");
     assert!(matches!(
         result,
         Err(SolveError::Unit(UnitError::DimensionMismatch { .. }))
