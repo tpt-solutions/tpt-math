@@ -714,6 +714,67 @@ impl ComplexDMatrix<f64> {
         self.lu_with_tolerance(1e-12)
     }
 
+    /// LU factorisation on split re/im planes through `tpt-simd-blas` `getrf`.
+    /// Returns the factors in column-major planes and the LAPACK-style row swaps.
+    /// Applies the same singularity rule as [`ComplexDMatrix::lu_with_tolerance`]:
+    /// a pivot that is non-finite, zero, or below `tol` is an error.
+    #[cfg(feature = "simd")]
+    fn lu_planes(&self, tol: f64) -> Result<(Vec<f64>, Vec<f64>, Vec<usize>), ComplexDenseError> {
+        let n = self.nrows;
+        let mut ar: Vec<f64> = self.data.iter().map(|z| z.re).collect();
+        let mut ai: Vec<f64> = self.data.iter().map(|z| z.im).collect();
+        let mut ipiv = vec![0usize; n];
+        // `getrf` finishes the factorisation after an exact zero pivot, so the
+        // diagonal check below sees it.
+        let _ = tpt_simd_blas::getrf_c64(n, &mut ar, &mut ai, n.max(1), &mut ipiv);
+        for k in 0..n {
+            let d = Complex::new(ar[k + k * n], ai[k + k * n]).norm();
+            if !d.is_finite() || d == 0.0 || d < tol {
+                return Err(ComplexDenseError::Singular { what: "lu" });
+            }
+        }
+        Ok((ar, ai, ipiv))
+    }
+
+    /// [`ComplexDMatrix::lu_planes`] repackaged as the `(L, U, piv)` triple that
+    /// [`ComplexDMatrix::lu_with_tolerance`] returns.
+    #[cfg(feature = "simd")]
+    fn planes_to_lu(
+        n: usize,
+        ar: &[f64],
+        ai: &[f64],
+        ipiv: &[usize],
+    ) -> (Vec<Vec<Complex<f64>>>, Vec<Vec<Complex<f64>>>, Vec<usize>) {
+        let at = |i: usize, j: usize| Complex::new(ar[i + j * n], ai[i + j * n]);
+        let l: Vec<Vec<Complex<f64>>> = (0..n)
+            .map(|i| {
+                (0..n)
+                    .map(|j| {
+                        if i == j {
+                            Complex::from_real(1.0)
+                        } else if i > j {
+                            at(i, j)
+                        } else {
+                            Complex::from_real(0.0)
+                        }
+                    })
+                    .collect()
+            })
+            .collect();
+        let u: Vec<Vec<Complex<f64>>> = (0..n)
+            .map(|i| {
+                (0..n)
+                    .map(|j| if i <= j { at(i, j) } else { Complex::from_real(0.0) })
+                    .collect()
+            })
+            .collect();
+        let mut piv: Vec<usize> = (0..n).collect();
+        for (k, &p) in ipiv.iter().enumerate() {
+            piv.swap(k, p);
+        }
+        (l, u, piv)
+    }
+
     /// [`ComplexDMatrix::lu`] with an absolute pivot threshold: a pivot whose
     /// modulus is below `tol` counts as singular. `tol = 0.0` accepts any
     /// non-zero finite pivot.
@@ -732,6 +793,26 @@ impl ComplexDMatrix<f64> {
                 what: alloc::format!("matrix is {}x{}, expected square", n, self.ncols),
             });
         }
+        #[cfg(feature = "simd")]
+        {
+            let (ar, ai, ipiv) = self.lu_planes(tol)?;
+            return Ok(Self::planes_to_lu(n, &ar, &ai, &ipiv));
+        }
+        #[cfg(not(feature = "simd"))]
+        {
+            self.lu_scalar(tol)
+        }
+    }
+
+    /// Scalar partial-pivot LU behind [`ComplexDMatrix::lu_with_tolerance`]; the
+    /// square-matrix check has already been made by the caller.
+    #[cfg(not(feature = "simd"))]
+    fn lu_scalar(
+        &self,
+        tol: f64,
+    ) -> Result<(Vec<Vec<Complex<f64>>>, Vec<Vec<Complex<f64>>>, Vec<usize>), ComplexDenseError>
+    {
+        let n = self.nrows;
         let mut a: Vec<Vec<Complex<f64>>> = (0..n)
             .map(|i| (0..n).map(|j| self[(i, j)]).collect())
             .collect();
@@ -803,9 +884,21 @@ impl ComplexDMatrix<f64> {
                 what: alloc::format!("rhs has length {}, expected {n}", b.len()),
             });
         }
-        let (l, u, piv) = self.lu()?;
-        let x = solve_with_lu(&l, &u, &piv, b);
-        Ok(ComplexDVector::from_vec(x))
+        #[cfg(feature = "simd")]
+        {
+            let (ar, ai, ipiv) = self.lu_planes(1e-12)?;
+            let mut xr: Vec<f64> = (0..n).map(|i| b[i].re).collect();
+            let mut xi: Vec<f64> = (0..n).map(|i| b[i].im).collect();
+            tpt_simd_blas::getrs_c64(n, 1, &ar, &ai, n.max(1), &ipiv, &mut xr, &mut xi, n.max(1));
+            let x = xr.iter().zip(&xi).map(|(&re, &im)| Complex::new(re, im)).collect();
+            return Ok(ComplexDVector::from_vec(x));
+        }
+        #[cfg(not(feature = "simd"))]
+        {
+            let (l, u, piv) = self.lu()?;
+            let x = solve_with_lu(&l, &u, &piv, b);
+            Ok(ComplexDVector::from_vec(x))
+        }
     }
 
     /// Compute the inverse of `self`.
@@ -816,15 +909,31 @@ impl ComplexDMatrix<f64> {
                 what: alloc::format!("matrix is {}x{}, expected square", n, self.ncols),
             });
         }
-        let (l, u, piv) = self.lu()?;
-        let mut out = Vec::with_capacity(n * n);
-        for col in 0..n {
-            let mut e = vec![Complex::from_real(0.0_f64); n];
-            e[col] = Complex::from_real(1.0);
-            let x = solve_with_lu(&l, &u, &piv, &ComplexDVector::from_vec(e));
-            out.extend(x);
+        #[cfg(feature = "simd")]
+        {
+            // A^-1 = getrs applied to the identity, in planes.
+            let (ar, ai, ipiv) = self.lu_planes(1e-12)?;
+            let mut xr = vec![0.0_f64; n * n];
+            let mut xi = vec![0.0_f64; n * n];
+            for i in 0..n {
+                xr[i + i * n] = 1.0;
+            }
+            tpt_simd_blas::getrs_c64(n, n, &ar, &ai, n.max(1), &ipiv, &mut xr, &mut xi, n.max(1));
+            let out = xr.iter().zip(&xi).map(|(&re, &im)| Complex::new(re, im)).collect();
+            return Ok(ComplexDMatrix::from_vec(n, n, out));
         }
-        Ok(ComplexDMatrix::from_vec(n, n, out))
+        #[cfg(not(feature = "simd"))]
+        {
+            let (l, u, piv) = self.lu()?;
+            let mut out = Vec::with_capacity(n * n);
+            for col in 0..n {
+                let mut e = vec![Complex::from_real(0.0_f64); n];
+                e[col] = Complex::from_real(1.0);
+                let x = solve_with_lu(&l, &u, &piv, &ComplexDVector::from_vec(e));
+                out.extend(x);
+            }
+            Ok(ComplexDMatrix::from_vec(n, n, out))
+        }
     }
 
     /// Cholesky factorisation `A = L Lᴴ` for a Hermitian positive-definite
@@ -886,6 +995,7 @@ impl ComplexDMatrix<f64> {
 }
 
 #[cfg(feature = "alloc")]
+#[cfg(not(feature = "simd"))]
 fn solve_with_lu(
     l: &[Vec<Complex<f64>>],
     u: &[Vec<Complex<f64>>],
