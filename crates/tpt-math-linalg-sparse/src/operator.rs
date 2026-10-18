@@ -142,7 +142,7 @@ pub fn conjugate_gradient_op<T, Op>(
     max_iter: usize,
 ) -> Result<(DVector<T>, SolveReport<T>), SparseError>
 where
-    T: Scalar + Copy,
+    T: Scalar + Copy + 'static,
     Op: LinearOperator<T>,
 {
     let n = op.nrows();

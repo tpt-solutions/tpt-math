@@ -735,6 +735,13 @@ impl ComplexDMatrix<f64> {
                 what: alloc::format!("matrix is {}x{}, expected square", n, self.ncols),
             });
         }
+        #[cfg(feature = "simd-runtime")]
+        {
+            if n >= simd_lu::CUTOFF {
+                let factors = simd_lu::factor(self, tol)?;
+                return Ok(simd_lu::to_lu(&factors));
+            }
+        }
         let mut a: Vec<Vec<Complex<f64>>> = (0..n)
             .map(|i| (0..n).map(|j| self[(i, j)]).collect())
             .collect();
@@ -806,6 +813,15 @@ impl ComplexDMatrix<f64> {
                 what: alloc::format!("rhs has length {}, expected {n}", b.len()),
             });
         }
+        #[cfg(feature = "simd-runtime")]
+        {
+            if n >= simd_lu::CUTOFF {
+                let factors = simd_lu::factor(self, 1e-12)?;
+                let rhs = ComplexDMatrix::from_fn(n, 1, |i, _| b[i]);
+                let x = simd_lu::solve(&factors, &rhs);
+                return Ok(ComplexDVector::from_fn(n, |i| x[(i, 0)]));
+            }
+        }
         let (l, u, piv) = self.lu()?;
         let x = solve_with_lu(&l, &u, &piv, b);
         Ok(ComplexDVector::from_vec(x))
@@ -818,6 +834,16 @@ impl ComplexDMatrix<f64> {
             return Err(ComplexDenseError::DimensionMismatch {
                 what: alloc::format!("matrix is {}x{}, expected square", n, self.ncols),
             });
+        }
+        #[cfg(feature = "simd-runtime")]
+        {
+            if n >= simd_lu::CUTOFF {
+                let factors = simd_lu::factor(self, 1e-12)?;
+                let identity = ComplexDMatrix::from_fn(n, n, |i, j| {
+                    Complex::from_real(if i == j { 1.0 } else { 0.0 })
+                });
+                return Ok(simd_lu::solve(&factors, &identity));
+            }
         }
         let (l, u, piv) = self.lu()?;
         let mut out = Vec::with_capacity(n * n);
@@ -1500,5 +1526,172 @@ mod lu_threshold_tests {
         let zero = ComplexDMatrix::<f64>::zeros(2, 2);
         assert!(zero.lu_with_tolerance(0.0).is_err());
         assert!(zero.lu_with_relative_tolerance(1e-10).is_err());
+    }
+}
+
+/// SIMD LU for complex matrices through `tpt-simd-blas`'s `getrf_c64`/`getrs_c64`.
+///
+/// The kernels work on split real and imaginary planes in column-major order, so
+/// this module converts to and from that layout. Pivots come back as LAPACK-style
+/// sequential swaps, which become the permutation `piv` used by the public API.
+#[cfg(feature = "simd-runtime")]
+mod simd_lu {
+    use super::*;
+
+    /// Matrices from this size up use the kernels. Below it the scalar loops win.
+    pub(super) const CUTOFF: usize = 64;
+
+    /// An LU factorisation in the kernels' split-plane, column-major layout.
+    pub(super) struct Factors {
+        n: usize,
+        ar: Vec<f64>,
+        ai: Vec<f64>,
+        ipiv: Vec<usize>,
+    }
+
+    /// Factor `m` with `getrf_c64`, rejecting pivots below `tol` in modulus.
+    pub(super) fn factor(m: &ComplexDMatrix<f64>, tol: f64) -> Result<Factors, ComplexDenseError> {
+        let n = m.nrows;
+        let mut ar = vec![0.0_f64; n * n];
+        let mut ai = vec![0.0_f64; n * n];
+        for j in 0..n {
+            for i in 0..n {
+                let z = m[(i, j)];
+                ar[i + j * n] = z.re;
+                ai[i + j * n] = z.im;
+            }
+        }
+        let mut ipiv = vec![0usize; n];
+        let singular = ComplexDenseError::Singular { what: "lu" };
+        if tpt_simd_blas::getrf_c64(n, &mut ar, &mut ai, n, &mut ipiv).is_err() {
+            return Err(singular);
+        }
+        // The same singularity test as the scalar path, on the pivots actually used.
+        for k in 0..n {
+            let (re, im) = (ar[k + k * n], ai[k + k * n]);
+            let modulus = re.hypot(im);
+            if !modulus.is_finite() || modulus == 0.0 || modulus < tol {
+                return Err(singular);
+            }
+        }
+        Ok(Factors { n, ar, ai, ipiv })
+    }
+
+    /// The `(L, U, piv)` triple that the scalar [`ComplexDMatrix::lu`] returns.
+    pub(super) fn to_lu(
+        f: &Factors,
+    ) -> (Vec<Vec<Complex<f64>>>, Vec<Vec<Complex<f64>>>, Vec<usize>) {
+        let n = f.n;
+        let at = |i: usize, j: usize| Complex::new(f.ar[i + j * n], f.ai[i + j * n]);
+        let mut piv: Vec<usize> = (0..n).collect();
+        for (k, &p) in f.ipiv.iter().enumerate() {
+            piv.swap(k, p);
+        }
+        let zero = Complex::from_real(0.0);
+        let one = Complex::from_real(1.0);
+        let l = (0..n)
+            .map(|i| {
+                (0..n)
+                    .map(|j| match i.cmp(&j) {
+                        core::cmp::Ordering::Equal => one,
+                        core::cmp::Ordering::Greater => at(i, j),
+                        core::cmp::Ordering::Less => zero,
+                    })
+                    .collect()
+            })
+            .collect();
+        let u = (0..n)
+            .map(|i| {
+                (0..n)
+                    .map(|j| if i <= j { at(i, j) } else { zero })
+                    .collect()
+            })
+            .collect();
+        (l, u, piv)
+    }
+
+    /// Solve `A X = B` for the `ncols` right-hand sides of `rhs` with `getrs_c64`.
+    pub(super) fn solve(f: &Factors, rhs: &ComplexDMatrix<f64>) -> ComplexDMatrix<f64> {
+        let n = f.n;
+        let k = rhs.ncols;
+        let mut br = vec![0.0_f64; n * k];
+        let mut bi = vec![0.0_f64; n * k];
+        for c in 0..k {
+            for i in 0..n {
+                let z = rhs[(i, c)];
+                br[i + c * n] = z.re;
+                bi[i + c * n] = z.im;
+            }
+        }
+        tpt_simd_blas::getrs_c64(n, k, &f.ar, &f.ai, n, &f.ipiv, &mut br, &mut bi, n);
+        ComplexDMatrix::from_fn(n, k, |i, c| Complex::new(br[i + c * n], bi[i + c * n]))
+    }
+}
+
+#[cfg(all(test, feature = "simd-runtime"))]
+mod simd_complex_tests {
+    use super::*;
+
+    fn dominant(n: usize) -> ComplexDMatrix<f64> {
+        ComplexDMatrix::from_fn(n, n, |i, j| {
+            if i == j {
+                Complex::new(n as f64 + 1.0, 0.5)
+            } else {
+                Complex::new(((i * 3 + j) as f64).sin(), ((i + 2 * j) as f64).cos() * 0.5)
+            }
+        })
+    }
+
+    #[test]
+    fn simd_lu_factors_agree_with_the_scalar_factors() {
+        for n in [5usize, 33] {
+            let a = dominant(n);
+            let (l_s, u_s, p_s) = a.lu_with_tolerance(0.0).unwrap();
+            let factors = simd_lu::factor(&a, 0.0).unwrap();
+            let (l_v, u_v, p_v) = simd_lu::to_lu(&factors);
+            assert_eq!(p_s, p_v, "permutation, n = {n}");
+            for i in 0..n {
+                for j in 0..n {
+                    let d = |x: Complex<f64>, y: Complex<f64>| (x.re - y.re).hypot(x.im - y.im);
+                    assert!(d(l_s[i][j], l_v[i][j]) < 1e-10, "L at ({i},{j}), n = {n}");
+                    assert!(d(u_s[i][j], u_v[i][j]) < 1e-10, "U at ({i},{j}), n = {n}");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn simd_solve_and_inverse_have_small_residuals_above_the_cutoff() {
+        let n = 80;
+        let a = dominant(n);
+        let b = ComplexDVector::from_fn(n, |i| Complex::new(i as f64, 1.0));
+        let x = a.solve(&b).unwrap();
+        for i in 0..n {
+            let mut acc = Complex::new(0.0, 0.0);
+            for j in 0..n {
+                let (p, q) = (a[(i, j)], x[j]);
+                acc = Complex::new(
+                    acc.re + p.re * q.re - p.im * q.im,
+                    acc.im + p.re * q.im + p.im * q.re,
+                );
+            }
+            assert!((acc.re - b[i].re).hypot(acc.im - b[i].im) < 1e-9, "row {i}");
+        }
+        let inv = a.inverse().unwrap();
+        for i in 0..n {
+            for j in 0..n {
+                // (A · A⁻¹)_{ij} should be δ_ij.
+                let mut acc = Complex::new(0.0, 0.0);
+                for k in 0..n {
+                    let (p, q) = (a[(i, k)], inv[(k, j)]);
+                    acc = Complex::new(
+                        acc.re + p.re * q.re - p.im * q.im,
+                        acc.im + p.re * q.im + p.im * q.re,
+                    );
+                }
+                let want = if i == j { 1.0 } else { 0.0 };
+                assert!((acc.re - want).hypot(acc.im) < 1e-9, "({i},{j})");
+            }
+        }
     }
 }

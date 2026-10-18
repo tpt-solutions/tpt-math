@@ -16,6 +16,11 @@ categories = ["mathematics", "science", "algorithms", "no-std"]
 [dependencies]
 tpt-math-linalg-dense = { workspace = true, default-features = false }
 tpt-math-numeric = { workspace = true, default-features = false }
+# Optional SIMD kernels (see the `simd` feature). Needs Rust 1.95+ (edition 2024);
+# the workspace MSRV (1.85) covers the default build only.
+tpt-simd-blas = { version = "0.1.1", optional = true, default-features = false, features = [
+    "alloc",
+] }
 
 [features]
 default = ["std"]
@@ -23,6 +28,10 @@ default = ["std"]
 std = ["tpt-math-linalg-dense/std", "tpt-math-numeric/std", "alloc"]
 # Dynamic vectors/matrices always need an allocator.
 alloc = ["tpt-math-linalg-dense/alloc", "tpt-math-numeric/alloc"]
+# SIMD kernels for the complex LU (`getrf`/`getrs`) above a size cutoff.
+simd = ["alloc", "dep:tpt-simd-blas"]
+# Run-time AVX2 detection in tpt-simd-blas, and enable the dispatch.
+simd-runtime = ["simd", "tpt-simd-blas/runtime-dispatch"]
 
 [dev-dependencies]
 criterion = { workspace = true }

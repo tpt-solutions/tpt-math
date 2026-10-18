@@ -604,7 +604,7 @@ pub(crate) fn cg_core<T, A>(
     max_iter: usize,
 ) -> Result<(DVector<T>, SolveReport<T>), SparseError>
 where
-    T: Scalar + Copy,
+    T: Scalar + Copy + 'static,
     A: FnMut(&[T], &mut [T]) -> Result<(), SparseError>,
 {
     let mut x = x0.unwrap_or_else(|| DVector::zeros(n));

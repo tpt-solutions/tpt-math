@@ -2403,11 +2403,11 @@ impl DMatrix<f64> {
         let shifted =
             DMatrix::from_fn(n, n, |i, j| self[(i, j)] - if i == j { shift } else { 0.0 });
 
-        let mut x = DVector::from_fn(n, |i| 1.0 / ((i + 1) as f64).sqrt());
+        let mut x = DVector::from_fn(n, |i| 1.0 / sqrt_f64((i + 1) as f64));
         let mut residual = f64::INFINITY;
         for _ in 0..20 {
             let y = shifted.solve(&x)?;
-            let norm = y.iter().map(|v| v * v).sum::<f64>().sqrt();
+            let norm = sqrt_f64(y.iter().map(|v| v * v).sum::<f64>());
             if !norm.is_finite() || norm == 0.0 {
                 return Err(DenseError::NoConvergence {
                     what: "eigenvector_for_eigenvalue",
@@ -2416,10 +2416,14 @@ impl DMatrix<f64> {
             x = DVector::from_fn(n, |i| y[i] / norm);
             // Residual of A x = λ x.
             let ax = DVector::from_fn(n, |i| (0..n).map(|j| self[(i, j)] * x[j]).sum::<f64>());
-            residual = (0..n)
-                .map(|i| (ax[i] - lambda * x[i]).powi(2))
-                .sum::<f64>()
-                .sqrt();
+            residual = sqrt_f64(
+                (0..n)
+                    .map(|i| {
+                        let d = ax[i] - lambda * x[i];
+                        d * d
+                    })
+                    .sum::<f64>(),
+            );
             if residual <= 1e-12 * scale {
                 break;
             }
