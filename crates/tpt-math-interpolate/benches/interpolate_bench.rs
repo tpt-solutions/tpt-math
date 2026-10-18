@@ -29,10 +29,10 @@ fn bench_kriging(c: &mut Criterion) {
     let n = 100;
     let xs = DVector::from_fn(n, |i| i as f64 / n as f64);
     let ys = DVector::from_fn(n, |i| (i as f64 / n as f64 * 6.0).sin());
-    let variogram = Variogram::Gaussian {
+    let variogram = Variogram::Exponential {
         sill: 1.0,
-        range: 0.2,
-        nugget: 0.0,
+        range: 0.3,
+        nugget: 1e-2,
     };
     c.bench_function("Kriging fit, 100 points", |b| {
         b.iter(|| black_box(Kriging::new(xs.clone(), ys.clone(), variogram)))
