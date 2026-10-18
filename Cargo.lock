@@ -1168,6 +1168,7 @@ dependencies = [
  "criterion",
  "tpt-math-linalg-dense",
  "tpt-math-numeric",
+ "tpt-simd-blas",
 ]
 
 [[package]]

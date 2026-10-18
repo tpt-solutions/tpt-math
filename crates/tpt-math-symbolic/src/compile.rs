@@ -140,7 +140,8 @@ where
             Box::new(move |args| Some(fa(args)?.powi(n)))
         }
         Expr::Func(name, a) => {
-            let f = func_pointer(name).ok_or_else(|| CompileError::UnknownFunction(name.clone()))?;
+            let f =
+                func_pointer(name).ok_or_else(|| CompileError::UnknownFunction(name.clone()))?;
             let fa = build(a, vars)?;
             Box::new(move |args| Some(C::from(f(to_f64(fa(args)?)))))
         }
