@@ -109,6 +109,7 @@ mod descriptive;
 mod dist;
 mod error;
 mod hypothesis;
+mod multiple;
 mod nonparametric;
 mod regression;
 mod special;
@@ -130,6 +131,7 @@ pub use hypothesis::{
     try_one_sample_t_test, try_one_way_anova, try_paired_t_test, try_pooled_t_test,
     try_two_sample_t_test, two_sample_t_test,
 };
+pub use multiple::{try_logistic_regression, try_multiple_regression, LogisticFit, MultipleFit};
 pub use nonparametric::{
     kolmogorov_smirnov_two_sample, mann_whitney_u, try_kolmogorov_smirnov_two_sample,
     try_mann_whitney_u, try_wilcoxon_signed_rank, wilcoxon_signed_rank,

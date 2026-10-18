@@ -53,6 +53,11 @@ use alloc::vec::Vec;
 #[cfg(feature = "alloc")]
 use alloc::{format, string::String, vec};
 
+#[cfg(feature = "alloc")]
+mod factor;
+#[cfg(feature = "alloc")]
+pub use factor::{solve_tridiagonal, Cholesky};
+
 /// A dynamically-sized column vector of `T`, stored as a contiguous `Vec`.
 #[derive(Clone)]
 pub struct DVector<T = f64> {

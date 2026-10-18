@@ -1399,8 +1399,9 @@ constant kernel) are checked in debug builds, and in release with the
 - [ ] Dense linalg: pseudo-inverse / minimum-norm least squares via SVD (`Qr`
       rejects rank-deficient input), a tridiagonal/banded solver, a reusable
       Cholesky solve object, and general real eigenvectors
-      Status: Partial: `DMatrix::pseudo_inverse` and `DMatrix::solve_min_norm` (SVD) are done.
-      Still open: the banded solver, the Cholesky solve object, real eigenvectors.
+      Status: Partial: `DMatrix::pseudo_inverse` and `DMatrix::solve_min_norm` (SVD),
+      `Cholesky` (reusable factor with `solve` and `det`) and `solve_tridiagonal` (Thomas,
+      no pivoting) are done. Still open: general banded solvers and real eigenvectors.
 - [ ] Sparse linalg: a Lanczos/Arnoldi eigensolver, a fill-reducing ordering
       (AMD/RCM) for `SparseLu`/`SparseCholesky`, and a matrix-free
       `LinearOperator` trait for the Krylov solvers
@@ -1413,8 +1414,9 @@ constant kernel) are checked in debug builds, and in release with the
       quantile, moments) are done. Negative binomial and multivariate normal are open.
 - [ ] Stats: multiple and logistic regression, Spearman and Kendall
       correlation, kernel density estimation
-      Status: Partial: Spearman (tie-corrected) and Kendall τ-b are done. Multiple and
-      logistic regression and kernel density estimation are open.
+      Status: Partial: Spearman (tie-corrected), Kendall τ-b, multiple regression
+      (`try_multiple_regression`, QR) and logistic regression (Newton, `try_logistic_regression`)
+      are done. Kernel density estimation is open.
 - [x] Signal: STFT/spectrogram, Welch PSD, FFT convolution, zero-phase
       `filtfilt`
       Status: Done: `stft` (complex frames, so `|·|²` gives the spectrogram), `welch`

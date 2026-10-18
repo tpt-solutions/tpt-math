@@ -73,6 +73,16 @@ pub enum StatsError {
         /// The rejected degrees-of-freedom value.
         freedom: f64,
     },
+
+    /// The regression design matrix does not have full column rank, so the
+    /// coefficients are not identified.
+    RankDeficientDesign,
+
+    /// An iterative fit did not settle within its iteration budget.
+    DidNotConverge {
+        /// The number of iterations that were run.
+        iterations: usize,
+    },
 }
 
 impl fmt::Display for StatsError {
@@ -110,6 +120,13 @@ impl fmt::Display for StatsError {
                 "{freedom} is not a valid number of degrees of freedom \
                  (expected a finite value > 0)"
             ),
+            StatsError::RankDeficientDesign => write!(
+                f,
+                "the design matrix is rank-deficient; the coefficients are not identified"
+            ),
+            StatsError::DidNotConverge { iterations } => {
+                write!(f, "the fit did not converge within {iterations} iterations")
+            }
         }
     }
 }

@@ -1347,6 +1347,7 @@ name = "tpt-math-stats"
 version = "0.1.0"
 dependencies = [
  "criterion",
+ "tpt-math-linalg-dense",
  "tpt-math-prob-core",
 ]
 

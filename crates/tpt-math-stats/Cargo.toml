@@ -15,6 +15,7 @@ categories = ["mathematics", "science", "algorithms"]
 
 [dependencies]
 tpt-math-prob-core = { workspace = true, features = ["std"] }
+tpt-math-linalg-dense = { workspace = true, features = ["alloc"] }
 
 [features]
 default = []
