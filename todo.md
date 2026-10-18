@@ -1483,8 +1483,8 @@ constant kernel) are checked in debug builds, and in release with the
 - [x] Autodiff-driven optimisers: `minimize_lbfgs_autodiff(|x| …)` takes the
       gradient from `autodiff-rev`, so callers never write one
       Status: Done: `minimize_lbfgs_autodiff` takes the cost written on the reverse-mode tape. It caches the last point, so each iterate is taped once.
-- [ ] ODE solvers generic over `Dual` for forward sensitivity analysis
-      Status: Partial: forward sensitivity analysis is done in `numeric::sensitivity` (`forward_sensitivity`), by integrating the augmented variational system with explicit Jacobians. Solvers are not generic over `Dual`, because `Dual` has no `Float` implementation. Adding one is a separate job.
+- [x] ODE solvers generic over `Dual` for forward sensitivity analysis
+      Status: Done: `autodiff-fwd` implements `Float` for `Dual<f64, N>`, so `dopri5_integrate` and the other fixed-size solvers run on dual numbers and return exact parameter sensitivities (tested against the closed form). `numeric::sensitivity::forward_sensitivity` is the explicit-Jacobian alternative for runtime-sized systems.
 - [ ] Interactive wasm docs playground (the `no_std` crates already build for
       `wasm32`); Python bindings as a later reach
       Status: Not started, and out of scope for this repository. The `no_std` crates build for `wasm32` in CI. A playground or Python bindings are product decisions for a separate project.
