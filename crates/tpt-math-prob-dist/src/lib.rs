@@ -46,6 +46,8 @@ extern crate std;
 /// (the default) for the special functions in `tpt-math-prob-core`.
 #[cfg(feature = "std")]
 pub mod density;
+#[cfg(feature = "multivariate")]
+pub mod multivariate;
 
 // Re-export the core randomness traits/types so consumers can depend on this
 // crate alone. We deliberately re-export `rand_distr` verbatim as well.

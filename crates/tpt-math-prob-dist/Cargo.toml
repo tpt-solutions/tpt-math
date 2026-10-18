@@ -19,11 +19,16 @@ categories = ["mathematics", "science", "algorithms"]
 rand = { workspace = true }
 rand_distr = { workspace = true }
 tpt-math-prob-core = { workspace = true, default-features = false }
+# Only for the multivariate normal, which needs a Cholesky factor and a heap.
+tpt-math-linalg-dense = { workspace = true, optional = true, default-features = false, features = ["alloc"] }
 
 [features]
 default = ["std"]
 std = ["alloc", "rand/std", "rand_distr/std", "tpt-math-prob-core/std"]
 alloc = ["rand/alloc", "rand_distr/alloc", "tpt-math-prob-core/alloc"]
+# Multivariate normal distribution (Cholesky-based density).
+# Needs `std` for the logarithm and exponential, as the density functions do.
+multivariate = ["std", "alloc", "dep:tpt-math-linalg-dense"]
 
 
 [lints]

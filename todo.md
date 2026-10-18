@@ -1408,10 +1408,12 @@ constant kernel) are checked in debug builds, and in release with the
 - [ ] Interpolation: N-D `RbfInterpolator` and `Kriging` (they are 1-D only),
       RBF polynomial tail (thin-plate), natural cubic spline, bilinear/trilinear
       grid interpolation
-- [ ] Distributions: binomial, negative binomial, lognormal, Weibull,
+- [x] Distributions: binomial, negative binomial, lognormal, Weibull,
       multivariate normal
-      Status: Partial: binomial, negative binomial (pmf, cdf, moments), lognormal and Weibull (pdf, cdf,
-      quantile, moments) are done. Multivariate normal is open.
+      Status: Done. Binomial, negative binomial (pmf, cdf, moments) and lognormal and Weibull
+      (pdf, cdf, quantile, moments) are in `density`. The multivariate normal is in
+      `prob_dist::multivariate` behind the `multivariate` feature, which needs `std`. It uses the
+      dense Cholesky factor, and its tests check a bivariate closed form and the 1-D case.
 - [ ] Stats: multiple and logistic regression, Spearman and Kendall
       correlation, kernel density estimation
       Status: Partial: Spearman (tie-corrected), Kendall τ-b, multiple regression
