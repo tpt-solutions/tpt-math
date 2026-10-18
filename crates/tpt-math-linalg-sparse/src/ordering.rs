@@ -169,9 +169,10 @@ pub fn reverse_cuthill_mckee(a: &CsrMatrix<f64>) -> Result<Vec<usize>, SparseErr
 /// # Examples
 ///
 /// ```
-/// use tpt_math_linalg_sparse::{minimum_degree_ordering, CooMatrix};
+/// use tpt_math_linalg_sparse::{minimum_degree_ordering, CooMatrix, FillOrdering,
+///     ReorderedCholesky, SparseCholesky};
 ///
-/// // An arrow matrix: the hub (node 0) should be eliminated last.
+/// // An arrow matrix: eliminating the hub (node 0) first fills the whole factor.
 /// let n = 5;
 /// let mut coo = CooMatrix::<f64>::new(n, n);
 /// for i in 0..n {
@@ -179,8 +180,12 @@ pub fn reverse_cuthill_mckee(a: &CsrMatrix<f64>) -> Result<Vec<usize>, SparseErr
 ///     coo.push(0, i, 1.0);
 ///     coo.push(i, 0, 1.0);
 /// }
-/// let perm = minimum_degree_ordering(&coo.to_csr()).unwrap();
-/// assert_eq!(*perm.last().unwrap(), 0);
+/// let a = coo.to_csr();
+/// let perm = minimum_degree_ordering(&a).unwrap();
+/// assert_ne!(perm[0], 0, "the hub is not eliminated first");
+/// let md = ReorderedCholesky::factor_with(&a, FillOrdering::MinimumDegree).unwrap().nnz();
+/// let natural = SparseCholesky::factor(&a).unwrap().nnz();
+/// assert!(md < natural, "minimum degree {md}, natural {natural}");
 /// ```
 pub fn minimum_degree_ordering(a: &CsrMatrix<f64>) -> Result<Vec<usize>, SparseError> {
     let n = a.nrows();
