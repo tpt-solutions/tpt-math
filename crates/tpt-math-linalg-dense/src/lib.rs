@@ -3062,12 +3062,6 @@ mod simd_dense_solve_tests {
                 (true, false) => 1.0,
                 _ => 0.0,
             });
-                if i == n - 1 && j == n - 1 {
-                    last
-                } else {
-                    a[(i, j)]
-                }
-            });
             let scale = 1.0;
             let simd = partial_pivot_lu_with(&a, DEFAULT_PIVOT_RELATIVE * scale);
             let scalar = scalar_lu(&a, DEFAULT_PIVOT_RELATIVE * scale);
