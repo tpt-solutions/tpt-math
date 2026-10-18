@@ -50,8 +50,8 @@ extern crate alloc;
 mod operator;
 #[cfg(feature = "alloc")]
 pub use operator::{
-    conjugate_gradient_op, lanczos, matrix_free, LanczosEigenpairs, LinearOperator, MatrixFree,
-    Which,
+    arnoldi, conjugate_gradient_op, lanczos, matrix_free, ArnoldiRitz, LanczosEigenpairs,
+    LinearOperator, MatrixFree, Which,
 };
 #[cfg(feature = "alloc")]
 mod ordering;

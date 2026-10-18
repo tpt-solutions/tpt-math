@@ -7,6 +7,7 @@
 //! [`CsrMatrix`] implements the trait, so the same code works for stored
 //! matrices.
 
+use alloc::vec;
 use alloc::vec::Vec;
 
 use tpt_math_linalg_dense::{DMatrix, DVector};
@@ -444,5 +445,192 @@ mod tests {
         assert!(conjugate_gradient_op(&op, &short, None, 1e-8, 10).is_err());
         let b = DVector::from_fn(3, |_| 1.0);
         assert!(conjugate_gradient_op(&op, &b, Some(short), 1e-8, 10).is_err());
+    }
+}
+
+/// Approximate eigenvalues of a general operator from an Arnoldi run.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ArnoldiRitz {
+    /// Ritz values sorted by decreasing modulus. Complex values come in
+    /// conjugate pairs.
+    pub values: Vec<tpt_math_linalg_dense::Eigenvalue>,
+    /// Residual estimates `|h_{m+1,m}·y_m|` for the real Ritz values, `None`
+    /// for complex ones (their eigenvectors are not formed here).
+    pub residuals: Vec<Option<f64>>,
+    /// The Krylov dimension actually built.
+    pub krylov_dim: usize,
+}
+
+/// Approximate the `k` eigenvalues of largest modulus of a general operator by
+/// the Arnoldi method.
+///
+/// Builds an orthonormal Krylov basis of dimension `steps` (capped at the
+/// operator size) with full reorthogonalization, and takes the eigenvalues of
+/// the resulting upper Hessenberg matrix as Ritz values. The start vector is
+/// deterministic.
+///
+/// # Errors
+///
+/// Returns [`SparseError::DimensionMismatch`] if the operator is not square, or if
+/// `k` is zero or larger than the operator size, and
+/// [`SparseError::NotConverged`] if the Hessenberg eigenvalue iteration fails.
+///
+/// # Examples
+///
+/// ```
+/// use tpt_math_linalg_sparse::{arnoldi, matrix_free};
+///
+/// // A non-symmetric upper bidiagonal operator, diagonal 1..=n: the spectrum
+/// // is {1, …, n}, so the largest-modulus Ritz value is n.
+/// let n = 8;
+/// let op = matrix_free(n, |x: &[f64], y: &mut [f64]| {
+///     for i in 0..x.len() {
+///         y[i] = (i as f64 + 1.0) * x[i] + if i + 1 < x.len() { 0.5 * x[i + 1] } else { 0.0 };
+///     }
+/// });
+/// let ritz = arnoldi(&op, 1, n).unwrap();
+/// assert!((ritz.values[0].re - n as f64).abs() < 1e-8);
+/// ```
+pub fn arnoldi<Op>(op: &Op, k: usize, steps: usize) -> Result<ArnoldiRitz, SparseError>
+where
+    Op: LinearOperator<f64>,
+{
+    let n = op.nrows();
+    if op.ncols() != n || k == 0 || k > n {
+        return Err(SparseError::DimensionMismatch);
+    }
+    let m_max = steps.clamp(k, n);
+
+    let mut v = DVector::from_fn(n, |i| 1.0 + i as f64 / n as f64);
+    let norm0 = norm(&v);
+    v = DVector::from_fn(n, |i| v[i] / norm0);
+
+    let mut basis: Vec<DVector<f64>> = Vec::with_capacity(m_max);
+    // Upper Hessenberg matrix, row-major: h[i][j] for i <= j + 1.
+    let mut h = vec![vec![0.0_f64; m_max]; m_max];
+    let mut w = DVector::zeros(n);
+    // Subdiagonal entry h[m][m-1] that couples to the next (unbuilt) vector.
+    let mut last_sub = 0.0_f64;
+    let mut m = m_max;
+
+    for j in 0..m_max {
+        basis.push(v.clone());
+        op.apply(v.as_slice(), w.as_mut_slice())?;
+        let mut r = w.clone();
+        // Modified Gram–Schmidt against the whole basis, twice for stability.
+        // The first pass defines column j of the Hessenberg matrix.
+        for pass in 0..2 {
+            for (i, q) in basis.iter().enumerate() {
+                let c = dot(q, &r);
+                if pass == 0 {
+                    h[i][j] += c;
+                }
+                r = DVector::from_fn(n, |t| r[t] - c * q[t]);
+            }
+        }
+        let beta = norm(&r);
+        if j + 1 == m_max {
+            last_sub = beta;
+            break;
+        }
+        if beta <= 1e-12 * (1.0 + norm(&w)) {
+            // Invariant subspace: the Ritz values are exact eigenvalues.
+            m = j + 1;
+            break;
+        }
+        h[j + 1][j] = beta;
+        v = DVector::from_fn(n, |t| r[t] / beta);
+    }
+
+    let hm = DMatrix::from_fn(m, m, |i, j| h[i][j]);
+    let values_raw = hm
+        .eigenvalues()
+        .map_err(|_| SparseError::NotConverged { iterations: m })?;
+    let mut ranked: Vec<tpt_math_linalg_dense::Eigenvalue> = values_raw;
+    ranked.sort_by(|a, b| b.re.hypot(b.im).total_cmp(&a.re.hypot(a.im)));
+    ranked.truncate(k.min(m));
+
+    let mut residuals = Vec::with_capacity(ranked.len());
+    for e in &ranked {
+        let residual = if !e.is_real() {
+            None
+        } else if last_sub == 0.0 {
+            Some(0.0)
+        } else {
+            hm.eigenvector_for_eigenvalue(e.re)
+                .ok()
+                .map(|(y, _)| (last_sub * y[m - 1]).abs())
+        };
+        residuals.push(residual);
+    }
+    Ok(ArnoldiRitz {
+        values: ranked,
+        residuals,
+        krylov_dim: m,
+    })
+}
+
+#[cfg(test)]
+mod arnoldi_tests {
+    use super::*;
+
+    #[test]
+    fn arnoldi_full_dimension_recovers_a_nonsymmetric_spectrum() {
+        // Upper bidiagonal with diagonal 1..=n: the spectrum is 1..=n.
+        let n = 7;
+        let op = matrix_free(n, |x: &[f64], y: &mut [f64]| {
+            for i in 0..x.len() {
+                y[i] = (i as f64 + 1.0) * x[i] + if i + 1 < x.len() { 0.5 * x[i + 1] } else { 0.0 };
+            }
+        });
+        let ritz = arnoldi(&op, n, n).unwrap();
+        assert_eq!(ritz.values.len(), n);
+        let mut re: Vec<f64> = ritz.values.iter().map(|e| e.re).collect();
+        re.sort_by(|a, b| a.total_cmp(b));
+        for (k, r) in re.iter().enumerate() {
+            assert!((r - (k as f64 + 1.0)).abs() < 1e-8, "{re:?}");
+        }
+        assert!(ritz.values.iter().all(|e| e.im.abs() < 1e-8));
+    }
+
+    #[test]
+    fn arnoldi_finds_the_complex_pair_of_largest_modulus() {
+        // Block diagonal of rotation-scaled 2×2 blocks: moduli 3, 2 and 1, with
+        // the modulus-3 pair 3·e^{±iπ/4} as the dominant one.
+        let scale = [3.0, 2.0, 1.0];
+        let c = core::f64::consts::FRAC_1_SQRT_2;
+        let op = matrix_free(6, move |x: &[f64], y: &mut [f64]| {
+            for b in 0..3 {
+                let (p, q) = (x[2 * b], x[2 * b + 1]);
+                let s = scale[b];
+                // [[c, −c], [c, c]]·s has eigenvalues s·c·(1 ± i).
+                y[2 * b] = s * c * (p - q);
+                y[2 * b + 1] = s * c * (p + q);
+            }
+        });
+        let ritz = arnoldi(&op, 2, 6).unwrap();
+        let top = &ritz.values[0];
+        assert!((top.re.hypot(top.im) - 3.0).abs() < 1e-8, "{top:?}");
+        assert!((top.re - 3.0 * c).abs() < 1e-8 && (top.im.abs() - 3.0 * c).abs() < 1e-8);
+        assert!(
+            ritz.residuals[0].is_none(),
+            "complex Ritz values carry no residual"
+        );
+    }
+
+    #[test]
+    fn arnoldi_stops_early_when_the_krylov_space_is_invariant() {
+        // The identity: every Krylov space is one-dimensional.
+        let op = matrix_free(4, |x: &[f64], y: &mut [f64]| y.copy_from_slice(x));
+        let ritz = arnoldi(&op, 1, 4).unwrap();
+        assert_eq!(ritz.krylov_dim, 1);
+        assert!((ritz.values[0].re - 1.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn arnoldi_rejects_invalid_requests() {
+        let op = matrix_free(3, |x: &[f64], y: &mut [f64]| y.copy_from_slice(x));
+        assert!(arnoldi(&op, 0, 3).is_err());
+        assert!(arnoldi(&op, 4, 4).is_err());
     }
 }
