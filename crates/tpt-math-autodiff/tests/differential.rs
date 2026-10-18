@@ -11,6 +11,8 @@
 //! * **Linear solves:** exact rational Gauss elimination against the dense
 //!   `f64` solver.
 
+#![cfg(all(feature = "tpt-math-autodiff-fwd", feature = "tpt-math-autodiff-rev"))]
+
 use std::collections::HashMap;
 
 use num_traits::ToPrimitive;

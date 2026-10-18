@@ -760,6 +760,7 @@ mod dopri5_tests {
         assert_eq!(result, Err(OdeError::MaxStepsExceeded));
     }
 
+    #[cfg(feature = "alloc")]
     #[test]
     fn dense_output_matches_the_closed_form_between_steps() {
         let sol = dopri5_dense(
@@ -785,6 +786,7 @@ mod dopri5_tests {
         assert_eq!(sol.eval(-0.1), None);
     }
 
+    #[cfg(feature = "alloc")]
     #[test]
     fn dense_output_works_backwards() {
         let sol = dopri5_dense(
@@ -801,6 +803,7 @@ mod dopri5_tests {
         assert!((mid - 0.5f64.exp()).abs() < 1e-6, "{mid}");
     }
 
+    #[cfg(feature = "alloc")]
     #[test]
     fn event_locates_a_crossing_and_keeps_going_when_not_terminal() {
         // y(t) = (sin t, cos t) solves y0' = y1, y1' = −y0. Its first component
@@ -828,6 +831,7 @@ mod dopri5_tests {
         assert!((run.t_end - 7.0).abs() < 1e-12);
     }
 
+    #[cfg(feature = "alloc")]
     #[test]
     fn terminal_event_stops_the_run() {
         let fall = |_t: f64, s: &[f64; 2]| [s[1], -9.81];
