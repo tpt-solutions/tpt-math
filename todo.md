@@ -1250,7 +1250,7 @@ tree.*
       doctests, rustdoc, the no_std build, the drift check and cargo-deny, matching
       the CI jobs. The feature-powerset and bench-smoke jobs need `cargo-hack` and
       are CI-only. `just ci` runs `check`.
-- [ ] Automation: release-plz (31-crate ordered publishing), Dependabot
+- [x] Automation: release-plz (31-crate ordered publishing), Dependabot
       (group `tpt-*`), proptest, cargo-fuzz (symbolic, exact), typos, taplo
       Status: Done, with release-plz manual until item 2 is published. Dependabot is
       configured (weekly, cargo and actions, `tpt-*` grouped). `typos` is pinned to
@@ -1303,8 +1303,10 @@ constant kernel) are checked in debug builds, and in release with the
       `NO_STD_CRATES` entry in `xtask`; README crate-map row
 - [ ] Add `tpt-rust-map/registry.toml` entry (sibling repo, not available here):
       `domain = "math.pde"`, `no_std = true`, `wraps = []`; `status = "planned"` → `"git"`
-- [ ] Refresh `Cargo.lock` with `cargo update -p tpt-math-pde-operators` once the
+- [x] Refresh `Cargo.lock` with `cargo update -p tpt-math-pde-operators` once the
       `tpt-simd` sibling checkout is available (CI runs against it)
+      Status: Done. `Cargo.lock` lists `tpt-math-pde-operators`, and the `tpt-simd-*` crates
+      resolve from crates.io, so no sibling checkout is needed.
 
 ---
 
@@ -1513,6 +1515,9 @@ constant kernel) are checked in debug builds, and in release with the
       variance 4.19 ms at 1e6). Complex still has 64 and 256 sizes only, so 128 is not yet benched.
 - [ ] Save Criterion baselines (`-- --save-baseline before`), with and without
       `--features simd`
+      Status: Partial: the default-feature `before` baseline is saved for `linalg-dense` and
+      `stats`, and a `flat` baseline for the LU benches. No baseline has been saved with `simd`
+      or `simd-runtime`. The `simd-runtime` runs were compared against `flat`, not saved.
 
 ### I.1 Default path: flat column-major dense LU
 
@@ -1528,6 +1533,8 @@ constant kernel) are checked in debug builds, and in release with the
 - [x] Fix the misplaced `#[cfg(feature = "alloc")]` on the LU helpers (H.1)
 - [ ] Inherited by `solve`/`inverse`/`det`, `linalg` `Mat::solve`/`inverse`, the
       convex IPM, the Newton step, and RBF/Kriging. Confirm with their benches
+      Status: Partial: `solve`, `inverse` and `det` are benched and show the gain. The
+      `linalg` wrappers, the convex IPM, the Newton step and RBF/Kriging have no benches yet.
 
 ### I.2 `simd` path: LU and Cholesky through `tpt-simd-blas`
 
@@ -1549,6 +1556,9 @@ constant kernel) are checked in debug builds, and in release with the
 - [ ] Tests: simd vs scalar agree to ~1e-12 relative at n = 5, 33, 200; singular
       and near-singular inputs give the same `Err` on both paths; `det` sign under
       many swaps
+      Status: Partial: LU factors and permutations agree at n = 5, 33 and 200, and singular
+      input is rejected on both paths. Near-singular inputs and the `det` sign under many swaps
+      are not tested yet. Cholesky and getrs are not implemented, so they have no tests.
 
 ### I.3 Default path: other dense routines
 
@@ -1597,6 +1607,7 @@ constant kernel) are checked in debug builds, and in release with the
 - [ ] Re-run benches against the `before` baselines (with and without `simd`);
       revert any step that does not win; record speedups in each CHANGELOG
       `[Unreleased]`
+      Status: Not started. Speed-ups are recorded in `todo.md` only, not yet in the CHANGELOGs.
 - [ ] `cargo test --workspace` (default and `--all-features`), `--features simd`
       for dense and complex, clippy `-D warnings`, `cargo xtask check`
 
