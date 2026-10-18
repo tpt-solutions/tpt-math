@@ -1261,10 +1261,10 @@ tree.*
       formats the TOML, and CI checks it. `release-plz.toml` opens release PRs with
       publishing off, from a manual workflow, because `cargo package` cannot run
       while the simd path dependency is unpublished.
-- [ ] `[package.metadata.docs.rs]` (`all-features`, `docsrs` cfg) in each
+- [x] `[package.metadata.docs.rs]` (`all-features`, `docsrs` cfg) in each
       crate; feature tables in READMEs; examples for geometry/spatial,
       graph, signal, sparse/complex linalg, `no_std`
-      Status: Partial: the docs.rs table is in all 31 crates. `tpt-math-linalg-dense` uses `features = ["alloc"]` instead of `all-features`, because its optional `simd` feature depends on the out-of-repo `tpt-simd-blas` path. Feature tables are in the READMEs, and examples cover geometry/spatial, graph, signal and sparse/complex, with a `no_std` snippet in the `linalg-fixed` README. The switch to `all-features` for `linalg-dense` waits on item 2.
+      Status: Done: the docs.rs table is in all 31 crates, and `tpt-math-linalg-dense` now uses `all-features`. Its `simd` dependency is on crates.io, so the old path blocker is gone. Feature tables are in the READMEs, and examples cover geometry/spatial, graph, signal and sparse/complex, with a `no_std` snippet in the `linalg-fixed` README.
 - [x] Move hard-coded external dep versions (`num-traits`, `uom`, `rand`,
       `criterion`) into `[workspace.dependencies]`; make `default-features`
       consistent
@@ -1303,6 +1303,7 @@ constant kernel) are checked in debug builds, and in release with the
       `NO_STD_CRATES` entry in `xtask`; README crate-map row
 - [ ] Add `tpt-rust-map/registry.toml` entry (sibling repo, not available here):
       `domain = "math.pde"`, `no_std = true`, `wraps = []`; `status = "planned"` → `"git"`
+      Status: Not done. The `tpt-rust-map` sibling checkout is not in this environment. Add this entry there when it is available.
 - [x] Refresh `Cargo.lock` with `cargo update -p tpt-math-pde-operators` once the
       `tpt-simd` sibling checkout is available (CI runs against it)
       Status: Done. `Cargo.lock` lists `tpt-math-pde-operators`, and the `tpt-simd-*` crates
@@ -1380,8 +1381,10 @@ constant kernel) are checked in debug builds, and in release with the
       are), and `QpSolution`. Do it in the release that already bumps
       `autodiff-rev`, `optimize-convex` and `symbolic` to 0.2.0, so future
       variants (like this release's `Op` change) are not breaking
+      Status: Not done. The enums are not `#[non_exhaustive]` yet. Adding it breaks downstream exhaustive matches, so it goes with the 0.2.0 bumps, which are not decided.
 - [ ] Unify error detail: `SparseError::DimensionMismatch` carries nothing,
       `DenseError::DimensionMismatch` carries a message
+      Status: Not done. Changing `SparseError::DimensionMismatch` to carry a message is a breaking change, so it goes with the same version bumps.
 - [x] One tolerance convention across solvers: dense LU absolute, QR and the
       sparse solvers relative. Document the rule in CONTRIBUTING
 
@@ -1394,22 +1397,28 @@ constant kernel) are checked in debug builds, and in release with the
       Status: Done: features `units-dyn`, `linalg-sparse`, `linalg-complex`, `linalg-fixed`
       and `pde-operators` (all in `full`); a `std` passthrough; and prelude names `Lu`, `Qr`,
       `Fft`, `Dual`, `GradientTape` and `DynQuantity`.
-- [ ] ODE: a stiff solver (BDF or Rosenbrock), event detection and dense output
+- [x] ODE: a stiff solver (BDF or Rosenbrock), event detection and dense output
       in `tpt-math-numeric`
-- [ ] Optimisation: nonlinear least squares (Levenberg–Marquardt, a
+      Status: Done: `ode::dopri5_dense` (dense output), `ode::dopri5_events` (event location by bisection, optional termination) and `stiff::rosenbrock2_integrate`, a second-order L-stable Rosenbrock method (ROS2) with step-doubling error control. The Robertson kinetics benchmark matches the reference at t = 40.
+- [x] Optimisation: nonlinear least squares (Levenberg–Marquardt, a
       `curve_fit`-style helper) and bound constraints (L-BFGS-B or projected)
+      Status: Done: `levenberg_marquardt`, `curve_fit` and box bounds (`LeastSquaresOptions::with_bounds`). The bounds are handled by projection, not by an active-set method such as L-BFGS-B.
 - [ ] Dense linalg: pseudo-inverse / minimum-norm least squares via SVD (`Qr`
       rejects rank-deficient input), a tridiagonal/banded solver, a reusable
       Cholesky solve object, and general real eigenvectors
       Status: Partial: `DMatrix::pseudo_inverse` and `DMatrix::solve_min_norm` (SVD),
-      `Cholesky` (reusable factor with `solve` and `det`) and `solve_tridiagonal` (Thomas,
-      no pivoting) are done. Still open: general banded solvers and real eigenvectors.
+      `Cholesky` (reusable factor with `solve` and `det`), `solve_tridiagonal` (Thomas,
+      no pivoting) and `solve_banded` (banded LU with partial pivoting) are done. The
+      eigenvector for a known real eigenvalue is done by inverse iteration. Still open:
+      the eigenvalues of a general real matrix, so real eigenvectors come only from a given eigenvalue.
 - [ ] Sparse linalg: a Lanczos/Arnoldi eigensolver, a fill-reducing ordering
       (AMD/RCM) for `SparseLu`/`SparseCholesky`, and a matrix-free
       `LinearOperator` trait for the Krylov solvers
-- [ ] Interpolation: N-D `RbfInterpolator` and `Kriging` (they are 1-D only),
+      Status: Partial: the `LinearOperator` trait with matrix-free CG, Lanczos (Ritz pairs with residual estimates) and RCM ordering with a reordered Cholesky are done. Still open: Arnoldi, AMD, and operator forms of BiCGSTAB and GMRES.
+- [x] Interpolation: N-D `RbfInterpolator` and `Kriging` (they are 1-D only),
       RBF polynomial tail (thin-plate), natural cubic spline, bilinear/trilinear
       grid interpolation
+      Status: Done: `RbfInterpolatorNd` (with the thin-plate affine tail), `KrigingNd`, `NaturalCubicSpline` and `MultilinearGrid`.
 - [x] Distributions: binomial, negative binomial, lognormal, Weibull,
       multivariate normal
       Status: Done. Binomial, negative binomial (pmf, cdf, moments) and lognormal and Weibull
@@ -1418,9 +1427,9 @@ constant kernel) are checked in debug builds, and in release with the
       dense Cholesky factor, and its tests check a bivariate closed form and the 1-D case.
 - [ ] Stats: multiple and logistic regression, Spearman and Kendall
       correlation, kernel density estimation
-      Status: Partial: Spearman (tie-corrected), Kendall τ-b, multiple regression
-      (`try_multiple_regression`, QR) and logistic regression (Newton, `try_logistic_regression`)
-      are done. Kernel density estimation is open.
+      Status: Done: Spearman (tie-corrected), Kendall τ-b, multiple regression
+      (`try_multiple_regression`, QR), logistic regression (Newton, `try_logistic_regression`)
+      and Gaussian kernel density estimation (`try_kernel_density`, Silverman bandwidth).
 - [x] Signal: STFT/spectrogram, Welch PSD, FFT convolution, zero-phase
       `filtfilt`
       Status: Done: `stft` (complex frames, so `|·|²` gives the spectrogram), `welch`
@@ -1432,12 +1441,13 @@ constant kernel) are checked in debug builds, and in release with the
       `atan2`), each checked against central differences.
 - [ ] `symbolic`: string parser (`"x^2 + sin(x)"`), compile an expression to a
       closure, LaTeX output
-      Status: Partial: `parse_expr` (infix grammar with positioned errors) and `to_latex`
-      are done. Compiling an expression to a closure is open.
+      Status: Done: `parse_expr` (infix grammar with positioned errors), `to_latex`, and
+      `compile`, which turns an expression into a closure over an ordered variable list.
 - [ ] `graph`: path reconstruction for `dijkstra`; re-export or wrap the
       petgraph algorithms (BFS/DFS, topological sort, MST, components)
-      Status: Partial: `dijkstra_path` returns the route as well as its cost. The
-      petgraph re-exports (BFS/DFS, topological sort, MST, components) are open.
+      Status: Done: `dijkstra_path` returns the route as well as its cost. BFS/DFS,
+      reachability, cycle detection, connected and strongly connected components, and
+      minimum spanning forest wrap `petgraph`. Topological sort was already re-exported.
 
 ### H.4 CI and automation
 
@@ -1465,17 +1475,18 @@ constant kernel) are checked in debug builds, and in release with the
       large-shape gamma and `ln_binomial` bugs
 - [ ] Extend `xtask drift` to check that the facade exposes every library
       crate and that the README crate count matches `cargo metadata`
-      Status: Partial-done: the facade check is in. It walks the `[dependencies]` of every
-      crate from `tpt-math` and fails on any crate it cannot reach, which is checked with an
-      orphan crate. The README crate-count check is not done, so this box is not ticked. Its
-      status is kept in the note and the box is left unticked.
+      Status: Done: the facade check walks the `[dependencies]` of every crate from `tpt-math`
+      and fails on any crate it cannot reach (checked with an orphan crate). The README crate
+      count is compared with `cargo metadata` as well.
 - [ ] Occasional `cargo-mutants` run to measure test strength
+      Status: Not run. `cargo-mutants` is not installed in this environment.
 
 ### H.5 Innovation (pick one or two)
 
 - [ ] Certified linear solves and interval Newton (Krawczyk) for systems,
       building on `exact::roots` and `Interval`, returning guaranteed error
       bounds (for `tpt-formal`)
+      Status: Not started. Section H.5 is optional ("pick one or two"), and none of its items have been started.
 - [ ] Diagnostics from dense solvers: `solve_with_report` with a condition
       estimate, backward error and a warning when `cond·ε` exceeds the
       tolerance, so every solver family returns a `SolveReport`
@@ -1515,9 +1526,9 @@ constant kernel) are checked in debug builds, and in release with the
       variance 4.19 ms at 1e6). Complex still has 64 and 256 sizes only, so 128 is not yet benched.
 - [ ] Save Criterion baselines (`-- --save-baseline before`), with and without
       `--features simd`
-      Status: Partial: the default-feature `before` baseline is saved for `linalg-dense` and
-      `stats`, and a `flat` baseline for the LU benches. No baseline has been saved with `simd`
-      or `simd-runtime`. The `simd-runtime` runs were compared against `flat`, not saved.
+      Status: Done for `linalg-dense`: `scalar` (default features) and `simd_runtime` baselines
+      are saved, and the `simd-runtime` run was compared against `scalar`. The older `before`
+      baseline predates several bench cases, so Criterion cannot compare the new ones against it.
 
 ### I.1 Default path: flat column-major dense LU
 
@@ -1548,17 +1559,20 @@ constant kernel) are checked in debug builds, and in release with the
       column-major getrf, so the result is converted to the row-major layout, and the sequential
       swaps are turned into the permutation. Tests check the factors and permutation against the
       scalar path at n = 5, 33 and 200, and singular input.
-- [ ] Handle the LAPACK swap-sequence pivots: `getrs_f64` for solves, `det` sign
+- [x] Handle the LAPACK swap-sequence pivots: `getrs_f64` for solves, `det` sign
       from `#{i : ipiv[i] != i}`
-- [ ] `inverse` / `Lu::solve_matrix`: one `getrs_f64` call with `nrhs = n`
-- [ ] `cholesky` via `potrf_f64`; zero the strictly upper triangle to match today's
+      Status: Done: `Lu` factors are converted to LAPACK sequential swaps for `getrs_f64`, and `det` keeps the sign from the permutation. A test checks the sign after 65 row swaps.
+- [x] `inverse` / `Lu::solve_matrix`: one `getrs_f64` call with `nrhs = n`
+      Status: Done: `Lu::solve_matrix`, and so `inverse`, makes one `getrs_f64` call with `nrhs = n` above the cutoff.
+- [x] `cholesky` via `potrf_f64`; zero the strictly upper triangle to match today's
       output
+      Status: Done: `DMatrix::cholesky` uses `potrf_f64` above the cutoff. The result has a zero upper triangle, as before.
 - [ ] Tests: simd vs scalar agree to ~1e-12 relative at n = 5, 33, 200; singular
       and near-singular inputs give the same `Err` on both paths; `det` sign under
       many swaps
-      Status: Partial: LU factors and permutations agree at n = 5, 33 and 200, and singular
-      input is rejected on both paths. Near-singular inputs and the `det` sign under many swaps
-      are not tested yet. Cholesky and getrs are not implemented, so they have no tests.
+      Status: Partial: LU factors, permutations, `getrs`-based solves and Cholesky agree with
+      the scalar path at n = 5, 33 and 200, and the `det` sign is tested after 65 row swaps.
+      Singular input is rejected on both paths. Near-singular inputs are not tested yet.
 
 ### I.3 Default path: other dense routines
 
@@ -1567,8 +1581,8 @@ constant kernel) are checked in debug builds, and in release with the
       series with Higham's Padé(13) scaling and squaring; add the non-finite guard
       (H.1 hang). Test against closed forms and the old result
       Status: Partial-done: Padé(13) with the 1-norm scaling is in, and the denominator solve
-      reuses `Lu::solve_matrix`. The non-finite guard is from H.1. Still open: the `mul_matrix_into`
-      buffer reuse, which waits for the matrix kernels. Result at n = 32: 938 µs -> 254 µs (-74%).
+      reuses `Lu::solve_matrix`. The non-finite guard is from H.1. Products now go through `mul_matrix_into`.
+      The buffers are still allocated per product, so buffer reuse is still open. Result at n = 32: 938 µs -> 254 µs (-74%).
       Closed forms (rotation generator at large angles, nilpotent, zero, large-norm diagonal)
       are tested. The old result was not compared directly.
 - [x] `svd`: carry squared column norms between rotations
@@ -1580,16 +1594,19 @@ constant kernel) are checked in debug builds, and in release with the
       operation order
       Status: Partial: `cholesky` is done on flat row-major storage, with each inner sum a
       dot product of contiguous rows (not column-major, to match the LU). At n = 128 it went
-      from 178 µs to 128 µs (-28%); at n = 512 from 11.0 ms to 10.3 ms (-7%). `Qr::new` is open.
+      from 178 µs to 128 µs (-28%); at n = 512 from 11.0 ms to 10.3 ms (-7%). `Qr::new` now works on flat row-major storage too.
 
 ### I.4 `linalg-complex` `simd` feature
 
-- [ ] Add `simd = ["alloc", "dep:tpt-simd-blas"]` (`tpt-simd-blas = "0.1.1"`; needs
+- [x] Add `simd = ["alloc", "dep:tpt-simd-blas"]` (`tpt-simd-blas = "0.1.1"`; needs
       Rust 1.95, noted in Cargo.toml and README)
+      Status: Done: the `simd` and `simd-runtime` features. The LU path dispatches above a cutoff of 64.
 - [ ] For `n >= CUTOFF`: matmul via split re/im planes and `gemm_c64`;
       `solve`/`inverse`/`det` via `getrf_c64`/`getrs_c64`. Public `lu()` unchanged
+      Status: Partial: `lu`, `solve` and `inverse` use `getrf_c64`/`getrs_c64` above the cutoff. Matmul through `gemm_c64`, and `det`, are not done.
 - [ ] CI `--exclude-features simd` handling and the `simd` test commands in
       `PUBLISH_CHECKLIST.md`
+      Status: Open: the CI handling for the `simd` feature, and the simd test commands in `PUBLISH_CHECKLIST.md` (an untracked file), are not done.
 
 ### I.5 Algorithmic wins
 
@@ -1599,23 +1616,31 @@ constant kernel) are checked in debug builds, and in release with the
       Status: Done. Results are bitwise identical to the sort-based reference in
       `selection_tests`. Against the `before` baseline at 1e6: median 26.4 ms -> 4.0 ms
       (-85%), quantile 0.9 26.6 ms -> 3.5 ms (-87%).
-- [ ] Optional `stats` `simd` feature with `tpt-simd-reduce = "0.1.1"` for mean,
+- [x] Optional `stats` `simd` feature with `tpt-simd-reduce = "0.1.1"` for mean,
       variance and covariance. Keep only if I.0 shows a win at large `n`
+      Status: Done as an opt-in `simd` feature. The variance uses `tpt-simd-reduce` and runs about 7× faster at 10⁶ samples (3.9 ms → 0.56 ms). It keeps pairwise sums instead of compensated ones, so it is off by default.
 
 ### I.6 Wrap-up
 
 - [ ] Re-run benches against the `before` baselines (with and without `simd`);
       revert any step that does not win; record speedups in each CHANGELOG
       `[Unreleased]`
-      Status: Not started. Speed-ups are recorded in `todo.md` only, not yet in the CHANGELOGs.
-- [ ] `cargo test --workspace` (default and `--all-features`), `--features simd`
+      Status: Done. The dense benches were re-run against the scalar build and the `simd-runtime`
+      build, and the numbers are in the `linalg-dense` CHANGELOG. No step was reverted: the
+      `simd-runtime` path wins on large LU, Cholesky, inverse and products. Two small regressions
+      are recorded there too: `matrix_exp` at order 32 (about 2.5%, below the SIMD cutoff) and
+      `lu/solve/64` (about 1%). The stats `simd` variance is kept as an opt-in feature.
+- [x] `cargo test --workspace` (default and `--all-features`), `--features simd`
       for dense and complex, clippy `-D warnings`, `cargo xtask check`
+      Status: Done: `cargo test --workspace` passes in both default features (1,216 tests) and `--all-features` (1,250 tests). `cargo clippy --workspace --all-targets --all-features -- -D warnings` and `cargo xtask check` pass.
 
 ### I.7 Deferred (each needs its own design pass)
 
 - [ ] AMD/RCM fill-reducing ordering for `SparseLu`/`SparseCholesky`
+      Status: Not started: AMD is not implemented. RCM is done (see the sparse linalg item in Phase H.3).
 - [ ] `tpt-simd-rng` lane-parallel sampling in `prob-monte-carlo` (changes the
       random streams, so decide on stream compatibility first)
+      Status: Deferred, as the item says: it needs its own design pass first.
 
 ---
 
@@ -1624,7 +1649,7 @@ constant kernel) are checked in debug builds, and in release with the
 > Gaps found by reviewing the work since the Phase H review. Phase I and H.3 recorded
 > their results in `todo.md` only; these items bring the public record up to date.
 
-- [ ] CHANGELOG `[Unreleased]` entries for the new public APIs, one per touched crate:
+- [x] CHANGELOG `[Unreleased]` entries for the new public APIs, one per touched crate:
       `tpt-math-linalg-dense` (`Cholesky`, `solve_tridiagonal`, `pseudo_inverse`,
       `solve_min_norm`, `Lu::solve_matrix`, `NoConvergence`, the Padé `matrix_exp`, the
       flat LU, the `simd-runtime` LU dispatch); `tpt-math-linalg-sparse` (length check on
@@ -1641,12 +1666,14 @@ constant kernel) are checked in debug builds, and in release with the
       accepts base-unit expressions); `tpt-math-autodiff-rev` (`tanh`, `sinh`, `cosh`,
       `atan`, `atan2`); `tpt-math-autodiff` (`derivatives::jacobian`, `hessian`);
       `tpt-math` (new area features and prelude names); `xtask` is not published.
+      Status: Done: the `[Unreleased]` sections of 17 crates now list the new APIs, and breaking changes are marked `**Breaking:**`.
 - [ ] Verify the first GitHub Actions run of `ci.yml` after the changes in `b362e15`:
       the Windows and macOS legs of `test` (including `--all-features`, which pulls in
       the simd dependencies), the `msrv` job on 1.85, `each-feature`, `feature-powerset`
       with the corrected exclude list, `bench-smoke` over the whole workspace, and
       `semver-checks` on push against crates.io. Fix whatever fails, and record here what
       passed.
+      Status: Pending: this needs the push to `master` and the CI run. The result is recorded below once it is in.
 - [ ] Record the breaking changes and decide the version bumps before publishing:
       `StatsError` gained `RankDeficientDesign` and `DidNotConverge`, and it is not
       `#[non_exhaustive]`; `DenseError` gained `NoConvergence`; `tpt-math-linalg-dense`
@@ -1656,3 +1683,4 @@ constant kernel) are checked in debug builds, and in release with the
       with its crate's bump, and the list is checked against `cargo semver-checks` once a
       baseline exists. Additive changes, such as `DynQuantity::from_str` accepting base-unit
       expressions, go in the CHANGELOG only.
+      Status: Partly done: each breaking change is marked in its crate's CHANGELOG. The version bumps are not decided, and no crate has been bumped.
