@@ -54,6 +54,10 @@ use alloc::vec::Vec;
 use alloc::{format, string::String, vec};
 
 #[cfg(feature = "alloc")]
+mod banded;
+#[cfg(feature = "alloc")]
+pub use banded::solve_banded;
+#[cfg(feature = "alloc")]
 mod factor;
 #[cfg(feature = "alloc")]
 pub use factor::{solve_tridiagonal, Cholesky};
@@ -2309,6 +2313,89 @@ mod decomposition_tests {
             DMatrix::zeros(2, 3).matrix_exp(),
             Err(DenseError::DimensionMismatch { .. })
         ));
+    }
+}
+
+#[cfg(feature = "alloc")]
+impl DMatrix<f64> {
+    /// An eigenvector of a square matrix for a given real eigenvalue `lambda`,
+    /// by inverse iteration, returned with its residual.
+    ///
+    /// The vector is found by repeatedly solving `(A − σI) y = x` with a shift
+    /// `σ = λ + δ` just off the eigenvalue, so the solves are nearly singular and
+    /// the iterates converge to the eigenvector. Returns `(v, r)` with `‖v‖ = 1`
+    /// and `r = ‖A v − λ v‖`.
+    ///
+    /// This is for a *known* eigenvalue, for example one returned by another
+    /// routine or read from a model. The matrix does not have to be symmetric.
+    /// A wrong `lambda` gives a large residual, which is how to detect it. The
+    /// crate does not yet compute the eigenvalues of a general real matrix.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`DenseError::DimensionMismatch`] if the matrix is not square, and
+    /// [`DenseError::NoConvergence`] if the residual is still above `1e-8·‖A‖` after
+    /// the iteration budget. That usually means `lambda` is not an eigenvalue.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use tpt_math_linalg_dense::DMatrix;
+    ///
+    /// // A non-symmetric matrix with eigenvalues 1 and 3.
+    /// let a = DMatrix::from_row_slice(2, 2, &[2.0, 1.0, 1.0, 2.0]);
+    /// let (v, r) = a.eigenvector_for_eigenvalue(3.0).unwrap();
+    /// assert!(r < 1e-9);
+    /// assert!((v[0] - v[1]).abs() < 1e-9); // the eigenvector for 3 is (1, 1)/√2
+    /// ```
+    pub fn eigenvector_for_eigenvalue(
+        &self,
+        lambda: f64,
+    ) -> Result<(DVector<f64>, f64), DenseError> {
+        let n = self.nrows();
+        if self.ncols() != n {
+            return Err(DenseError::DimensionMismatch {
+                what: format!(
+                    "eigenvector_for_eigenvalue needs a square matrix, got {n}x{}",
+                    self.ncols()
+                ),
+            });
+        }
+        let scale = self.iter().fold(0.0_f64, |m, v| m.max(v.abs())).max(1.0);
+        // Shift just off the eigenvalue: singular enough to amplify the
+        // eigenvector, but still factorable.
+        let shift = lambda + 1e-9 * scale.max(lambda.abs());
+        let shifted =
+            DMatrix::from_fn(n, n, |i, j| self[(i, j)] - if i == j { shift } else { 0.0 });
+
+        let mut x = DVector::from_fn(n, |i| 1.0 / ((i + 1) as f64).sqrt());
+        let mut residual = f64::INFINITY;
+        for _ in 0..20 {
+            let y = shifted.solve(&x)?;
+            let norm = y.iter().map(|v| v * v).sum::<f64>().sqrt();
+            if !norm.is_finite() || norm == 0.0 {
+                return Err(DenseError::NoConvergence {
+                    what: "eigenvector_for_eigenvalue",
+                });
+            }
+            x = DVector::from_fn(n, |i| y[i] / norm);
+            // Residual of A x = λ x.
+            let ax = DVector::from_fn(n, |i| (0..n).map(|j| self[(i, j)] * x[j]).sum::<f64>());
+            residual = (0..n)
+                .map(|i| (ax[i] - lambda * x[i]).powi(2))
+                .sum::<f64>()
+                .sqrt();
+            if residual <= 1e-12 * scale {
+                break;
+            }
+        }
+        if residual <= 1e-8 * scale {
+            Ok((x, residual))
+        } else {
+            Err(DenseError::NoConvergence {
+                what: "eigenvector_for_eigenvalue",
+            })
+        }
     }
 }
 
