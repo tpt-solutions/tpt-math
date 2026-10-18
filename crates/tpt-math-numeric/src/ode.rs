@@ -867,6 +867,17 @@ mod tests {
         assert!((y[0] - (-1.0f64).exp()).abs() < 1e-9);
     }
 
+    /// Non-autonomous problems: the time argument must reach the right-hand side.
+    /// y' = cos t has the solution y = sin t from y(0) = 0.
+    #[test]
+    fn time_dependent_right_hand_side_is_integrated_correctly() {
+        let f = |t: f64, _y: &[f64; 1]| [t.cos()];
+        let y = rk4_integrate(f, 0.0, 2.0, [0.0], 400);
+        assert!((y[0] - 2.0f64.sin()).abs() < 1e-9, "rk4 {}", y[0]);
+        let y = dopri5_integrate(f, 0.0, 2.0, [0.0], 1e-11, 1e-13, 100_000).unwrap();
+        assert!((y[0] - 2.0f64.sin()).abs() < 1e-9, "dopri5 {}", y[0]);
+    }
+
     #[test]
     fn error_shrinks_like_h_to_the_fourth() {
         let exact = (-1.0f64).exp();
