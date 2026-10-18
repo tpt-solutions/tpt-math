@@ -63,7 +63,10 @@
 #![forbid(unsafe_code)]
 #![warn(missing_docs, missing_debug_implementations)]
 
+pub mod autodiff_opt;
 pub mod least_squares;
+
+pub use autodiff_opt::minimize_lbfgs_autodiff;
 pub mod linear_program;
 
 pub use least_squares::{
