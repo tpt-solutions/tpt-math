@@ -50,8 +50,8 @@ extern crate alloc;
 mod operator;
 #[cfg(feature = "alloc")]
 pub use operator::{
-    arnoldi, conjugate_gradient_op, lanczos, matrix_free, ArnoldiRitz, LanczosEigenpairs,
-    LinearOperator, MatrixFree, Which,
+    arnoldi, bicgstab_op, conjugate_gradient_op, gmres_op, lanczos, matrix_free, ArnoldiRitz,
+    LanczosEigenpairs, LinearOperator, MatrixFree, Which,
 };
 #[cfg(feature = "alloc")]
 mod ordering;
@@ -976,8 +976,28 @@ pub fn bicgstab_with_report<T: Scalar + Copy + 'static>(
         }
     }
     let n = b.len();
+    bicgstab_core(n, |p, out| a.matvec_into(p, out), b, x0, tol, max_iter)
+}
+
+/// The scalar BiCGSTAB loop, generic over how `A·p` is applied. `apply(p, out)`
+/// must write `A·p` into `out`. `b` must have length `n`.
+#[cfg(feature = "alloc")]
+pub(crate) fn bicgstab_core<T, A>(
+    n: usize,
+    mut apply: A,
+    b: &DVector<T>,
+    x0: Option<DVector<T>>,
+    tol: T,
+    max_iter: usize,
+) -> Result<(DVector<T>, SolveReport<T>), SparseError>
+where
+    T: Scalar + Copy + 'static,
+    A: FnMut(&[T], &mut [T]) -> Result<(), SparseError>,
+{
     let mut x = x0.unwrap_or_else(|| DVector::zeros(n));
-    let mut r = b.clone() - a.matvec(&x)?;
+    let mut ax = DVector::zeros(n);
+    apply(x.as_slice(), ax.as_mut_slice())?;
+    let mut r = b.clone() - ax;
     // Relative tolerance: stop when ‖r‖ ≤ tol·‖b‖ (absolute tol if b = 0).
     let b_norm = b.norm();
     let target = if b_norm > T::zero() {
@@ -1012,7 +1032,7 @@ pub fn bicgstab_with_report<T: Scalar + Copy + 'static>(
         {
             *pi = ri + beta * (*pi - omega * vi);
         }
-        a.matvec_into(p.as_slice(), v.as_mut_slice())?;
+        apply(p.as_slice(), v.as_mut_slice())?;
         let r0_v = r0.dot(&v);
         if r0_v == T::zero() || !r0_v.is_finite() {
             return Ok(report(x, SolveStatus::Breakdown, it, r.norm()));
@@ -1026,7 +1046,7 @@ pub fn bicgstab_with_report<T: Scalar + Copy + 'static>(
             axpy_slice(x.as_mut_slice(), alpha, p.as_slice());
             return Ok(report(x, SolveStatus::Converged, it + 1, s.norm()));
         }
-        a.matvec_into(s.as_slice(), t.as_mut_slice())?;
+        apply(s.as_slice(), t.as_mut_slice())?;
         let t_sq = t.dot(&t);
         if t_sq == T::zero() {
             return Ok(report(x, SolveStatus::Breakdown, it, r.norm()));
@@ -1197,7 +1217,37 @@ where
     if a.nrows() != a.ncols() || b.len() != a.nrows() {
         return Err(SparseError::DimensionMismatch);
     }
-    let n = b.len();
+    gmres_core(
+        b.len(),
+        |p, out| a.matvec_into(p, out),
+        b,
+        x0,
+        tol,
+        restart,
+        max_iter,
+        precond,
+    )
+}
+
+/// The restarted GMRES loop, generic over how `A·p` is applied. `apply(p, out)`
+/// must write `A·p` into `out`. `b` must have length `n`.
+#[cfg(feature = "alloc")]
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn gmres_core<T, P, A>(
+    n: usize,
+    mut apply: A,
+    b: &DVector<T>,
+    x0: Option<DVector<T>>,
+    tol: T,
+    restart: usize,
+    max_iter: usize,
+    precond: P,
+) -> Result<(DVector<T>, SolveReport<T>), SparseError>
+where
+    T: Scalar + Copy + 'static,
+    P: Fn(&[T]) -> Result<Vec<T>, SparseError>,
+    A: FnMut(&[T], &mut [T]) -> Result<(), SparseError>,
+{
     let m = restart.max(1);
     let mut x: Vec<T> = match x0 {
         Some(v) if v.len() == n => v.as_slice().to_vec(),
@@ -1215,7 +1265,7 @@ where
     let mut iterations = 0usize;
     let mut ax = vec![T::zero(); n];
     loop {
-        a.matvec_into(&x, &mut ax)?;
+        apply(&x, &mut ax)?;
         let r: Vec<T> = (0..n).map(|i| b_slice[i] - ax[i]).collect();
         let beta = slice_norm(&r);
         if beta <= target {
@@ -1252,7 +1302,7 @@ where
             iterations += 1;
             let z = precond(&basis[k])?;
             let mut w = vec![T::zero(); n];
-            a.matvec_into(&z, &mut w)?;
+            apply(&z, &mut w)?;
             let mut col = vec![T::zero(); k + 2];
             for i in 0..=k {
                 let h_ik = slice_dot(&w, &basis[i]);

@@ -153,6 +153,73 @@ where
     cg_core(n, |p, ap| op.apply(p, ap), b, x0, tol, max_iter)
 }
 
+/// BiCGSTAB for a general square operator.
+///
+/// The same method as [`bicgstab_with_report`](crate::bicgstab_with_report),
+/// with `A` given as a [`LinearOperator`].
+///
+/// # Errors
+///
+/// Returns [`SparseError::DimensionMismatch`] if the operator is not square, if
+/// `b` does not match it, or if `x0` has the wrong length.
+pub fn bicgstab_op<T, Op>(
+    op: &Op,
+    b: &DVector<T>,
+    x0: Option<DVector<T>>,
+    tol: T,
+    max_iter: usize,
+) -> Result<(DVector<T>, SolveReport<T>), SparseError>
+where
+    T: Scalar + Copy + 'static,
+    Op: LinearOperator<T>,
+{
+    let n = op.nrows();
+    if op.ncols() != n || b.len() != n || x0.as_ref().is_some_and(|v| v.len() != n) {
+        return Err(SparseError::DimensionMismatch);
+    }
+    crate::bicgstab_core(n, |p, out| op.apply(p, out), b, x0, tol, max_iter)
+}
+
+/// Restarted, right-preconditioned GMRES for a general square operator.
+///
+/// The same method as [`gmres_right_preconditioned_with_report`](crate::gmres_right_preconditioned_with_report),
+/// with `A` given as a [`LinearOperator`].
+///
+/// # Errors
+///
+/// Returns [`SparseError::DimensionMismatch`] for incompatible dimensions, and
+/// propagates any error from `precond`.
+#[allow(clippy::too_many_arguments)]
+pub fn gmres_op<T, Op, P>(
+    op: &Op,
+    b: &DVector<T>,
+    x0: Option<DVector<T>>,
+    tol: T,
+    restart: usize,
+    max_iter: usize,
+    precond: P,
+) -> Result<(DVector<T>, SolveReport<T>), SparseError>
+where
+    T: Scalar + Copy + 'static,
+    Op: LinearOperator<T>,
+    P: Fn(&[T]) -> Result<Vec<T>, SparseError>,
+{
+    let n = op.nrows();
+    if op.ncols() != n || b.len() != n {
+        return Err(SparseError::DimensionMismatch);
+    }
+    crate::gmres_core(
+        n,
+        |p, out| op.apply(p, out),
+        b,
+        x0,
+        tol,
+        restart,
+        max_iter,
+        precond,
+    )
+}
+
 /// Which end of the spectrum [`lanczos`] should return.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Which {
@@ -573,6 +640,7 @@ where
 #[cfg(test)]
 mod arnoldi_tests {
     use super::*;
+    use crate::CooMatrix;
 
     #[test]
     fn arnoldi_full_dimension_recovers_a_nonsymmetric_spectrum() {
@@ -632,5 +700,43 @@ mod arnoldi_tests {
         let op = matrix_free(3, |x: &[f64], y: &mut [f64]| y.copy_from_slice(x));
         assert!(arnoldi(&op, 0, 3).is_err());
         assert!(arnoldi(&op, 4, 4).is_err());
+    }
+
+    #[test]
+    fn operator_bicgstab_and_gmres_match_their_csr_forms() {
+        // Non-symmetric, diagonally dominant tridiagonal system.
+        let n = 10;
+        let mut coo = CooMatrix::new(n, n);
+        for i in 0..n {
+            coo.push(i, i, 4.0);
+            if i + 1 < n {
+                coo.push(i, i + 1, -1.5);
+                coo.push(i + 1, i, -0.5);
+            }
+        }
+        let csr = coo.to_csr();
+        let b = DVector::from_fn(n, |i| 1.0 + i as f64);
+        let (x_op, rep_op) = bicgstab_op(&csr, &b, None, 1e-12, 200).unwrap();
+        let (x_csr, _) = crate::bicgstab_with_report(&csr, &b, None, 1e-12, 200).unwrap();
+        assert!(rep_op.status.is_converged());
+        for i in 0..n {
+            assert!((x_op[i] - x_csr[i]).abs() < 1e-9, "bicgstab {i}");
+        }
+        let identity = |v: &[f64]| Ok(v.to_vec());
+        let (x_g, rep_g) = gmres_op(&csr, &b, None, 1e-12, 10, 200, identity).unwrap();
+        assert!(rep_g.status.is_converged());
+        let ax = csr.matvec(&x_g).unwrap();
+        for i in 0..n {
+            assert!((ax[i] - b[i]).abs() < 1e-9, "gmres row {i}");
+        }
+    }
+
+    #[test]
+    fn operator_forms_reject_bad_dimensions() {
+        let op = matrix_free(3, |x: &[f64], y: &mut [f64]| y.copy_from_slice(x));
+        let b = DVector::from_fn(2, |_| 1.0);
+        assert!(bicgstab_op(&op, &b, None, 1e-8, 10).is_err());
+        let identity = |v: &[f64]| Ok(v.to_vec());
+        assert!(gmres_op(&op, &b, None, 1e-8, 3, 10, identity).is_err());
     }
 }
