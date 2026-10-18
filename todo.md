@@ -1616,3 +1616,42 @@ constant kernel) are checked in debug builds, and in release with the
 - [ ] AMD/RCM fill-reducing ordering for `SparseLu`/`SparseCholesky`
 - [ ] `tpt-simd-rng` lane-parallel sampling in `prob-monte-carlo` (changes the
       random streams, so decide on stream compatibility first)
+
+---
+
+## Phase J — Changelogs, CI verification, breaking changes
+
+> Gaps found by reviewing the work since the Phase H review. Phase I and H.3 recorded
+> their results in `todo.md` only; these items bring the public record up to date.
+
+- [ ] CHANGELOG `[Unreleased]` entries for the new public APIs, one per touched crate:
+      `tpt-math-linalg-dense` (`Cholesky`, `solve_tridiagonal`, `pseudo_inverse`,
+      `solve_min_norm`, `Lu::solve_matrix`, `NoConvergence`, the Padé `matrix_exp`, the
+      flat LU, the `simd-runtime` LU dispatch); `tpt-math-linalg-sparse` (length check on
+      `x0`, the `to_csr`/`to_csc`/`transpose` alloc gating); `tpt-math-linalg`,
+      `tpt-math-linalg-complex`, `tpt-math-interpolate` (alloc-gated APIs, `std` enables
+      `alloc`); `tpt-math-stats` (`try_multiple_regression`, `try_logistic_regression`,
+      `try_spearman_correlation`, `try_kendall_tau`, `RankDeficientDesign`,
+      `DidNotConverge`, selection-based median and quantile); `tpt-math-prob-dist`
+      (lognormal, Weibull, binomial, negative binomial, `multivariate` feature);
+      `tpt-math-prob-core` (`ln_binomial` fix, large-shape `gamma_p`/`gamma_q`);
+      `tpt-math-graph` (`dijkstra_path`); `tpt-math-signal-fft` (`stft`, `welch`,
+      `fft_convolve`); `tpt-math-signal-filter` (`zero_phase_filter`);
+      `tpt-math-symbolic` (`parse_expr`, `to_latex`); `tpt-math-units-dyn` (`FromStr`
+      accepts base-unit expressions); `tpt-math-autodiff-rev` (`tanh`, `sinh`, `cosh`,
+      `atan`, `atan2`); `tpt-math-autodiff` (`derivatives::jacobian`, `hessian`);
+      `tpt-math` (new area features and prelude names); `xtask` is not published.
+- [ ] Verify the first GitHub Actions run of `ci.yml` after the changes in `b362e15`:
+      the Windows and macOS legs of `test` (including `--all-features`, which pulls in
+      the simd dependencies), the `msrv` job on 1.85, `each-feature`, `feature-powerset`
+      with the corrected exclude list, `bench-smoke` over the whole workspace, and
+      `semver-checks` on push against crates.io. Fix whatever fails, and record here what
+      passed.
+- [ ] Record the breaking changes and decide the version bumps before publishing:
+      `StatsError` gained `RankDeficientDesign` and `DidNotConverge`, and it is not
+      `#[non_exhaustive]`; `DenseError` gained `NoConvergence`; `tpt-math-linalg-dense`
+      gained `Lu`'s flat storage (private, so not breaking); `tpt-math-linalg` and
+      `tpt-math-linalg-complex` now need `alloc` for their `zeros`, `transpose`, `solve`
+      and `inverse` APIs (default builds keep them via `std`); `DynQuantity::from_str`
+      now accepts strings it used to reject. Each goes in the CHANGELOG with its crate's
+      bump, and the list is checked against `cargo semver-checks` once a baseline exists.
