@@ -49,6 +49,15 @@
 extern crate alloc;
 
 #[cfg(feature = "alloc")]
+mod nd;
+#[cfg(feature = "alloc")]
+pub use nd::{KrigingNd, RbfInterpolatorNd};
+#[cfg(feature = "alloc")]
+mod spline;
+#[cfg(feature = "alloc")]
+pub use spline::{MultilinearGrid, NaturalCubicSpline};
+
+#[cfg(feature = "alloc")]
 use alloc::{format, vec, vec::Vec};
 #[cfg(feature = "alloc")]
 use tpt_math_linalg_dense::{DMatrix, DVector, DenseError, Lu};
