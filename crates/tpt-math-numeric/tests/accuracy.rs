@@ -249,3 +249,49 @@ fn solve_report_and_status_display_their_text() {
     assert!(report.status.is_converged());
     assert_eq!(report.iterations, 4);
 }
+
+#[test]
+fn brent_uses_interpolation_so_it_needs_far_fewer_evaluations_than_bisection() {
+    // x³ − 2x − 5 has its root at 2.0945514815…; both methods must find it, but
+    // Brent's interpolation should take a handful of evaluations, bisection
+    // about forty for this tolerance.
+    let root = 2.094_551_481_542_326_6;
+    let count = std::cell::Cell::new(0usize);
+    let f = |x: f64| {
+        count.set(count.get() + 1);
+        x * x * x - 2.0 * x - 5.0
+    };
+    let r = brent(f, 2.0, 3.0, 1e-13, 200).unwrap();
+    assert!((r - root).abs() < 1e-11, "{r}");
+    let brent_evals = count.get();
+    count.set(0);
+    let b = bisect(f, 2.0, 3.0, 1e-13, 200).unwrap();
+    assert!((b - root).abs() < 1e-11, "{b}");
+    let bisect_evals = count.get();
+    assert!(brent_evals < 15, "brent used {brent_evals} evaluations");
+    assert!(
+        brent_evals * 3 < bisect_evals,
+        "brent {brent_evals} vs bisect {bisect_evals}"
+    );
+}
+
+#[test]
+fn brent_returns_an_endpoint_root_immediately() {
+    let calls = std::cell::Cell::new(0usize);
+    let r = brent(
+        |x: f64| {
+            calls.set(calls.get() + 1);
+            x
+        },
+        0.0,
+        1.0,
+        1e-12,
+        50,
+    );
+    assert_eq!(r, Ok(0.0));
+    assert!(
+        calls.get() <= 2,
+        "{} evaluations for an endpoint root",
+        calls.get()
+    );
+}
