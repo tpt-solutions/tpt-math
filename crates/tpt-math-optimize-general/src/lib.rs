@@ -63,7 +63,12 @@
 #![forbid(unsafe_code)]
 #![warn(missing_docs, missing_debug_implementations)]
 
+pub mod least_squares;
 pub mod linear_program;
+
+pub use least_squares::{
+    curve_fit, levenberg_marquardt, LeastSquaresOptions, LeastSquaresSolution, LsTermination,
+};
 
 pub use tpt_math_linalg;
 pub use tpt_math_linalg::tpt_math_linalg_dense;
