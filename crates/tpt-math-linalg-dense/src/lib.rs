@@ -1763,8 +1763,11 @@ impl DMatrix<f64> {
         ];
         // U = A [A⁶(b₁₃A⁶ + b₁₁A⁴ + b₉A²) + b₇A⁶ + b₅A⁴ + b₃A² + b₁I]
         let inner_u = lin(&[(B[13], &a6), (B[11], &a4), (B[9], &a2)]);
+        // One scratch buffer serves every intermediate product, not a new matrix each time.
+        let mut scratch = DMatrix::zeros(n, n);
+        a6.mul_matrix_into(&inner_u, &mut scratch);
         let u_poly = lin(&[
-            (1.0, &matmul_square(&a6, &inner_u)),
+            (1.0, &scratch),
             (B[7], &a6),
             (B[5], &a4),
             (B[3], &a2),
@@ -1773,8 +1776,9 @@ impl DMatrix<f64> {
         let u = matmul_square(&a, &u_poly);
         // V = A⁶(b₁₂A⁶ + b₁₀A⁴ + b₈A²) + b₆A⁶ + b₄A⁴ + b₂A² + b₀I
         let inner_v = lin(&[(B[12], &a6), (B[10], &a4), (B[8], &a2)]);
+        a6.mul_matrix_into(&inner_v, &mut scratch);
         let v = lin(&[
-            (1.0, &matmul_square(&a6, &inner_v)),
+            (1.0, &scratch),
             (B[6], &a6),
             (B[4], &a4),
             (B[2], &a2),
@@ -1785,7 +1789,8 @@ impl DMatrix<f64> {
         let q = lin(&[(1.0, &v), (-1.0, &u)]);
         let mut result = Lu::new(&q)?.solve_matrix(&p)?;
         for _ in 0..squarings {
-            result = matmul_square(&result, &result);
+            result.mul_matrix_into(&result, &mut scratch);
+            core::mem::swap(&mut result, &mut scratch);
         }
         Ok(result)
     }

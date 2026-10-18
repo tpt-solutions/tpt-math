@@ -14,6 +14,7 @@ use alloc::vec;
 use alloc::vec::Vec;
 
 use crate::ode::OdeError;
+use crate::Float;
 
 /// Dormand–Prince 5(4) coefficients.
 const C: [f64; 7] = [0.0, 1.0 / 5.0, 3.0 / 10.0, 4.0 / 5.0, 8.0 / 9.0, 1.0, 1.0];
@@ -145,7 +146,7 @@ where
         let error = if n == 0 {
             0.0
         } else {
-            (sum_sq / n as f64).sqrt()
+            Float::sqrt(sum_sq / n as f64)
         };
         let accepted = error <= 1.0;
         if accepted {
@@ -155,7 +156,7 @@ where
         let factor = if error == 0.0 {
             5.0
         } else {
-            (0.9 * error.powf(-0.2)).clamp(0.2, 5.0)
+            Float::min(Float::max(0.9 * Float::powf(error, -0.2), 0.2), 5.0)
         };
         let factor = if accepted { factor } else { factor.min(1.0) };
         h = step * factor;
