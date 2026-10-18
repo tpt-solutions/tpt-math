@@ -1146,8 +1146,8 @@ impl Lu {
 pub struct Qr {
     m: usize,
     n: usize,
-    /// Upper-triangular `R`, row-major `n × n`.
-    r: Vec<Vec<f64>>,
+    /// Upper-triangular `R`, flat and row-major: entry `(i, j)` is `r[i*n + j]`.
+    r: Vec<f64>,
     /// Reflectors `(k, v, vᵀv)` acting on rows `k..m`, in application order.
     reflectors: Vec<(usize, Vec<f64>, f64)>,
 }
@@ -1167,40 +1167,50 @@ impl Qr {
                 what: format!("QR needs nrows >= ncols, got {m}x{n}"),
             });
         }
-        let mut w: Vec<Vec<f64>> = (0..m)
-            .map(|i| (0..n).map(|j| a[(i, j)]).collect())
-            .collect();
+        // Flat row-major working copy: entry (i, j) is `w[i*n + j]`.
+        let mut w: Vec<f64> = (0..m * n).map(|idx| a[(idx / n, idx % n)]).collect();
         let mut reflectors = Vec::with_capacity(n);
         for k in 0..n {
-            let norm = w[k..m].iter().map(|row| row[k] * row[k]).sum::<f64>();
+            let norm = (k..m).map(|i| w[i * n + k] * w[i * n + k]).sum::<f64>();
             let norm = sqrt_f64(norm);
             if norm == 0.0 {
                 continue;
             }
             // Choose the sign that avoids cancellation in v = x - alpha e1.
-            let alpha = if w[k][k] > 0.0 { -norm } else { norm };
-            let mut v: Vec<f64> = (k..m).map(|i| w[i][k]).collect();
+            let alpha = if w[k * n + k] > 0.0 { -norm } else { norm };
+            let mut v: Vec<f64> = (k..m).map(|i| w[i * n + k]).collect();
             v[0] -= alpha;
             let vtv: f64 = v.iter().map(|x| x * x).sum();
             if vtv == 0.0 {
                 continue;
             }
             for j in k..n {
-                let dot: f64 = v.iter().enumerate().map(|(t, vt)| vt * w[k + t][j]).sum();
+                let dot: f64 = v
+                    .iter()
+                    .enumerate()
+                    .map(|(t, vt)| vt * w[(k + t) * n + j])
+                    .sum();
                 let f = 2.0 * dot / vtv;
                 for (t, vt) in v.iter().enumerate() {
-                    w[k + t][j] -= f * vt;
+                    w[(k + t) * n + j] -= f * vt;
                 }
             }
             reflectors.push((k, v, vtv));
         }
-        let r: Vec<Vec<f64>> = (0..n)
-            .map(|i| (0..n).map(|j| if j >= i { w[i][j] } else { 0.0 }).collect())
+        let r: Vec<f64> = (0..n * n)
+            .map(|idx| {
+                let (i, j) = (idx / n, idx % n);
+                if j >= i {
+                    w[i * n + j]
+                } else {
+                    0.0
+                }
+            })
             .collect();
-        let scale = r.iter().flatten().fold(0.0_f64, |acc, x| acc.max(x.abs()));
+        let scale = r.iter().fold(0.0_f64, |acc, x| acc.max(x.abs()));
         let tol = (n as f64) * f64::EPSILON * scale;
         if (0..n).any(|i| {
-            let d = r[i][i].abs();
+            let d = r[i * n + i].abs();
             d.is_nan() || d <= tol
         }) {
             return Err(DenseError::Singular { what: "Qr::new" });
@@ -1239,9 +1249,9 @@ impl Qr {
         for i in (0..n).rev() {
             let mut s = y[i];
             for j in (i + 1)..n {
-                s -= self.r[i][j] * x[j];
+                s -= self.r[i * n + j] * x[j];
             }
-            x[i] = s / self.r[i][i];
+            x[i] = s / self.r[i * n + i];
         }
         Ok(DVector::from_vec(x))
     }
@@ -1475,7 +1485,10 @@ fn rotate_columns(cols: &mut [Vec<f64>], p: usize, q: usize, c: f64, s: f64) {
 #[cfg(feature = "alloc")]
 fn matmul_square(a: &DMatrix<f64>, b: &DMatrix<f64>) -> DMatrix<f64> {
     let n = a.nrows();
-    DMatrix::from_fn(n, n, |i, j| (0..n).map(|k| a[(i, k)] * b[(k, j)]).sum())
+    // The flat j-k-i kernel, rather than an indexed triple loop.
+    let mut out = DMatrix::zeros(n, n);
+    a.mul_matrix_into(b, &mut out);
+    out
 }
 
 #[cfg(feature = "alloc")]
