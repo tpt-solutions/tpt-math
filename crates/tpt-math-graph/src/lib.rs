@@ -290,33 +290,50 @@ where
     }
     #[cfg(not(feature = "std"))]
     {
-        let mut dist: BTreeMap<usize, f64> = BTreeMap::new();
-        dist.insert(source.index(), 0.0);
-        let mut visited: BTreeMap<usize, bool> = BTreeMap::new();
-        let mut heap = BinaryHeap::new();
-        heap.push(OpenNode {
-            f: 0.0,
-            node: source.index(),
-        });
-        while let Some(OpenNode { f: d, node: u }) = heap.pop() {
-            if visited.contains_key(&u) {
-                continue; // settled earlier with a distance no larger than `d`
-            }
-            visited.insert(u, true);
-            if target.is_some_and(|tg| tg.index() == u) {
-                break;
-            }
-            for e in graph.edges_directed(NodeIndex::<Ix>::new(u), Direction::Outgoing) {
-                let v = e.target().index();
-                let nd = d + *e.weight();
-                if nd < dist.get(&v).copied().unwrap_or(f64::INFINITY) {
-                    dist.insert(v, nd);
-                    heap.push(OpenNode { f: nd, node: v });
-                }
+        Ok(in_house_dijkstra(graph, source, target))
+    }
+}
+
+/// Dijkstra over the crate's own binary heap, with no `std` collections.
+///
+/// The default `std` build calls petgraph instead, so this function is what the
+/// `no_std` build runs. It stays compiled under `std` too, and a test checks that
+/// it agrees with petgraph on the same graphs.
+#[cfg_attr(feature = "std", allow(dead_code))]
+fn in_house_dijkstra<N, Ix>(
+    graph: &Graph<N, f64, Directed, Ix>,
+    source: NodeIndex<Ix>,
+    target: Option<NodeIndex<Ix>>,
+) -> BTreeMap<usize, f64>
+where
+    Ix: IndexType,
+{
+    let mut dist: BTreeMap<usize, f64> = BTreeMap::new();
+    dist.insert(source.index(), 0.0);
+    let mut visited: BTreeMap<usize, bool> = BTreeMap::new();
+    let mut heap = BinaryHeap::new();
+    heap.push(OpenNode {
+        f: 0.0,
+        node: source.index(),
+    });
+    while let Some(OpenNode { f: d, node: u }) = heap.pop() {
+        if visited.contains_key(&u) {
+            continue; // settled earlier with a distance no larger than `d`
+        }
+        visited.insert(u, true);
+        if target.is_some_and(|tg| tg.index() == u) {
+            break;
+        }
+        for e in graph.edges_directed(NodeIndex::<Ix>::new(u), Direction::Outgoing) {
+            let v = e.target().index();
+            let nd = d + *e.weight();
+            if nd < dist.get(&v).copied().unwrap_or(f64::INFINITY) {
+                dist.insert(v, nd);
+                heap.push(OpenNode { f: nd, node: v });
             }
         }
-        Ok(dist)
     }
+    dist
 }
 
 /// A path as its total cost and the node sequence from source to target.
@@ -943,5 +960,338 @@ mod traversal_tests {
         };
         // Two components, so two edges: a forest with n - c = 2 edges.
         assert_eq!(minimum_spanning_tree(&g).len(), 2);
+    }
+
+    /// The classic augmenting-path example that needs a residual (reverse) edge:
+    /// the first path s→a→b→t must be partly undone to reach flow 2.
+    #[test]
+    fn max_flow_must_use_residual_reverse_edges() {
+        let mut g: Graph<&str, f64> = Graph::new();
+        let s = g.add_node("s");
+        let a = g.add_node("a");
+        let b = g.add_node("b");
+        let t = g.add_node("t");
+        g.add_edge(s, a, 1.0);
+        g.add_edge(a, b, 1.0);
+        g.add_edge(b, t, 1.0);
+        g.add_edge(s, b, 1.0);
+        g.add_edge(a, t, 1.0);
+        assert_eq!(max_flow(&g, s, t).unwrap().value, 2.0);
+    }
+
+    #[test]
+    fn max_flow_accepts_zero_capacities_and_returns_zero_without_a_path() {
+        let mut g: Graph<&str, f64> = Graph::new();
+        let s = g.add_node("s");
+        let t = g.add_node("t");
+        g.add_edge(s, t, 0.0);
+        assert_eq!(max_flow(&g, s, t).unwrap().value, 0.0);
+    }
+
+    #[test]
+    fn dijkstra_accepts_zero_weights() {
+        let mut g: Graph<u8, f64> = Graph::new();
+        let n: Vec<NodeIndex> = (0..3).map(|i| g.add_node(i)).collect();
+        g.add_edge(n[0], n[1], 0.0);
+        g.add_edge(n[1], n[2], 0.0);
+        let d = try_dijkstra(&g, n[0], None).unwrap();
+        assert_eq!(d[&n[2].index()], 0.0);
+    }
+
+    #[test]
+    fn dijkstra_sums_weights_along_multi_hop_paths() {
+        // 0 →(2) 1 →(3) 2: the distance to 2 is 5.
+        let mut g: Graph<u8, f64> = Graph::new();
+        let n: Vec<NodeIndex> = (0..3).map(|i| g.add_node(i)).collect();
+        g.add_edge(n[0], n[1], 2.0);
+        g.add_edge(n[1], n[2], 3.0);
+        let d = try_dijkstra(&g, n[0], None).unwrap();
+        assert_eq!(d[&n[1].index()], 2.0);
+        assert_eq!(d[&n[2].index()], 5.0);
+    }
+
+    #[test]
+    fn dijkstra_improves_a_tentative_distance_when_a_cheaper_route_appears() {
+        // Direct edge 0→1 costs 5, but 0→2→1 costs 2 and must replace it.
+        let mut g: Graph<u8, f64> = Graph::new();
+        let n: Vec<NodeIndex> = (0..3).map(|i| g.add_node(i)).collect();
+        g.add_edge(n[0], n[1], 5.0);
+        g.add_edge(n[0], n[2], 1.0);
+        g.add_edge(n[2], n[1], 1.0);
+        let d = try_dijkstra(&g, n[0], None).unwrap();
+        assert_eq!(d[&n[1].index()], 2.0);
+        let (cost, path) = dijkstra_path(&g, n[0], n[1]).unwrap().unwrap();
+        assert_eq!(cost, 2.0);
+        assert_eq!(path, vec![n[0], n[2], n[1]]);
+    }
+
+    #[test]
+    fn dijkstra_path_stops_at_the_target_not_at_the_first_settled_node() {
+        // Node 1 is settled first (weight 1) but is not the target; the target 2
+        // is reached at cost 4 through node 1.
+        let mut g: Graph<u8, f64> = Graph::new();
+        let n: Vec<NodeIndex> = (0..4).map(|i| g.add_node(i)).collect();
+        g.add_edge(n[0], n[1], 1.0);
+        g.add_edge(n[1], n[2], 3.0);
+        g.add_edge(n[0], n[3], 10.0);
+        let (cost, path) = dijkstra_path(&g, n[0], n[2]).unwrap().unwrap();
+        assert_eq!(cost, 4.0);
+        assert_eq!(path, vec![n[0], n[1], n[2]]);
+    }
+
+    #[test]
+    fn astar_costs_sum_along_multi_hop_paths() {
+        let mut g: Graph<u8, f64> = Graph::new();
+        let n: Vec<NodeIndex> = (0..4).map(|i| g.add_node(i)).collect();
+        g.add_edge(n[0], n[1], 1.0);
+        g.add_edge(n[1], n[2], 2.0);
+        g.add_edge(n[2], n[3], 4.0);
+        g.add_edge(n[0], n[3], 20.0);
+        let (cost, path) = try_astar(&g, n[0], |v| v == n[3], |_| 0.0)
+            .unwrap()
+            .unwrap();
+        assert_eq!(cost, 7.0);
+        assert_eq!(path, vec![n[0], n[1], n[2], n[3]]);
+    }
+
+    #[test]
+    fn negative_weight_is_rejected_but_zero_is_not() {
+        let mut g: Graph<u8, f64> = Graph::new();
+        let a = g.add_node(0);
+        let b = g.add_node(1);
+        g.add_edge(a, b, -0.0);
+        assert!(try_dijkstra(&g, a, None).is_ok());
+        g.add_edge(b, a, -1.0);
+        assert!(try_dijkstra(&g, a, None).is_err());
+    }
+}
+
+#[cfg(test)]
+mod in_house_dijkstra_tests {
+    use super::*;
+
+    /// A deterministic pseudo-random weighted digraph on `n` nodes.
+    fn random_graph(n: usize, seed: u64) -> Graph<u8, f64> {
+        let mut g: Graph<u8, f64> = Graph::new();
+        let nodes: Vec<NodeIndex> = (0..n).map(|i| g.add_node(i as u8)).collect();
+        let mut state = seed;
+        for u in 0..n {
+            for v in 0..n {
+                state = state
+                    .wrapping_mul(6364136223846793005)
+                    .wrapping_add(1442695040888963407);
+                if u != v && (state >> 33) % 3 == 0 {
+                    let w = ((state >> 40) % 9) as f64 + 0.5;
+                    g.add_edge(nodes[u], nodes[v], w);
+                }
+            }
+        }
+        g
+    }
+
+    #[test]
+    fn in_house_dijkstra_matches_petgraph_on_random_graphs() {
+        for seed in 1..25u64 {
+            let g = random_graph(12, seed);
+            let source = NodeIndex::new(0);
+            let reference: BTreeMap<usize, f64> =
+                petgraph::algo::dijkstra(&g, source, None, |e| *e.weight())
+                    .into_iter()
+                    .map(|(k, v)| (k.index(), v))
+                    .collect();
+            let ours = in_house_dijkstra(&g, source, None);
+            assert_eq!(ours.len(), reference.len(), "seed {seed}");
+            for (node, d) in &reference {
+                assert!((ours[node] - d).abs() < 1e-9, "seed {seed}, node {node}");
+            }
+        }
+    }
+
+    #[test]
+    fn in_house_dijkstra_stops_at_the_target_with_its_distance_settled() {
+        let mut g: Graph<u8, f64> = Graph::new();
+        let n: Vec<NodeIndex> = (0..3).map(|i| g.add_node(i)).collect();
+        g.add_edge(n[0], n[1], 1.0);
+        g.add_edge(n[1], n[2], 1.0);
+        let d = in_house_dijkstra(&g, n[0], Some(n[1]));
+        assert_eq!(d[&n[1].index()], 1.0);
+    }
+}
+
+#[cfg(test)]
+mod max_flow_min_cut_tests {
+    use super::*;
+
+    /// Minimum s–t cut by enumerating every vertex subset that contains `s` and
+    /// not `t`. Max-flow equals this value (max-flow min-cut theorem).
+    fn brute_min_cut(n: usize, edges: &[(usize, usize, f64)], s: usize, t: usize) -> f64 {
+        let mut best = f64::INFINITY;
+        for mask in 0..(1u32 << n) {
+            if mask & (1 << s) == 0 || mask & (1 << t) != 0 {
+                continue;
+            }
+            let cut: f64 = edges
+                .iter()
+                .filter(|&&(u, v, _)| mask & (1 << u) != 0 && mask & (1 << v) == 0)
+                .map(|&(_, _, c)| c)
+                .sum();
+            best = best.min(cut);
+        }
+        best
+    }
+
+    #[test]
+    fn max_flow_equals_the_brute_force_min_cut_on_random_graphs() {
+        for seed in 1..300u64 {
+            let n = 7usize;
+            let mut state = seed.wrapping_mul(0x9E37_79B9_7F4A_7C15).wrapping_add(7);
+            let mut next = || {
+                state = state
+                    .wrapping_mul(6364136223846793005)
+                    .wrapping_add(1442695040888963407);
+                state >> 33
+            };
+            let mut g: Graph<(), f64> = Graph::new();
+            let nodes: Vec<NodeIndex> = (0..n).map(|_| g.add_node(())).collect();
+            let mut edges = Vec::new();
+            for u in 0..n {
+                for v in 0..n {
+                    if u != v && next() % 3 == 0 {
+                        // Integer capacities keep the comparison exact.
+                        let c = (next() % 7 + 1) as f64;
+                        g.add_edge(nodes[u], nodes[v], c);
+                        edges.push((u, v, c));
+                    }
+                }
+            }
+            let (s, t) = (0, n - 1);
+            let flow = max_flow(&g, nodes[s], nodes[t]).unwrap().value;
+            let cut = brute_min_cut(n, &edges, s, t);
+            assert!(
+                (flow - cut).abs() < 1e-9,
+                "seed {seed}: flow {flow}, cut {cut}"
+            );
+        }
+    }
+
+    /// All-pairs shortest distances by Floyd–Warshall (test oracle).
+    fn floyd(n: usize, edges: &[(usize, usize, f64)]) -> Vec<Vec<f64>> {
+        let mut d = vec![vec![f64::INFINITY; n]; n];
+        for (i, row) in d.iter_mut().enumerate() {
+            row[i] = 0.0;
+        }
+        for &(u, v, w) in edges {
+            d[u][v] = d[u][v].min(w);
+        }
+        for k in 0..n {
+            for i in 0..n {
+                for j in 0..n {
+                    let via = d[i][k] + d[k][j];
+                    if via < d[i][j] {
+                        d[i][j] = via;
+                    }
+                }
+            }
+        }
+        d
+    }
+
+    #[test]
+    fn astar_with_an_admissible_heuristic_matches_the_true_distance() {
+        // h(v) = ½·dist(v, goal) never overestimates, so A* must return the true
+        // distance. A non-zero heuristic also exercises the f = g + h bookkeeping.
+        for seed in 1..200u64 {
+            let n = 8usize;
+            let mut state = seed.wrapping_mul(0x2545_F491_4F6C_DD1D).wrapping_add(3);
+            let mut next = || {
+                state = state
+                    .wrapping_mul(6364136223846793005)
+                    .wrapping_add(1442695040888963407);
+                state >> 33
+            };
+            let mut g: Graph<(), f64> = Graph::new();
+            let nodes: Vec<NodeIndex> = (0..n).map(|_| g.add_node(())).collect();
+            let mut edges = Vec::new();
+            for u in 0..n {
+                for v in 0..n {
+                    if u != v && next() % 3 == 0 {
+                        let w = (next() % 9 + 1) as f64;
+                        g.add_edge(nodes[u], nodes[v], w);
+                        edges.push((u, v, w));
+                    }
+                }
+            }
+            let goal = n - 1;
+            let d = floyd(n, &edges);
+            let h = |v: NodeIndex| {
+                let dv = d[v.index()][goal];
+                if dv.is_finite() {
+                    0.5 * dv
+                } else {
+                    0.0
+                }
+            };
+            let got = try_astar(&g, nodes[0], |v| v.index() == goal, h).unwrap();
+            if d[0][goal].is_finite() {
+                let (cost, path) = got.expect("a reachable goal must be found");
+                assert!(
+                    (cost - d[0][goal]).abs() < 1e-9,
+                    "seed {seed}: {cost} vs {}",
+                    d[0][goal]
+                );
+                assert_eq!(path.first().map(|p| p.index()), Some(0));
+                assert_eq!(path.last().map(|p| p.index()), Some(goal));
+            } else {
+                assert!(
+                    got.is_none(),
+                    "seed {seed}: unreachable goal reported as found"
+                );
+            }
+        }
+    }
+
+    /// Unit-capacity bipartite matching networks. Augmenting paths here often
+    /// have to cancel earlier flow along reverse residual edges, so this forces
+    /// the residual bookkeeping the random graphs above rarely exercise.
+    #[test]
+    fn bipartite_matching_networks_need_residual_reversal_and_match_min_cut() {
+        for seed in 1..200u64 {
+            let (l, r) = (4usize, 4usize);
+            // Nodes: 0 = source, 1..=l left, l+1..=l+r right, last = sink.
+            let n = l + r + 2;
+            let (s, t) = (0usize, n - 1);
+            let mut state = seed.wrapping_mul(0x9E37_79B9_7F4A_7C15).wrapping_add(11);
+            let mut next = || {
+                state = state
+                    .wrapping_mul(6364136223846793005)
+                    .wrapping_add(1442695040888963407);
+                state >> 33
+            };
+            let mut g: Graph<(), f64> = Graph::new();
+            let nodes: Vec<NodeIndex> = (0..n).map(|_| g.add_node(())).collect();
+            let mut edges = Vec::new();
+            for i in 0..l {
+                edges.push((s, 1 + i, 1.0));
+            }
+            for j in 0..r {
+                edges.push((1 + l + j, t, 1.0));
+            }
+            for i in 0..l {
+                for j in 0..r {
+                    if next() % 2 == 0 {
+                        edges.push((1 + i, 1 + l + j, 1.0));
+                    }
+                }
+            }
+            for &(u, v, c) in &edges {
+                g.add_edge(nodes[u], nodes[v], c);
+            }
+            let flow = max_flow(&g, nodes[s], nodes[t]).unwrap().value;
+            let cut = brute_min_cut(n, &edges, s, t);
+            assert!(
+                (flow - cut).abs() < 1e-9,
+                "seed {seed}: flow {flow}, cut {cut}"
+            );
+        }
     }
 }
