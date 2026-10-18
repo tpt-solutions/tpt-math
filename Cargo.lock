@@ -1230,6 +1230,7 @@ name = "tpt-math-optimize-general"
 version = "0.1.0"
 dependencies = [
  "criterion",
+ "tpt-math-autodiff-rev",
  "tpt-math-linalg",
  "tpt-math-linalg-dense",
  "tpt-math-numeric",
