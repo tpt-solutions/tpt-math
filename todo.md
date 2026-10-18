@@ -1410,8 +1410,8 @@ constant kernel) are checked in debug builds, and in release with the
       grid interpolation
 - [ ] Distributions: binomial, negative binomial, lognormal, Weibull,
       multivariate normal
-      Status: Partial: binomial (pmf, cdf, moments), lognormal and Weibull (pdf, cdf,
-      quantile, moments) are done. Negative binomial and multivariate normal are open.
+      Status: Partial: binomial, negative binomial (pmf, cdf, moments), lognormal and Weibull (pdf, cdf,
+      quantile, moments) are done. Multivariate normal is open.
 - [ ] Stats: multiple and logistic regression, Spearman and Kendall
       correlation, kernel density estimation
       Status: Partial: Spearman (tie-corrected), Kendall τ-b, multiple regression

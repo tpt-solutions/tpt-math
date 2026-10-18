@@ -1006,3 +1006,69 @@ mod new_distribution_tests {
         assert!(binomial_pmf(5, 1.5, 2).is_nan());
     }
 }
+
+/// Negative binomial pmf: the probability of `k` failures before the `r`-th success
+/// with success probability `p`, for a real `r > 0`.
+///
+/// `P(X = k) = Γ(k + r) / (Γ(r) k!) · p^r (1 − p)^k`, evaluated in log space.
+pub fn negative_binomial_pmf(r: f64, p: f64, k: u64) -> f64 {
+    if !is_positive(r) || !(0.0..=1.0).contains(&p) {
+        return f64::NAN;
+    }
+    if p == 0.0 {
+        return 0.0;
+    }
+    if p == 1.0 {
+        return if k == 0 { 1.0 } else { 0.0 };
+    }
+    let k = k as f64;
+    let ln_pmf = ln_gamma(k + r) - ln_gamma(r) - ln_gamma(k + 1.0) + r * p.ln() + k * (-p).ln_1p();
+    ln_pmf.exp()
+}
+
+/// `P(X ≤ k)` for the negative binomial, `I_p(r, k + 1)`.
+pub fn negative_binomial_cdf(r: f64, p: f64, k: u64) -> f64 {
+    if !is_positive(r) || !(0.0..=1.0).contains(&p) {
+        return f64::NAN;
+    }
+    if p == 0.0 {
+        return 0.0;
+    }
+    regularized_incomplete_beta(r, k as f64 + 1.0, p)
+}
+
+/// Mean and variance of the negative binomial, `(r(1 − p)/p, r(1 − p)/p²)`.
+pub fn negative_binomial_moments(r: f64, p: f64) -> (f64, f64) {
+    if !is_positive(r) || !(0.0 < p && p <= 1.0) {
+        return (f64::NAN, f64::NAN);
+    }
+    let q = 1.0 - p;
+    (r * q / p, r * q / (p * p))
+}
+
+#[cfg(test)]
+mod negative_binomial_tests {
+    use super::*;
+
+    #[test]
+    fn pmf_sums_to_one_and_matches_the_geometric_case() {
+        // r = 1 is the geometric distribution: P(X = k) = p (1 − p)^k.
+        for k in 0..6 {
+            let want = 0.3 * 0.7_f64.powi(k);
+            assert!((negative_binomial_pmf(1.0, 0.3, k as u64) - want).abs() < 1e-14);
+        }
+        let total: f64 = (0..400).map(|k| negative_binomial_pmf(2.5, 0.4, k)).sum();
+        assert!((total - 1.0).abs() < 1e-10, "total {total}");
+    }
+
+    #[test]
+    fn cdf_matches_the_partial_pmf_sum_and_moments_are_right() {
+        let (r, p) = (3.5, 0.45);
+        let partial: f64 = (0..=7).map(|k| negative_binomial_pmf(r, p, k)).sum();
+        assert!((negative_binomial_cdf(r, p, 7) - partial).abs() < 1e-12);
+        let (mean, var) = negative_binomial_moments(r, p);
+        assert!((mean - r * (1.0 - p) / p).abs() < 1e-12);
+        assert!((var - r * (1.0 - p) / (p * p)).abs() < 1e-12);
+        assert!(negative_binomial_pmf(0.0, 0.5, 1).is_nan());
+    }
+}
