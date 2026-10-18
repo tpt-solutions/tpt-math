@@ -1455,6 +1455,10 @@ constant kernel) are checked in debug builds, and in release with the
       large-shape gamma and `ln_binomial` bugs
 - [ ] Extend `xtask drift` to check that the facade exposes every library
       crate and that the README crate count matches `cargo metadata`
+      Status: Partial-done: the facade check is in. It walks the `[dependencies]` of every
+      crate from `tpt-math` and fails on any crate it cannot reach, which is checked with an
+      orphan crate. The README crate-count check is not done, so this box is not ticked. Its
+      status is kept in the note and the box is left unticked.
 - [ ] Occasional `cargo-mutants` run to measure test strength
 
 ### H.5 Innovation (pick one or two)

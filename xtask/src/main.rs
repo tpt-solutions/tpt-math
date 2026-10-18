@@ -204,7 +204,7 @@ fn drift() -> Result<(), String> {
         }
     }
 
-    let mut problems = Vec::new();
+    let mut problems = unreachable_from_facade()?;
     for (label, other) in [
         ("NO_STD_CRATES", &listed),
         ("the README no_std column", &documented),
@@ -271,4 +271,55 @@ fn which(name: &str) -> bool {
         .status()
         .map(|s| s.success())
         .unwrap_or(false)
+}
+
+/// Crates under `crates/` that the `tpt-math` facade cannot reach, directly or
+/// through another workspace crate's `[dependencies]`. Dev-dependencies are not
+/// followed, because they are not part of what a user of the facade gets.
+fn unreachable_from_facade() -> Result<Vec<String>, String> {
+    use std::collections::{BTreeMap, BTreeSet};
+    use std::fs;
+
+    let mut edges: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    let entries = fs::read_dir("crates").map_err(|e| format!("reading crates/: {e}"))?;
+    for entry in entries {
+        let entry = entry.map_err(|e| format!("reading crates/: {e}"))?;
+        let name = entry.file_name().to_string_lossy().into_owned();
+        let manifest = entry.path().join("Cargo.toml");
+        let text = fs::read_to_string(&manifest)
+            .map_err(|e| format!("reading {}: {e}", manifest.display()))?;
+        let mut deps = Vec::new();
+        let mut in_deps = false;
+        for line in text.lines() {
+            let trimmed = line.trim();
+            if trimmed.starts_with('[') {
+                in_deps = trimmed == "[dependencies]";
+                continue;
+            }
+            if in_deps && trimmed.starts_with("tpt-math-") {
+                let dep: String = trimmed
+                    .chars()
+                    .take_while(|c| !c.is_whitespace() && *c != '=')
+                    .collect();
+                deps.push(dep);
+            }
+        }
+        edges.insert(name, deps);
+    }
+
+    let mut reached: BTreeSet<String> = BTreeSet::new();
+    let mut stack = vec!["tpt-math".to_string()];
+    while let Some(name) = stack.pop() {
+        if !reached.insert(name.clone()) {
+            continue;
+        }
+        if let Some(deps) = edges.get(&name) {
+            stack.extend(deps.iter().cloned());
+        }
+    }
+    Ok(edges
+        .keys()
+        .filter(|name| !reached.contains(*name))
+        .map(|name| format!("{name} is not reachable from the tpt-math facade"))
+        .collect())
 }
