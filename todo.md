@@ -1673,7 +1673,7 @@ constant kernel) are checked in debug builds, and in release with the
       with the corrected exclude list, `bench-smoke` over the whole workspace, and
       `semver-checks` on push against crates.io. Fix whatever fails, and record here what
       passed.
-      Status: Run 39122793847 on `d884adb` passed `test` on Ubuntu, Windows and macOS, `msrv` (1.85), `feature-powerset`, `each-feature`, `clippy`, `docs`, `fmt`, `no_std`, `wasm`, `cargo-deny`, `coverage` and `bench-smoke`. It failed two jobs. `typos` flagged two words in new code, now fixed. `semver-checks` fails as expected, because the breaking changes are recorded in the CHANGELOGs but the versions are not bumped, so it waits on the version decision below.
+      Status: Run 39122793847 on `d884adb` passed `test` on Ubuntu, Windows and macOS, `msrv` (1.85), `feature-powerset`, `each-feature`, `clippy`, `docs`, `fmt`, `no_std`, `wasm`, `cargo-deny`, `coverage` and `bench-smoke`. It failed two jobs. `typos` flagged two words in new code. Run 39123538331 on `74d38e3` passes `typos`, and `semver-checks` is the only job that still fails. `semver-checks` fails as expected, because the breaking changes are recorded in the CHANGELOGs but the versions are not bumped, so it waits on the version decision below.
 - [ ] Record the breaking changes and decide the version bumps before publishing:
       `StatsError` gained `RankDeficientDesign` and `DidNotConverge`, and it is not
       `#[non_exhaustive]`; `DenseError` gained `NoConvergence`; `tpt-math-linalg-dense`
