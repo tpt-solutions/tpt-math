@@ -8,7 +8,7 @@ use tpt_math_linalg_dense::{solve_tridiagonal, DVector, DenseError};
 ///
 /// The spline is `C²` on the nodes and has zero second derivative at the two
 /// end nodes. Between the nodes it is the usual cubic. Beyond the nodes it is
-/// extended linearly with the slope at the nearest end, so the extrapolant
+/// extended linearly with the slope at the nearest end, so the extension
 /// does not curve away unboundedly.
 ///
 /// The second derivatives at the interior nodes solve a symmetric positive

@@ -16,7 +16,7 @@ use crate::{DMatrix, DVector, DenseError};
 /// super-diagonals, by Gaussian elimination with partial pivoting.
 ///
 /// `a` is stored as a dense matrix, but only its band is read. Entries outside
-/// the declared band must be zero, so a mis-declared band is reported rather
+/// the declared band must be zero, so a wrongly declared band is reported rather
 /// than silently ignored.
 ///
 /// # Errors
