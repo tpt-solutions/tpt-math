@@ -6,9 +6,10 @@
 //! augmented system, so the solver's error control covers both.
 //!
 //! This works on runtime-sized vectors, because the augmented size `N(1 + P)`
-//! is not known at compile time. It uses explicit Jacobians rather than dual
-//! numbers. A fully generic version over a dual scalar would need a `Float`
-//! implementation for the dual type, which the autodiff crate does not provide.
+//! is not known at compile time. It uses explicit Jacobians. For a fixed, small
+//! number of parameters, the fixed-size solvers can instead run on
+//! `tpt_math_autodiff_fwd::Dual`, which implements `Float` and carries the
+//! sensitivities through the arithmetic.
 
 use alloc::vec;
 use alloc::vec::Vec;

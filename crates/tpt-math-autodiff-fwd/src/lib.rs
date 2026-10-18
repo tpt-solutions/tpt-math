@@ -25,6 +25,7 @@
 //!
 //! [`Dual`]: Dual
 
+mod float_impl;
 use core::ops::{Add, Div, Mul, Neg, Sub};
 use tpt_math_numeric::{Float, One, Zero};
 
