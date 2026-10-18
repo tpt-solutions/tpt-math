@@ -1388,7 +1388,7 @@ constant kernel) are checked in debug builds, and in release with the
 - [x] `tpt-math` facade: add features for `units-dyn`, `linalg-sparse`,
       `linalg-complex`, `linalg-fixed` and `pde-operators`. Add a `std`/no_std
       passthrough and a richer prelude (`Lu`, `Qr`, `Fft`, `Dual`,
-      `GradientTape`, `DynQuantity`). Do this before the facade's first publish
+      `GradientTape`, `DynQuantity`). Do this before the facade's first publish.
       Status: Done: features `units-dyn`, `linalg-sparse`, `linalg-complex`, `linalg-fixed`
       and `pde-operators` (all in `full`); a `std` passthrough; and prelude names `Lu`, `Qr`,
       `Fft`, `Dual`, `GradientTape` and `DynQuantity`.

@@ -1045,14 +1045,19 @@ dependencies = [
  "tpt-math-graph",
  "tpt-math-interpolate",
  "tpt-math-linalg",
+ "tpt-math-linalg-complex",
+ "tpt-math-linalg-fixed",
+ "tpt-math-linalg-sparse",
  "tpt-math-numeric",
  "tpt-math-optimize",
+ "tpt-math-pde-operators",
  "tpt-math-prob",
  "tpt-math-signal",
  "tpt-math-spatial",
  "tpt-math-stats",
  "tpt-math-symbolic",
  "tpt-math-units",
+ "tpt-math-units-dyn",
 ]
 
 [[package]]
