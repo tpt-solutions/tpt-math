@@ -1529,6 +1529,78 @@ mod lu_threshold_tests {
     }
 }
 
+#[cfg(feature = "alloc")]
+impl ComplexDMatrix<f64> {
+    /// The determinant, from the LU factorisation: the sign of the row
+    /// permutation times the product of the diagonal of `U`.
+    ///
+    /// A numerically singular matrix has determinant zero, as with the real
+    /// [`DMatrix::det`](tpt_math_linalg_dense::DMatrix::det).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ComplexDenseError::DimensionMismatch`] if the matrix is not square.
+    pub fn det(&self) -> Result<Complex<f64>, ComplexDenseError> {
+        if self.nrows != self.ncols {
+            return Err(ComplexDenseError::DimensionMismatch {
+                what: alloc::format!("matrix is {}x{}, expected square", self.nrows, self.ncols),
+            });
+        }
+        let (_, u, piv) = match self.lu() {
+            Ok(factors) => factors,
+            Err(ComplexDenseError::Singular { .. }) => {
+                return Ok(Complex::from_real(0.0));
+            }
+            Err(e) => return Err(e),
+        };
+        // Sign of the permutation from its cycle count.
+        let n = piv.len();
+        let mut seen = alloc::vec![false; n];
+        let mut cycles = 0usize;
+        for start in 0..n {
+            if !seen[start] {
+                cycles += 1;
+                let mut j = start;
+                while !seen[j] {
+                    seen[j] = true;
+                    j = piv[j];
+                }
+            }
+        }
+        let sign = if (n - cycles) % 2 == 0 { 1.0 } else { -1.0 };
+        let mut det = Complex::from_real(sign);
+        for (i, row) in u.iter().enumerate() {
+            det = det * row[i];
+        }
+        Ok(det)
+    }
+
+    /// The matrix product `self · rhs`.
+    ///
+    /// With `simd-runtime` and matrices of order 64 or more, the product goes
+    /// through `tpt-simd-blas`'s `gemm_c64`, on split real and imaginary planes.
+    /// Otherwise it is the scalar product, the same as `*`. The `*` operator is
+    /// generic over the scalar type and always uses the scalar product.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the inner dimensions do not match.
+    pub fn product(&self, rhs: &ComplexDMatrix<f64>) -> ComplexDMatrix<f64> {
+        assert_eq!(
+            self.ncols, rhs.nrows,
+            "inner dimensions do not match: {}x{} * {}x{}",
+            self.nrows, self.ncols, rhs.nrows, rhs.ncols
+        );
+        #[cfg(feature = "simd-runtime")]
+        {
+            if self.nrows >= simd_lu::CUTOFF && self.ncols >= simd_lu::CUTOFF {
+                return simd_lu::gemm(self, rhs);
+            }
+        }
+        self.clone() * rhs.clone()
+    }
+}
+
 /// SIMD LU for complex matrices through `tpt-simd-blas`'s `getrf_c64`/`getrs_c64`.
 ///
 /// The kernels work on split real and imaginary planes in column-major order, so
@@ -1608,6 +1680,46 @@ mod simd_lu {
             })
             .collect();
         (l, u, piv)
+    }
+
+    /// `A · B` through `gemm_c64`, on split planes in column-major order.
+    pub(super) fn gemm(a: &ComplexDMatrix<f64>, b: &ComplexDMatrix<f64>) -> ComplexDMatrix<f64> {
+        let (m, k, n) = (a.nrows, a.ncols, b.ncols);
+        let mut ar = vec![0.0_f64; m * k];
+        let mut ai = vec![0.0_f64; m * k];
+        for j in 0..k {
+            for i in 0..m {
+                ar[i + j * m] = a[(i, j)].re;
+                ai[i + j * m] = a[(i, j)].im;
+            }
+        }
+        let mut br = vec![0.0_f64; k * n];
+        let mut bi = vec![0.0_f64; k * n];
+        for j in 0..n {
+            for i in 0..k {
+                br[i + j * k] = b[(i, j)].re;
+                bi[i + j * k] = b[(i, j)].im;
+            }
+        }
+        let mut cr = vec![0.0_f64; m * n];
+        let mut ci = vec![0.0_f64; m * n];
+        tpt_simd_blas::gemm_c64(
+            m,
+            n,
+            k,
+            [1.0, 0.0],
+            &ar,
+            &ai,
+            m,
+            &br,
+            &bi,
+            k,
+            [0.0, 0.0],
+            &mut cr,
+            &mut ci,
+            m,
+        );
+        ComplexDMatrix::from_fn(m, n, |i, j| Complex::new(cr[i + j * m], ci[i + j * m]))
     }
 
     /// Solve `A X = B` for the `ncols` right-hand sides of `rhs` with `getrs_c64`.
@@ -1691,6 +1803,60 @@ mod simd_complex_tests {
                 }
                 let want = if i == j { 1.0 } else { 0.0 };
                 assert!((acc.re - want).hypot(acc.im) < 1e-9, "({i},{j})");
+            }
+        }
+    }
+
+    #[test]
+    fn determinant_of_a_small_complex_matrix() {
+        // det [[1+i, 2], [3, 4−i]] = (1+i)(4−i) − 6 = −1 + 3i.
+        let a = ComplexDMatrix::from_fn(2, 2, |i, j| match (i, j) {
+            (0, 0) => Complex::new(1.0, 1.0),
+            (0, 1) => Complex::new(2.0, 0.0),
+            (1, 0) => Complex::new(3.0, 0.0),
+            _ => Complex::new(4.0, -1.0),
+        });
+        let d = a.det().unwrap();
+        assert!(
+            (d.re + 1.0).abs() < 1e-12 && (d.im - 3.0).abs() < 1e-12,
+            "{d:?}"
+        );
+    }
+
+    #[test]
+    fn determinant_sign_after_many_swaps_on_the_simd_path() {
+        // A cyclic shift on 66 rows is an n-cycle, with 65 transpositions: det = −1.
+        let n = 66;
+        let shift = ComplexDMatrix::from_fn(n, n, |i, j| {
+            Complex::new(if j == (i + 1) % n { 1.0 } else { 0.0 }, 0.0)
+        });
+        let d = shift.det().unwrap();
+        assert!((d.re + 1.0).abs() < 1e-10 && d.im.abs() < 1e-10, "{d:?}");
+    }
+
+    #[test]
+    fn singular_determinant_is_zero_and_nonsquare_is_rejected() {
+        let s = ComplexDMatrix::from_fn(2, 2, |_, _| Complex::new(1.0, 0.0));
+        let d = s.det().unwrap();
+        assert!(d.re == 0.0 && d.im == 0.0);
+        assert!(ComplexDMatrix::from_fn(2, 3, |_, _| Complex::new(1.0, 0.0))
+            .det()
+            .is_err());
+    }
+
+    #[test]
+    fn product_matches_the_scalar_product_above_the_cutoff() {
+        let n = 70;
+        let a = dominant(n);
+        let b = ComplexDMatrix::from_fn(n, n, |i, j| {
+            Complex::new((i + 2 * j) as f64 * 0.01, (i as f64 - j as f64) * 0.02)
+        });
+        let fast = a.product(&b);
+        let slow = a.clone() * b.clone();
+        for i in 0..n {
+            for j in 0..n {
+                let (x, y) = (fast[(i, j)], slow[(i, j)]);
+                assert!((x.re - y.re).hypot(x.im - y.im) < 1e-9, "({i},{j})");
             }
         }
     }
