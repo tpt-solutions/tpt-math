@@ -1008,15 +1008,9 @@ impl DMatrix<f64> {
                 what: format!("matrix is {}x{}, expected square", n, self.ncols),
             });
         }
-        let (lu, piv) = partial_pivot_lu(self)?;
-        let mut out = Vec::with_capacity(n * n);
-        for col in 0..n {
-            let mut e = vec![0.0_f64; n];
-            e[col] = 1.0;
-            let x = solve_with_lu(&lu, &piv, &DVector::from_vec(e));
-            out.extend(x);
-        }
-        Ok(DMatrix::from_vec(n, n, out))
+        let factor = Lu::new(self)?;
+        let identity = DMatrix::from_fn(n, n, |i, j| if i == j { 1.0 } else { 0.0 });
+        factor.solve_matrix(&identity)
     }
 }
 
@@ -1108,6 +1102,30 @@ impl Lu {
             });
         }
         Ok(DVector::from_vec(solve_with_lu(&self.lu, &self.piv, b)))
+    }
+
+    /// Solve `A X = B` for every column of `b` with the stored factorisation.
+    ///
+    /// The factors are reused across columns, so this costs O(n²) per column
+    /// rather than a fresh factorisation per column.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`DenseError::DimensionMismatch`] if `b` does not have `dim()` rows.
+    pub fn solve_matrix(&self, b: &DMatrix<f64>) -> Result<DMatrix<f64>, DenseError> {
+        let n = self.dim();
+        if b.nrows() != n {
+            return Err(DenseError::DimensionMismatch {
+                what: format!("rhs has {} rows, expected {n}", b.nrows()),
+            });
+        }
+        let mut out = Vec::with_capacity(n * b.ncols());
+        for col in 0..b.ncols() {
+            let column = DVector::from_fn(n, |i| b[(i, col)]);
+            out.extend(solve_with_lu(&self.lu, &self.piv, &column));
+        }
+        // Column-major output, matching `DMatrix::from_vec`.
+        Ok(DMatrix::from_vec(n, b.ncols(), out))
     }
 }
 
@@ -2459,5 +2477,27 @@ mod review_regression_tests {
         assert!(a
             .solve_min_norm(&DVector::from_vec(vec![1.0, 2.0, 3.0]))
             .is_err());
+    }
+}
+
+#[cfg(all(test, feature = "alloc"))]
+mod solve_matrix_tests {
+    use super::*;
+
+    #[test]
+    fn solve_matrix_matches_column_by_column_solves() {
+        let a = DMatrix::from_fn(4, 4, |i, j| if i == j { 5.0 } else { ((i + 2 * j) as f64).sin() });
+        let b = DMatrix::from_fn(4, 3, |i, j| (i * 3 + j) as f64 - 4.0);
+        let lu = Lu::new(&a).unwrap();
+        let x = lu.solve_matrix(&b).unwrap();
+        assert_eq!((x.nrows(), x.ncols()), (4, 3));
+        for col in 0..3 {
+            let rhs = DVector::from_fn(4, |i| b[(i, col)]);
+            let want = lu.solve(&rhs).unwrap();
+            for i in 0..4 {
+                assert!((x[(i, col)] - want[i]).abs() < 1e-12);
+            }
+        }
+        assert!(lu.solve_matrix(&DMatrix::zeros(3, 1)).is_err());
     }
 }

@@ -1508,8 +1508,11 @@ constant kernel) are checked in debug builds, and in release with the
       Status: Done, but row-major rather than column-major: the update walks two contiguous row slices, which vectorises just as well and needs no transpose. Same pivot-tolerance check. Result: 128 factor 524 µs -> 148 µs (-72%); 512 solve 30.9 ms -> 13.6 ms (-56%); inverse 128 1.63 ms -> 1.00 ms (-38%); det 128 518 µs -> 151 µs.
 - [x] `Lu` internals become `{ n, lu: Vec<f64>, piv }` (private); flat `solve_with_lu`
       Status: Done. The dimension is kept as `piv.len()`, so `n` is not stored separately.
-- [ ] Add `Lu::solve_matrix(&DMatrix<f64>)` (multi-RHS); `inverse` uses it instead
+- [x] Add `Lu::solve_matrix(&DMatrix<f64>)` (multi-RHS); `inverse` uses it instead
       of n allocating single solves
+      Status: Done. `inverse` factors once and calls `solve_matrix` on the identity. The
+      speed-up over the earlier loop is in the noise (inverse 128 is about 1.0 ms both
+      before and after this step); the gain was from the flat layout in I.1.
 - [x] Fix the misplaced `#[cfg(feature = "alloc")]` on the LU helpers (H.1)
 - [ ] Inherited by `solve`/`inverse`/`det`, `linalg` `Mat::solve`/`inverse`, the
       convex IPM, the Newton step, and RBF/Kriging. Confirm with their benches
