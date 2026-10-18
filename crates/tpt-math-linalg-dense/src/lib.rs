@@ -3052,6 +3052,39 @@ mod simd_dense_solve_tests {
     }
 
     #[test]
+    fn near_singular_inputs_are_classified_the_same_on_both_paths() {
+        // Order 70 is above the SIMD cutoff. The last pivot sits on either side of
+        // the relative threshold (1e-12 · max|aᵢⱼ| = 1e-12).
+        let n = 70;
+        for (last, singular) in [(1e-14, true), (1e-10, false)] {
+            let a = DMatrix::from_fn(n, n, |i, j| match (i == j, i == n - 1) {
+                (true, true) => last,
+                (true, false) => 1.0,
+                _ => 0.0,
+            });
+                if i == n - 1 && j == n - 1 {
+                    last
+                } else {
+                    a[(i, j)]
+                }
+            });
+            let scale = 1.0;
+            let simd = partial_pivot_lu_with(&a, DEFAULT_PIVOT_RELATIVE * scale);
+            let scalar = scalar_lu(&a, DEFAULT_PIVOT_RELATIVE * scale);
+            assert_eq!(simd.is_err(), singular, "simd path, last pivot {last}");
+            assert_eq!(scalar.is_err(), singular, "scalar path, last pivot {last}");
+            if !singular {
+                let (lu_s, p_s) = scalar.unwrap();
+                let (lu_v, p_v) = simd.unwrap();
+                assert_eq!(p_s, p_v);
+                for (x, y) in lu_s.iter().zip(&lu_v) {
+                    assert!((x - y).abs() < 1e-12);
+                }
+            }
+        }
+    }
+
+    #[test]
     fn lu_solve_matrix_dispatch_matches_small_path() {
         // Above the cutoff, `Lu::solve_matrix` takes the SIMD branch; check it
         // against a solve column by column.
