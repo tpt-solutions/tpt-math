@@ -1549,6 +1549,9 @@ constant kernel) are checked in debug builds, and in release with the
       ill-conditioned input
 - [ ] `Qr::new` and default-path `cholesky` on flat column-major storage, same
       operation order
+      Status: Partial: `cholesky` is done on flat row-major storage, with each inner sum a
+      dot product of contiguous rows (not column-major, to match the LU). At n = 128 it went
+      from 178 µs to 128 µs (-28%); at n = 512 from 11.0 ms to 10.3 ms (-7%). `Qr::new` is open.
 
 ### I.4 `linalg-complex` `simd` feature
 

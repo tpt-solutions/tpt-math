@@ -1294,21 +1294,28 @@ impl DMatrix<f64> {
                 what: format!("matrix is {}x{}, expected square", n, self.ncols),
             });
         }
-        let mut l = vec![vec![0.0_f64; n]; n];
+        // Flat row-major factor. Row i of `L` is `l[i*n..i*n + n]`, so each inner
+        // sum is a dot product of two contiguous slices.
+        let mut l = vec![0.0_f64; n * n];
         for j in 0..n {
-            let d = self[(j, j)] - (0..j).map(|k| l[j][k] * l[j][k]).sum::<f64>();
+            let row_j_head: f64 = l[j * n..j * n + j].iter().map(|x| x * x).sum();
+            let d = self[(j, j)] - row_j_head;
             if d.is_nan() || d <= 0.0 {
                 return Err(DenseError::Singular {
                     what: "cholesky (not positive definite)",
                 });
             }
-            l[j][j] = sqrt_f64(d);
-            for i in (j + 1)..n {
-                let s = self[(i, j)] - (0..j).map(|k| l[i][k] * l[j][k]).sum::<f64>();
-                l[i][j] = s / l[j][j];
+            let ljj = sqrt_f64(d);
+            l[j * n + j] = ljj;
+            let (upto_i, from_i) = l.split_at_mut((j + 1) * n);
+            let row_j = &upto_i[j * n..j * n + j];
+            for (r, row_i) in from_i.chunks_exact_mut(n).enumerate() {
+                let i = j + 1 + r;
+                let dot: f64 = row_i[..j].iter().zip(row_j).map(|(a, b)| a * b).sum();
+                row_i[j] = (self[(i, j)] - dot) / ljj;
             }
         }
-        Ok(DMatrix::from_fn(n, n, |i, j| l[i][j]))
+        Ok(DMatrix::from_fn(n, n, |i, j| l[i * n + j]))
     }
 
     /// Eigendecomposition of a symmetric matrix by the cyclic Jacobi method.
