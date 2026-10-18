@@ -1652,6 +1652,7 @@ constant kernel) are checked in debug builds, and in release with the
       `#[non_exhaustive]`; `DenseError` gained `NoConvergence`; `tpt-math-linalg-dense`
       gained `Lu`'s flat storage (private, so not breaking); `tpt-math-linalg` and
       `tpt-math-linalg-complex` now need `alloc` for their `zeros`, `transpose`, `solve`
-      and `inverse` APIs (default builds keep them via `std`); `DynQuantity::from_str`
-      now accepts strings it used to reject. Each goes in the CHANGELOG with its crate's
-      bump, and the list is checked against `cargo semver-checks` once a baseline exists.
+      and `inverse` APIs (default builds keep them via `std`). Each goes in the CHANGELOG
+      with its crate's bump, and the list is checked against `cargo semver-checks` once a
+      baseline exists. Additive changes, such as `DynQuantity::from_str` accepting base-unit
+      expressions, go in the CHANGELOG only.
