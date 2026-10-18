@@ -460,6 +460,130 @@ pub fn power_spectrum(signal: &[f64]) -> Vec<f64> {
         .collect()
 }
 
+/// Linear convolution `(a * b)[k] = Σ a[i] b[k − i]`, computed by zero-padded
+/// FFTs. The result has `a.len() + b.len() − 1` samples (empty if either input
+/// is empty).
+///
+/// # Examples
+///
+/// ```
+/// use tpt_math_signal_fft::fft_convolve;
+///
+/// let y = fft_convolve(&[1.0, 2.0, 3.0], &[0.0, 1.0, 0.5]);
+/// let want = [0.0, 1.0, 2.5, 4.0, 1.5];
+/// for (got, w) in y.iter().zip(want) {
+///     assert!((got - w).abs() < 1e-12);
+/// }
+/// ```
+pub fn fft_convolve(a: &[f64], b: &[f64]) -> Vec<f64> {
+    if a.is_empty() || b.is_empty() {
+        return Vec::new();
+    }
+    let out_len = a.len() + b.len() - 1;
+    let n = out_len.next_power_of_two();
+    let mut engine = Fft::new();
+    let fa = engine.forward_n(a, n);
+    let fb = engine.forward_n(b, n);
+    let product: Vec<Complex<f64>> = fa.iter().zip(&fb).map(|(x, y)| x * y).collect();
+    engine
+        .inverse_normalized(&product)
+        .iter()
+        .take(out_len)
+        .map(|z| z.re)
+        .collect()
+}
+
+/// Short-time Fourier transform: the one-sided spectra of windowed frames.
+///
+/// Frames of `window.len()` samples start every `hop` samples; only frames that
+/// fit completely are returned. Each frame is multiplied by `window` and
+/// transformed, and the `window.len() / 2 + 1` non-negative-frequency bins are
+/// kept. Returns an empty list when the signal is shorter than one window, or
+/// when `window` is empty or `hop` is zero.
+///
+/// # Examples
+///
+/// ```
+/// use tpt_math_signal_fft::stft;
+///
+/// let x = vec![1.0; 16];
+/// let frames = stft(&x, &[1.0; 8], 4);
+/// assert_eq!(frames.len(), 3);
+/// assert_eq!(frames[0].len(), 5);
+/// ```
+pub fn stft(signal: &[f64], window: &[f64], hop: usize) -> Vec<Vec<Complex<f64>>> {
+    let len = window.len();
+    if len == 0 || hop == 0 || signal.len() < len {
+        return Vec::new();
+    }
+    let mut engine = Fft::new();
+    let bins = len / 2 + 1;
+    (0..=(signal.len() - len))
+        .step_by(hop)
+        .map(|start| {
+            let frame: Vec<f64> = signal[start..start + len]
+                .iter()
+                .zip(window)
+                .map(|(x, w)| x * w)
+                .collect();
+            let mut spectrum = engine.forward_n(&frame, len);
+            spectrum.truncate(bins);
+            spectrum
+        })
+        .collect()
+}
+
+/// Welch's power spectral density estimate, one-sided, in units of power per
+/// unit frequency (sampling rate `fs`).
+///
+/// The signal is split into segments of `window.len()` samples overlapping by
+/// `overlap` samples. Each segment is windowed and transformed, the squared
+/// magnitudes are averaged, and the result is scaled by `1 / (fs · Σ w²)`.
+/// Bins other than DC and Nyquist are doubled to form the one-sided spectrum.
+/// Returns `window.len() / 2 + 1` values, or an empty vector if no full segment
+/// fits, `window` is empty, or `overlap >= window.len()`.
+///
+/// # Examples
+///
+/// ```
+/// use tpt_math_signal_fft::welch;
+///
+/// // A unit-amplitude cosine at bin 4 of an 8-sample frame, sampled at fs = 8.
+/// let x: Vec<f64> = (0..64)
+///     .map(|i| (std::f64::consts::TAU * 4.0 * i as f64 / 8.0).cos())
+///     .collect();
+/// let psd = welch(&x, 8.0, &[1.0; 8], 0);
+/// let peak = psd.iter().enumerate().max_by(|a, b| a.1.total_cmp(b.1)).unwrap().0;
+/// assert_eq!(peak, 4);
+/// ```
+pub fn welch(signal: &[f64], fs: f64, window: &[f64], overlap: usize) -> Vec<f64> {
+    let len = window.len();
+    if len == 0 || overlap >= len || signal.len() < len {
+        return Vec::new();
+    }
+    let hop = len - overlap;
+    let frames = stft(signal, window, hop);
+    let bins = len / 2 + 1;
+    let weight: f64 = window.iter().map(|w| w * w).sum();
+    let mut psd = vec![0.0; bins];
+    for frame in &frames {
+        for (k, z) in frame.iter().enumerate() {
+            psd[k] += z.re * z.re + z.im * z.im;
+        }
+    }
+    let scale = 1.0 / (frames.len() as f64 * fs * weight);
+    for (k, p) in psd.iter_mut().enumerate() {
+        *p *= scale;
+        // One-sided: every bin except DC and (for even lengths) Nyquist carries
+        // the energy of its mirror image too.
+        let mirrored = k != 0 && !(len % 2 == 0 && k == len / 2);
+        if mirrored {
+            *p *= 2.0;
+        }
+    }
+    psd
+}
+
 /// Widen real samples to complex with zero imaginary part.
 fn real_to_complex(signal: &[f64]) -> Vec<Complex<f64>> {
     signal.iter().map(|&re| Complex::new(re, 0.0)).collect()
@@ -698,5 +822,61 @@ mod real_fft_tests {
         for (got, want) in back.iter().zip(&x) {
             assert!((got - want).abs() < 1e-10);
         }
+    }
+}
+
+#[cfg(test)]
+mod spectral_extension_tests {
+    use super::*;
+
+    #[test]
+    fn fft_convolve_matches_direct_sum() {
+        let a: Vec<f64> = (0..13).map(|i| ((i * 7 % 5) as f64) - 2.0).collect();
+        let b: Vec<f64> = (0..6).map(|i| (i as f64 * 0.3).cos()).collect();
+        let got = fft_convolve(&a, &b);
+        assert_eq!(got.len(), a.len() + b.len() - 1);
+        for k in 0..got.len() {
+            let want: f64 = (0..a.len())
+                .filter(|&i| k >= i && k - i < b.len())
+                .map(|i| a[i] * b[k - i])
+                .sum();
+            assert!((got[k] - want).abs() < 1e-10, "k = {k}");
+        }
+        assert!(fft_convolve(&[], &b).is_empty());
+    }
+
+    #[test]
+    fn stft_frame_count_and_bins() {
+        let x: Vec<f64> = (0..20).map(|i| i as f64).collect();
+        let w = vec![1.0; 6];
+        let frames = stft(&x, &w, 3);
+        // Starts 0, 3, 6, 9, 12: five full frames of six samples.
+        assert_eq!(frames.len(), 5);
+        assert!(frames.iter().all(|f| f.len() == 4));
+        assert!(stft(&x, &w, 0).is_empty());
+        assert!(stft(&x[..3], &w, 1).is_empty());
+    }
+
+    #[test]
+    fn welch_recovers_sine_power_at_its_bin() {
+        // Unit-amplitude sine at bin 2 of an 8-sample rectangular frame, fs = 8.
+        // Its power is 1/2 per sample. The one-sided PSD integrates to that power:
+        // Σ psd · Δf with Δf = fs/len = 1 here.
+        let n = 8;
+        let x: Vec<f64> = (0..256)
+            .map(|i| (std::f64::consts::TAU * 2.0 * i as f64 / n as f64).sin())
+            .collect();
+        let psd = welch(&x, n as f64, &vec![1.0; n], 0);
+        assert_eq!(psd.len(), n / 2 + 1);
+        let total: f64 = psd.iter().sum();
+        assert!((total - 0.5).abs() < 1e-9, "total power {total}");
+        let peak = psd
+            .iter()
+            .enumerate()
+            .max_by(|a, b| a.1.total_cmp(b.1))
+            .unwrap()
+            .0;
+        assert_eq!(peak, 2);
+        assert!(welch(&x, 8.0, &[1.0; 8], 8).is_empty());
     }
 }

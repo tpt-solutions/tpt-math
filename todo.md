@@ -1385,10 +1385,13 @@ constant kernel) are checked in debug builds, and in release with the
 
 ### H.3 Missing features
 
-- [ ] `tpt-math` facade: add features for `units-dyn`, `linalg-sparse`,
+- [x] `tpt-math` facade: add features for `units-dyn`, `linalg-sparse`,
       `linalg-complex`, `linalg-fixed` and `pde-operators`. Add a `std`/no_std
       passthrough and a richer prelude (`Lu`, `Qr`, `Fft`, `Dual`,
       `GradientTape`, `DynQuantity`). Do this before the facade's first publish
+      Status: Done: features `units-dyn`, `linalg-sparse`, `linalg-complex`, `linalg-fixed`
+      and `pde-operators` (all in `full`); a `std` passthrough; and prelude names `Lu`, `Qr`,
+      `Fft`, `Dual`, `GradientTape` and `DynQuantity`.
 - [ ] ODE: a stiff solver (BDF or Rosenbrock), event detection and dense output
       in `tpt-math-numeric`
 - [ ] Optimisation: nonlinear least squares (Levenberg–Marquardt, a
@@ -1412,14 +1415,19 @@ constant kernel) are checked in debug builds, and in release with the
       correlation, kernel density estimation
       Status: Partial: Spearman (tie-corrected) and Kendall τ-b are done. Multiple and
       logistic regression and kernel density estimation are open.
-- [ ] Signal: STFT/spectrogram, Welch PSD, FFT convolution, zero-phase
+- [x] Signal: STFT/spectrogram, Welch PSD, FFT convolution, zero-phase
       `filtfilt`
+      Status: Done: `stft` (complex frames, so `|·|²` gives the spectrogram), `welch`
+      (one-sided PSD), `fft_convolve` in `tpt-math-signal-fft`, and `zero_phase_filter`
+      (odd-extension filtfilt over a biquad cascade) in `tpt-math-signal-filter`.
 - [ ] `autodiff-rev`: `atan`, `tanh`, `atan2`, `sinh`/`cosh` (forward mode has
       `atan` and `tanh`); Jacobian and Hessian helpers in the umbrella crate
       Status: Partial: the reverse-mode operators are done (`tanh`, `sinh`, `cosh`, `atan`,
       `atan2`), each checked against central differences. Jacobian and Hessian helpers are open.
 - [ ] `symbolic`: string parser (`"x^2 + sin(x)"`), compile an expression to a
       closure, LaTeX output
+      Status: Partial: `parse_expr` (infix grammar with positioned errors) and `to_latex`
+      are done. Compiling an expression to a closure is open.
 - [ ] `graph`: path reconstruction for `dijkstra`; re-export or wrap the
       petgraph algorithms (BFS/DFS, topological sort, MST, components)
       Status: Partial: `dijkstra_path` returns the route as well as its cost. The

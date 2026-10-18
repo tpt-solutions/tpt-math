@@ -3,7 +3,9 @@
 mod biquad;
 mod fir;
 mod window;
+mod zero_phase;
 
 pub use biquad::{butterworth_bandpass, butterworth_highpass, butterworth_lowpass, Biquad};
 pub use fir::FirFilter;
 pub use window::{apply_window, bartlett, blackman, hamming, hanning, rectangular, Window};
+pub use zero_phase::zero_phase_filter;

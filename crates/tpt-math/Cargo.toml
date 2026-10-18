@@ -28,6 +28,11 @@ tpt-math-geometry = { workspace = true, optional = true }
 tpt-math-spatial = { workspace = true, optional = true }
 tpt-math-graph = { workspace = true, optional = true }
 tpt-math-interpolate = { workspace = true, optional = true }
+tpt-math-units-dyn = { workspace = true, optional = true }
+tpt-math-linalg-sparse = { workspace = true, optional = true }
+tpt-math-linalg-complex = { workspace = true, optional = true }
+tpt-math-linalg-fixed = { workspace = true, optional = true }
+tpt-math-pde-operators = { workspace = true, optional = true }
 
 # Short feature names. Nothing is enabled by default, so a dependency pulls in
 # only what it names. `full` enables every area.
@@ -47,7 +52,28 @@ geometry = ["dep:tpt-math-geometry"]
 spatial = ["dep:tpt-math-spatial"]
 graph = ["dep:tpt-math-graph"]
 interpolate = ["dep:tpt-math-interpolate"]
+units-dyn = ["dep:tpt-math-units-dyn"]
+linalg-sparse = ["dep:tpt-math-linalg-sparse"]
+linalg-complex = ["dep:tpt-math-linalg-complex"]
+linalg-fixed = ["dep:tpt-math-linalg-fixed"]
+pde-operators = ["dep:tpt-math-pde-operators"]
+# Passes `std` to every enabled area that has it. Without it the areas build
+# their `no_std` configurations.
+std = [
+    "tpt-math-numeric?/std",
+    "tpt-math-units?/std",
+    "tpt-math-linalg?/std",
+    "tpt-math-linalg-sparse?/std",
+    "tpt-math-linalg-complex?/std",
+    "tpt-math-linalg-fixed?/std",
+    "tpt-math-pde-operators?/std",
+]
 full = [
+    "units-dyn",
+    "linalg-sparse",
+    "linalg-complex",
+    "linalg-fixed",
+    "pde-operators",
     "numeric",
     "units",
     "linalg",

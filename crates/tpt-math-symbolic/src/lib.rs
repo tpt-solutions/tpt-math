@@ -217,6 +217,9 @@ impl<C: Coefficient> Symbolic<C> for Expr<C> {
 /// `Expr<f64>` — the default, floating-point symbolic expression.
 pub type Expr64 = Expr<f64>;
 
+mod syntax;
+pub use syntax::{parse_expr, ParseError};
+
 impl<C: Coefficient> From<f64> for Expr<C>
 where
     C: From<f64>,

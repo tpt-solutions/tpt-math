@@ -86,6 +86,21 @@ pub use tpt_math_graph as graph;
 #[cfg(feature = "interpolate")]
 pub use tpt_math_interpolate as interpolate;
 
+#[cfg(feature = "units-dyn")]
+pub use tpt_math_units_dyn as units_dyn;
+
+#[cfg(feature = "linalg-sparse")]
+pub use tpt_math_linalg_sparse as linalg_sparse;
+
+#[cfg(feature = "linalg-complex")]
+pub use tpt_math_linalg_complex as linalg_complex;
+
+#[cfg(feature = "linalg-fixed")]
+pub use tpt_math_linalg_fixed as linalg_fixed;
+
+#[cfg(feature = "pde-operators")]
+pub use tpt_math_pde_operators as pde_operators;
+
 /// The most common names, each gated on the feature that provides it.
 pub mod prelude {
     #[cfg(feature = "numeric")]
@@ -99,6 +114,21 @@ pub mod prelude {
 
     #[cfg(feature = "symbolic")]
     pub use tpt_math_symbolic::{Expr64, Symbolic};
+
+    #[cfg(feature = "linalg")]
+    pub use tpt_math_linalg::tpt_math_linalg_dense::{Lu, Qr};
+
+    #[cfg(feature = "signal")]
+    pub use tpt_math_signal::fft::Fft;
+
+    #[cfg(feature = "autodiff")]
+    pub use tpt_math_autodiff::fwd::Dual;
+
+    #[cfg(feature = "autodiff")]
+    pub use tpt_math_autodiff::rev::GradientTape;
+
+    #[cfg(feature = "units-dyn")]
+    pub use tpt_math_units_dyn::DynQuantity;
 }
 
 #[cfg(test)]
@@ -118,5 +148,8 @@ mod tests {
         let _: Option<crate::units::prelude::Length> = None;
         let _ = crate::prob::dist::density::normal_cdf;
         let _ = crate::signal::fft::fft;
+        let _: Option<crate::units_dyn::DynQuantity> = None;
+        let _: Option<crate::linalg_sparse::CsrMatrix<f64>> = None;
+        let _: Option<crate::pde_operators::Grid<f64, 2>> = None;
     }
 }
