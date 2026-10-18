@@ -54,6 +54,11 @@ use alloc::vec::Vec;
 use alloc::{format, string::String, vec};
 
 #[cfg(feature = "alloc")]
+#[cfg(feature = "alloc")]
+mod diagnostics;
+#[cfg(feature = "alloc")]
+pub use diagnostics::{SolveDiagnostics, ILL_CONDITIONED_THRESHOLD};
+#[cfg(feature = "alloc")]
 mod eig;
 #[cfg(feature = "alloc")]
 pub use eig::Eigenvalue;
