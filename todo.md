@@ -1417,15 +1417,15 @@ constant kernel) are checked in debug builds, and in release with the
 
 ### H.4 CI and automation
 
-- [ ] Run `cargo hack check --each-feature --no-dev-deps` for every crate.
+- [x] Run `cargo hack check --each-feature --no-dev-deps` for every crate.
       This catches H.1's `alloc` build failure; the powerset job covers 10 crates
-- [ ] Add an MSRV job (`cargo +<msrv> check --workspace`, or
+- [x] Add an MSRV job (`cargo +<msrv> check --workspace`, or
       `cargo hack --rust-version`)
-- [ ] Run `cargo-semver-checks` on push to master, against the crates.io
+- [x] Run `cargo-semver-checks` on push to master, against the crates.io
       baseline. It only runs on pull requests now, and work is pushed straight to
       master, so it never runs
-- [ ] Add Windows and macOS to the test job (CI is Ubuntu-only)
-- [ ] `bench-smoke`: `cargo bench --no-run --workspace` (it builds 4 crates'
+- [x] Add Windows and macOS to the test job (CI is Ubuntu-only)
+- [x] `bench-smoke`: `cargo bench --no-run --workspace` (it builds 4 crates'
       benches; every crate has one)
 - [ ] More fuzz targets: the `DynQuantity` `FromStr` parser, `from_triplets`,
       and special-function invariants (no NaN on valid input, monotone CDFs,

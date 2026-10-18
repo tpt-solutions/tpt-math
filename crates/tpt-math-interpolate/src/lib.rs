@@ -48,11 +48,13 @@
 
 extern crate alloc;
 
-use tpt_math_linalg_dense::{DMatrix, DVector, DenseError, Lu};
-use tpt_math_numeric::{Float, Scalar};
-
 #[cfg(feature = "alloc")]
 use alloc::{format, vec, vec::Vec};
+#[cfg(feature = "alloc")]
+use tpt_math_linalg_dense::{DMatrix, DVector, DenseError, Lu};
+use tpt_math_numeric::Float;
+#[cfg(feature = "alloc")]
+use tpt_math_numeric::Scalar;
 
 // ===========================================================================
 // Radial basis function interpolation

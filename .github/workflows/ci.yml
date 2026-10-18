@@ -36,7 +36,11 @@ jobs:
       - run: cargo clippy --workspace --all-targets --all-features -- -D warnings
 
   test:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
@@ -71,6 +75,29 @@ jobs:
         with:
           command: check
 
+  # Every crate compiles with each of its features on its own, and with none.
+  # It catches the no-alloc build breakages that the default build hides.
+  each-feature:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-hack
+      - run: cargo hack check --workspace --each-feature --no-dev-deps --exclude-features simd,simd-runtime
+
+  # The declared rust-version (Cargo.toml `rust-version`) must build the workspace.
+  # The simd features need a newer toolchain, so they are excluded here.
+  msrv:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@1.85
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo check --workspace
+
   # Feature-powerset CI for the four umbrella crates, so that every combination
   # of their constituent re-export features is actually compiled and tested.
   feature-powerset:
@@ -87,7 +114,7 @@ jobs:
           -p tpt-math-prob -p tpt-math-autodiff -p tpt-math-optimize -p tpt-math-signal
           -p tpt-math-units-dyn -p tpt-math-numeric -p tpt-math-exact -p tpt-math-prob-monte-carlo
           -p tpt-math-signal-filter -p tpt-math-optimize-general
-          --exclude-features simd simd-runtime
+          --exclude-features simd,simd-runtime
 
   # Compile-only smoke test for the criterion benchmark targets. Benches are not
   # run to pass/fail in CI (timing noise); we only confirm they build.
@@ -97,9 +124,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - run: >
-          cargo bench --no-run
-          -p tpt-math-linalg -p tpt-math-signal-fft -p tpt-math-optimize-convex -p tpt-math-exact
+      - run: cargo bench --no-run --workspace
 
   # Rustdoc must build with no warnings, so broken intra-doc links fail CI.
   docs:
@@ -148,10 +173,10 @@ jobs:
           name: lcov
           path: lcov.info
 
-  # Pull requests only: flag breaking public-API changes against the base branch.
-  # Crates that do not exist on the base branch are skipped by the tool.
+  # Flags breaking public-API changes. Pull requests compare against the base
+  # branch; pushes to master compare against the last crates.io release. Crates
+  # that do not exist on the baseline are skipped by the tool.
   semver-checks:
-    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -162,4 +187,9 @@ jobs:
       - uses: taiki-e/install-action@v2
         with:
           tool: cargo-semver-checks
-      - run: cargo semver-checks check-release --workspace --baseline-rev ${{ github.event.pull_request.base.sha }}
+      - name: Check against the PR base branch
+        if: github.event_name == 'pull_request'
+        run: cargo semver-checks check-release --workspace --baseline-rev ${{ github.event.pull_request.base.sha }}
+      - name: Check against the crates.io baseline
+        if: github.event_name == 'push'
+        run: cargo semver-checks check-release --workspace

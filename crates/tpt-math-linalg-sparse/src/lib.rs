@@ -46,11 +46,15 @@
 
 extern crate alloc;
 
-use alloc::vec;
 use alloc::vec::Vec;
 
+#[cfg(feature = "alloc")]
+use alloc::vec;
+#[cfg(feature = "alloc")]
 use tpt_math_linalg_dense::DVector;
-use tpt_math_numeric::{Scalar, SolveReport, SolveStatus};
+use tpt_math_numeric::Scalar;
+#[cfg(feature = "alloc")]
+use tpt_math_numeric::{SolveReport, SolveStatus};
 
 /// Errors returned by the sparse solvers and operators.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -169,11 +173,13 @@ impl<T: Scalar + Copy> CooMatrix<T> {
     }
 
     /// Convert to compressed-sparse-row form, summing any duplicate entries.
+    #[cfg(feature = "alloc")]
     pub fn to_csr(&self) -> CsrMatrix<T> {
         to_csr_impl(self.nrows, self.ncols, &self.rows, &self.cols, &self.vals)
     }
 
     /// Convert to compressed-sparse-column form, summing any duplicate entries.
+    #[cfg(feature = "alloc")]
     pub fn to_csc(&self) -> CscMatrix<T> {
         to_csc_impl(self.nrows, self.ncols, &self.rows, &self.cols, &self.vals)
     }
@@ -227,6 +233,7 @@ impl<T> CsrMatrix<T> {
 
 impl<T: Scalar + Copy> CsrMatrix<T> {
     /// Transpose, producing a [`CscMatrix`].
+    #[cfg(feature = "alloc")]
     pub fn transpose(&self) -> CscMatrix<T> {
         // New matrix is `ncols x nrows`; swap row/col roles.
         let rows: Vec<usize> = self.iter().map(|(_, c, _)| c).collect();
@@ -335,6 +342,7 @@ impl<T> CscMatrix<T> {
 
 impl<T: Scalar + Copy> CscMatrix<T> {
     /// Transpose, producing a [`CsrMatrix`].
+    #[cfg(feature = "alloc")]
     pub fn transpose(&self) -> CsrMatrix<T> {
         // New matrix is `ncols x nrows`; swap row/col roles.
         let rows: Vec<usize> = self.iter().map(|(_, c, _)| c).collect();

@@ -20,7 +20,7 @@ tpt-math-numeric = { workspace = true, default-features = false }
 
 [features]
 default = ["std"]
-std = ["tpt-math-linalg-dense/std", "tpt-math-units/std", "tpt-math-numeric/std"]
+std = ["tpt-math-linalg-dense/std", "tpt-math-units/std", "tpt-math-numeric/std", "alloc"]
 alloc = ["tpt-math-linalg-dense/alloc", "tpt-math-units/alloc", "tpt-math-numeric/alloc"]
 
 

@@ -125,6 +125,7 @@ impl<U, V, T> Mat<U, V, T> {
     }
 }
 
+#[cfg(feature = "alloc")]
 impl<U, T: Clone> Vec<U, T> {
     /// A zero vector of length `n`.
     pub fn zeros(n: usize) -> Self
@@ -135,6 +136,7 @@ impl<U, T: Clone> Vec<U, T> {
     }
 }
 
+#[cfg(feature = "alloc")]
 impl<U, V, T: Clone> Mat<U, V, T> {
     /// A zero matrix of the given shape.
     pub fn zeros(rows: usize, cols: usize) -> Self
@@ -278,6 +280,7 @@ where
     }
 }
 
+#[cfg(feature = "alloc")]
 impl<U, V, T> Mat<U, V, T>
 where
     T: Scalar + Clone,
@@ -395,6 +398,7 @@ where
     }
 }
 
+#[cfg(feature = "alloc")]
 impl<U, V> Mat<U, V, f64> {
     /// Solve `A x = b` for `x` by LU factorisation, where `A` is `self`.
     ///

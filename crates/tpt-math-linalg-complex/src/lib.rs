@@ -50,13 +50,15 @@ extern crate alloc;
 use core::fmt;
 use core::ops::{Add, Div, Index, Mul, Neg, Sub};
 
+use alloc::vec::Vec;
+#[cfg(feature = "alloc")]
 use tpt_math_linalg_dense::DMatrix;
-use tpt_math_numeric::{Float, Scalar};
+#[cfg(feature = "alloc")]
+use tpt_math_numeric::Float;
+use tpt_math_numeric::Scalar;
 
 #[cfg(feature = "alloc")]
 use alloc::vec;
-#[cfg(feature = "alloc")]
-use alloc::vec::Vec;
 
 // ===========================================================================
 // Complex scalar
@@ -627,6 +629,7 @@ impl<T: PartialEq> PartialEq for ComplexDMatrix<T> {
     }
 }
 
+#[cfg(feature = "alloc")]
 impl<T: fmt::Debug> fmt::Debug for ComplexDVector<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_list().entries(self.iter()).finish()
