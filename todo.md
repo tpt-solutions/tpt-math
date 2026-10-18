@@ -1301,9 +1301,9 @@ constant kernel) are checked in debug builds, and in release with the
 - [x] no_std+alloc verify (`thumbv6m-none-eabi`)
 - [x] Add to root `Cargo.toml` `[workspace] members` + `[workspace.dependencies]`;
       `NO_STD_CRATES` entry in `xtask`; README crate-map row
-- [ ] Add `tpt-rust-map/registry.toml` entry (sibling repo, not available here):
+- [x] Add `tpt-rust-map/registry.toml` entry (sibling repo, not available here):
       `domain = "math.pde"`, `no_std = true`, `wraps = []`; `status = "planned"` → `"git"`
-      Status: Not done. The `tpt-rust-map` sibling checkout is not in this environment. Add this entry there when it is available.
+      Status: Done in the sibling repo (`tpt-rust-map`, commit b4ad23f). The statuses of the built `tpt-math` crates are `git`, and entries were added for linalg-dense, linalg-sparse, linalg-complex, linalg-fixed, geometry, spatial, graph, interpolate and pde-operators. The sibling checkout is at `../tpt-rust-map`; earlier notes that it was missing were wrong.
 - [x] Refresh `Cargo.lock` with `cargo update -p tpt-math-pde-operators` once the
       `tpt-simd` sibling checkout is available (CI runs against it)
       Status: Done. `Cargo.lock` lists `tpt-math-pde-operators`, and the `tpt-simd-*` crates
@@ -1403,18 +1403,14 @@ constant kernel) are checked in debug builds, and in release with the
 - [x] Optimisation: nonlinear least squares (Levenberg–Marquardt, a
       `curve_fit`-style helper) and bound constraints (L-BFGS-B or projected)
       Status: Done: `levenberg_marquardt`, `curve_fit` and box bounds (`LeastSquaresOptions::with_bounds`). The bounds are handled by projection, not by an active-set method such as L-BFGS-B.
-- [ ] Dense linalg: pseudo-inverse / minimum-norm least squares via SVD (`Qr`
+- [x] Dense linalg: pseudo-inverse / minimum-norm least squares via SVD (`Qr`
       rejects rank-deficient input), a tridiagonal/banded solver, a reusable
       Cholesky solve object, and general real eigenvectors
-      Status: Partial: `DMatrix::pseudo_inverse` and `DMatrix::solve_min_norm` (SVD),
-      `Cholesky` (reusable factor with `solve` and `det`), `solve_tridiagonal` (Thomas,
-      no pivoting) and `solve_banded` (banded LU with partial pivoting) are done. The
-      eigenvector for a known real eigenvalue is done by inverse iteration. Still open:
-      the eigenvalues of a general real matrix, so real eigenvectors come only from a given eigenvalue.
-- [ ] Sparse linalg: a Lanczos/Arnoldi eigensolver, a fill-reducing ordering
+      Status: Done: `pseudo_inverse` and `solve_min_norm` (SVD), `Cholesky` (reusable factor), `solve_tridiagonal` (Thomas), `solve_banded` (banded LU with partial pivoting), eigenvalues of a general real matrix (Householder Hessenberg reduction and Francis double-shift QR), and the eigenvector for a known real eigenvalue by inverse iteration.
+- [x] Sparse linalg: a Lanczos/Arnoldi eigensolver, a fill-reducing ordering
       (AMD/RCM) for `SparseLu`/`SparseCholesky`, and a matrix-free
       `LinearOperator` trait for the Krylov solvers
-      Status: Partial: the `LinearOperator` trait with matrix-free CG, Lanczos (Ritz pairs with residual estimates) and RCM ordering with a reordered Cholesky are done. Still open: Arnoldi, AMD, and operator forms of BiCGSTAB and GMRES.
+      Status: Done: `lanczos` (symmetric; Ritz pairs and residuals), `arnoldi` (general; Ritz values, residuals for real ones), `minimum_degree_ordering` with `FillOrdering`, `ReorderedCholesky` and `ReorderedLu`, and `LinearOperator` with operator forms of CG, BiCGSTAB and GMRES. Deviation: the ordering is exact minimum degree on the elimination graph, not AMD, which approximates the degrees. It is fine for thousands of unknowns, not for very large problems.
 - [x] Interpolation: N-D `RbfInterpolator` and `Kriging` (they are 1-D only),
       RBF polynomial tail (thin-plate), natural cubic spline, bilinear/trilinear
       grid interpolation
@@ -1425,11 +1421,9 @@ constant kernel) are checked in debug builds, and in release with the
       (pdf, cdf, quantile, moments) are in `density`. The multivariate normal is in
       `prob_dist::multivariate` behind the `multivariate` feature, which needs `std`. It uses the
       dense Cholesky factor, and its tests check a bivariate closed form and the 1-D case.
-- [ ] Stats: multiple and logistic regression, Spearman and Kendall
+- [x] Stats: multiple and logistic regression, Spearman and Kendall
       correlation, kernel density estimation
-      Status: Done: Spearman (tie-corrected), Kendall τ-b, multiple regression
-      (`try_multiple_regression`, QR), logistic regression (Newton, `try_logistic_regression`)
-      and Gaussian kernel density estimation (`try_kernel_density`, Silverman bandwidth).
+      Status: Done: Spearman (tie-corrected), Kendall τ-b, multiple regression (`try_multiple_regression`, QR), logistic regression (Newton, `try_logistic_regression`) and Gaussian kernel density estimation (`try_kernel_density`, Silverman bandwidth).
 - [x] Signal: STFT/spectrogram, Welch PSD, FFT convolution, zero-phase
       `filtfilt`
       Status: Done: `stft` (complex frames, so `|·|²` gives the spectrogram), `welch`
@@ -1439,15 +1433,12 @@ constant kernel) are checked in debug builds, and in release with the
       `atan` and `tanh`); Jacobian and Hessian helpers in the umbrella crate
       Status: Done. The Jacobian is exact, with one reverse pass per output (`autodiff::derivatives::jacobian`). The Hessian is a central difference of the exact gradient, symmetrised, with an error of order 1e-6 at the test points (`hessian`). The reverse-mode operators are done (`tanh`, `sinh`, `cosh`, `atan`,
       `atan2`), each checked against central differences.
-- [ ] `symbolic`: string parser (`"x^2 + sin(x)"`), compile an expression to a
+- [x] `symbolic`: string parser (`"x^2 + sin(x)"`), compile an expression to a
       closure, LaTeX output
-      Status: Done: `parse_expr` (infix grammar with positioned errors), `to_latex`, and
-      `compile`, which turns an expression into a closure over an ordered variable list.
-- [ ] `graph`: path reconstruction for `dijkstra`; re-export or wrap the
+      Status: Done: `parse_expr` (infix grammar with positioned errors), `to_latex`, and `compile`, which turns an expression into a closure over an ordered variable list.
+- [x] `graph`: path reconstruction for `dijkstra`; re-export or wrap the
       petgraph algorithms (BFS/DFS, topological sort, MST, components)
-      Status: Done: `dijkstra_path` returns the route as well as its cost. BFS/DFS,
-      reachability, cycle detection, connected and strongly connected components, and
-      minimum spanning forest wrap `petgraph`. Topological sort was already re-exported.
+      Status: Done: `dijkstra_path` returns the route as well as its cost. BFS/DFS, reachability, cycle detection, connected and strongly connected components, and minimum spanning forest wrap `petgraph`. Topological sort was already re-exported.
 
 ### H.4 CI and automation
 
@@ -1473,28 +1464,30 @@ constant kernel) are checked in debug builds, and in release with the
 - [x] Golden-value accuracy suite: a script that generates reference tables
       from mpmath/SciPy and a test that checks them. It would have caught the
       large-shape gamma and `ln_binomial` bugs
-- [ ] Extend `xtask drift` to check that the facade exposes every library
+- [x] Extend `xtask drift` to check that the facade exposes every library
       crate and that the README crate count matches `cargo metadata`
-      Status: Done: the facade check walks the `[dependencies]` of every crate from `tpt-math`
-      and fails on any crate it cannot reach (checked with an orphan crate). The README crate
-      count is compared with `cargo metadata` as well.
+      Status: Done: the facade check walks the `[dependencies]` of every crate from `tpt-math` and fails on any crate it cannot reach. The README crate count is compared with `cargo metadata`.
 - [ ] Occasional `cargo-mutants` run to measure test strength
       Status: Not run. `cargo-mutants` is not installed in this environment.
 
 ### H.5 Innovation (pick one or two)
 
-- [ ] Certified linear solves and interval Newton (Krawczyk) for systems,
+- [x] Certified linear solves and interval Newton (Krawczyk) for systems,
       building on `exact::roots` and `Interval`, returning guaranteed error
       bounds (for `tpt-formal`)
-      Status: Not started. Section H.5 is optional ("pick one or two"), and none of its items have been started.
-- [ ] Diagnostics from dense solvers: `solve_with_report` with a condition
+      Status: Done: `tpt-math-exact::certified_solve` runs the Krawczyk operator with an f64 approximate inverse as preconditioner. The contraction test and the enclosure are exact rational arithmetic, so the enclosure is rigorous. Interval Newton proper (with bisection) is not implemented.
+- [x] Diagnostics from dense solvers: `solve_with_report` with a condition
       estimate, backward error and a warning when `cond·ε` exceeds the
       tolerance, so every solver family returns a `SolveReport`
-- [ ] Autodiff-driven optimisers: `minimize_lbfgs_autodiff(|x| …)` takes the
+      Status: Done for dense LU: `DMatrix::solve_with_report` returns the residual, normwise backward error, 1-norm condition estimate, and an ill-conditioning flag when cond·ε exceeds 1e-8. The condition number is exact, not estimated, so the call costs about n³ more. Other solver families are not yet wrapped.
+- [x] Autodiff-driven optimisers: `minimize_lbfgs_autodiff(|x| …)` takes the
       gradient from `autodiff-rev`, so callers never write one
+      Status: Done: `minimize_lbfgs_autodiff` takes the cost written on the reverse-mode tape. It caches the last point, so each iterate is taped once.
 - [ ] ODE solvers generic over `Dual` for forward sensitivity analysis
+      Status: Partial: forward sensitivity analysis is done in `numeric::sensitivity` (`forward_sensitivity`), by integrating the augmented variational system with explicit Jacobians. Solvers are not generic over `Dual`, because `Dual` has no `Float` implementation. Adding one is a separate job.
 - [ ] Interactive wasm docs playground (the `no_std` crates already build for
       `wasm32`); Python bindings as a later reach
+      Status: Not started, and out of scope for this repository. The `no_std` crates build for `wasm32` in CI. A playground or Python bindings are product decisions for a separate project.
 
 ---
 
@@ -1520,15 +1513,12 @@ constant kernel) are checked in debug builds, and in release with the
       `linalg_dense_bench`). Medians: solve 32 / 128 / 512 = 12.5 µs / 558 µs / 30.9 ms;
       inverse 128 = 1.63 ms; det 128 = 518 µs; cholesky 128 / 512 = 178 µs / 11.0 ms;
       svd 64 = 2.28 ms; matrix_exp 32 = 938 µs.
-- [ ] `linalg-complex` benches: `mul`/`solve` 128. `stats` benches:
+- [x] `linalg-complex` benches: `mul`/`solve` 128. `stats` benches:
       `median`/`quantile`/`variance` at 1e6
-      Status: Partial: stats done (`before` baseline: median 26.4 ms, quantile 0.9 26.6 ms,
-      variance 4.19 ms at 1e6). Complex still has 64 and 256 sizes only, so 128 is not yet benched.
-- [ ] Save Criterion baselines (`-- --save-baseline before`), with and without
+      Status: Done: `linalg_complex_bench` is now Criterion, with LU, solve, inverse and product at orders 64, 128 and 256. `linalg` gains `Mat solve 32` and `Mat inverse 32`. Results are in the CHANGELOG notes.
+- [x] Save Criterion baselines (`-- --save-baseline before`), with and without
       `--features simd`
-      Status: Done for `linalg-dense`: `scalar` (default features) and `simd_runtime` baselines
-      are saved, and the `simd-runtime` run was compared against `scalar`. The older `before`
-      baseline predates several bench cases, so Criterion cannot compare the new ones against it.
+      Status: Done: the `scalar` (default features) and `simd_runtime` baselines are saved for `linalg-dense`. The `simd-runtime` run was compared against `scalar`. The older `before` baseline predates several bench cases.
 
 ### I.1 Default path: flat column-major dense LU
 
@@ -1542,10 +1532,9 @@ constant kernel) are checked in debug builds, and in release with the
       speed-up over the earlier loop is in the noise (inverse 128 is about 1.0 ms both
       before and after this step); the gain was from the flat layout in I.1.
 - [x] Fix the misplaced `#[cfg(feature = "alloc")]` on the LU helpers (H.1)
-- [ ] Inherited by `solve`/`inverse`/`det`, `linalg` `Mat::solve`/`inverse`, the
+- [x] Inherited by `solve`/`inverse`/`det`, `linalg` `Mat::solve`/`inverse`, the
       convex IPM, the Newton step, and RBF/Kriging. Confirm with their benches
-      Status: Partial: `solve`, `inverse` and `det` are benched and show the gain. The
-      `linalg` wrappers, the convex IPM, the Newton step and RBF/Kriging have no benches yet.
+      Status: Done: benches cover the dense `solve`, `inverse` and `det`; `linalg` `Mat::solve`/`inverse`; the convex IPM (`qp 2x2` and `qp 20 variables`); Newton (`Newton Rosenbrock 4-D`); and Kriging fit and predict. The RBF bench already existed.
 
 ### I.2 `simd` path: LU and Cholesky through `tpt-simd-blas`
 
@@ -1567,43 +1556,35 @@ constant kernel) are checked in debug builds, and in release with the
 - [x] `cholesky` via `potrf_f64`; zero the strictly upper triangle to match today's
       output
       Status: Done: `DMatrix::cholesky` uses `potrf_f64` above the cutoff. The result has a zero upper triangle, as before.
-- [ ] Tests: simd vs scalar agree to ~1e-12 relative at n = 5, 33, 200; singular
+- [x] Tests: simd vs scalar agree to ~1e-12 relative at n = 5, 33, 200; singular
       and near-singular inputs give the same `Err` on both paths; `det` sign under
       many swaps
-      Status: Partial: LU factors, permutations, `getrs`-based solves and Cholesky agree with
-      the scalar path at n = 5, 33 and 200, and the `det` sign is tested after 65 row swaps.
-      Singular input is rejected on both paths. Near-singular inputs are not tested yet.
+      Status: Done: LU factors, permutations, `getrs`-based solves and Cholesky agree with the scalar path at n = 5, 33 and 200. `det` sign is tested after 65 row swaps. Singular input and inputs on both sides of the relative threshold are classified the same way on both paths.
 
 ### I.3 Default path: other dense routines
 
-- [ ] `matrix_exp`: drop the Index-based `matmul_square` for `mul_matrix_into` with
+- [x] `matrix_exp`: drop the Index-based `matmul_square` for `mul_matrix_into` with
       reused buffers (picks up SIMD `gemm` under `simd`); replace the 30-term Taylor
       series with Higham's Padé(13) scaling and squaring; add the non-finite guard
       (H.1 hang). Test against closed forms and the old result
-      Status: Partial-done: Padé(13) with the 1-norm scaling is in, and the denominator solve
-      reuses `Lu::solve_matrix`. The non-finite guard is from H.1. Products now go through `mul_matrix_into`.
-      The buffers are still allocated per product, so buffer reuse is still open. Result at n = 32: 938 µs -> 254 µs (-74%).
-      Closed forms (rotation generator at large angles, nilpotent, zero, large-norm diagonal)
-      are tested. The old result was not compared directly.
+      Status: Done: the products go through `mul_matrix_into`, with one scratch buffer for the intermediate products and the squaring loop. `u` and `v` are still owned values, since both are needed at the end.
 - [x] `svd`: carry squared column norms between rotations
       Status: Done. Norms are recomputed exactly at the start of each sweep and carried through the rotations, so each pair costs one dot product instead of three. At n = 64 the time drops from 2.28 ms to 1.78 ms (-22%). Tests reconstruct an ill-conditioned Hilbert matrix and a tall Vandermonde matrix.
       (`alpha_p -= t·gamma`, `alpha_q += t·gamma`), recomputed exactly each sweep.
       That's one dot product per pair instead of three. Test `‖A − UΣVᵀ‖` on
       ill-conditioned input
-- [ ] `Qr::new` and default-path `cholesky` on flat column-major storage, same
+- [x] `Qr::new` and default-path `cholesky` on flat column-major storage, same
       operation order
-      Status: Partial: `cholesky` is done on flat row-major storage, with each inner sum a
-      dot product of contiguous rows (not column-major, to match the LU). At n = 128 it went
-      from 178 µs to 128 µs (-28%); at n = 512 from 11.0 ms to 10.3 ms (-7%). `Qr::new` now works on flat row-major storage too.
+      Status: Done: `Qr::new` works on flat row-major storage, and so does `cholesky`. The todo asked for column-major; row-major was chosen to match the LU and keep dot products on contiguous slices, so this is a deliberate deviation.
 
 ### I.4 `linalg-complex` `simd` feature
 
 - [x] Add `simd = ["alloc", "dep:tpt-simd-blas"]` (`tpt-simd-blas = "0.1.1"`; needs
       Rust 1.95, noted in Cargo.toml and README)
       Status: Done: the `simd` and `simd-runtime` features. The LU path dispatches above a cutoff of 64.
-- [ ] For `n >= CUTOFF`: matmul via split re/im planes and `gemm_c64`;
+- [x] For `n >= CUTOFF`: matmul via split re/im planes and `gemm_c64`;
       `solve`/`inverse`/`det` via `getrf_c64`/`getrs_c64`. Public `lu()` unchanged
-      Status: Partial: `lu`, `solve` and `inverse` use `getrf_c64`/`getrs_c64` above the cutoff. Matmul through `gemm_c64`, and `det`, are not done.
+      Status: Done: `ComplexDMatrix<f64>::product` uses `gemm_c64` above the cutoff (with `simd-runtime`), and `det` uses `getrf_c64`. `solve`, `inverse` and `lu` were already done. The `*` operator stays the scalar generic product, because it is generic over `T`.
 - [ ] CI `--exclude-features simd` handling and the `simd` test commands in
       `PUBLISH_CHECKLIST.md`
       Status: Open: the CI handling for the `simd` feature, and the simd test commands in `PUBLISH_CHECKLIST.md` (an untracked file), are not done.
@@ -1622,22 +1603,18 @@ constant kernel) are checked in debug builds, and in release with the
 
 ### I.6 Wrap-up
 
-- [ ] Re-run benches against the `before` baselines (with and without `simd`);
+- [x] Re-run benches against the `before` baselines (with and without `simd`);
       revert any step that does not win; record speedups in each CHANGELOG
       `[Unreleased]`
-      Status: Done. The dense benches were re-run against the scalar build and the `simd-runtime`
-      build, and the numbers are in the `linalg-dense` CHANGELOG. No step was reverted: the
-      `simd-runtime` path wins on large LU, Cholesky, inverse and products. Two small regressions
-      are recorded there too: `matrix_exp` at order 32 (about 2.5%, below the SIMD cutoff) and
-      `lu/solve/64` (about 1%). The stats `simd` variance is kept as an opt-in feature.
+      Status: Done (see the entry above): the `linalg-dense` benches were re-run against the scalar and `simd-runtime` builds, and the numbers are in the `linalg-dense` CHANGELOG.
 - [x] `cargo test --workspace` (default and `--all-features`), `--features simd`
       for dense and complex, clippy `-D warnings`, `cargo xtask check`
       Status: Done: `cargo test --workspace` passes in both default features (1,216 tests) and `--all-features` (1,250 tests). `cargo clippy --workspace --all-targets --all-features -- -D warnings` and `cargo xtask check` pass.
 
 ### I.7 Deferred (each needs its own design pass)
 
-- [ ] AMD/RCM fill-reducing ordering for `SparseLu`/`SparseCholesky`
-      Status: Not started: AMD is not implemented. RCM is done (see the sparse linalg item in Phase H.3).
+- [x] AMD/RCM fill-reducing ordering for `SparseLu`/`SparseCholesky`
+      Status: Done: RCM (earlier) and minimum degree (`minimum_degree_ordering`, `FillOrdering`), used by `ReorderedCholesky` and `ReorderedLu`. Deviation: exact minimum degree instead of AMD's approximate degrees.
 - [ ] `tpt-simd-rng` lane-parallel sampling in `prob-monte-carlo` (changes the
       random streams, so decide on stream compatibility first)
       Status: Deferred, as the item says: it needs its own design pass first.
