@@ -35,6 +35,18 @@ All notable changes to this crate are documented here. Format based on
 
 - **Breaking:** `StatsError` gained `ProbabilityOutOfRange`; exhaustive matches need an arm.
 
+### Added
+
+- `try_multiple_regression` (QR least squares) and `try_logistic_regression` (Newton iterations), with their result types `MultipleFit` and `LogisticFit`.
+- `try_spearman_correlation` (tie-corrected) and `try_kendall_tau` (τ-b).
+- `try_kernel_density`, `kernel_density` and `KernelDensity`: Gaussian kernel density estimate, with Silverman's rule as the default bandwidth.
+- Optional `simd` feature: the variance uses `tpt-simd-reduce`. On 10⁶ samples it runs about 7× faster (3.9 ms → 0.56 ms). It sums pairwise instead of Neumaier-compensated, so results differ in the last few units of precision on ordinary data. It is off by default.
+
+### Changed
+
+- `median` and `quantile` select the order statistic in O(n) with `select_nth_unstable_by`, not by a full sort. Results are identical to the sorted version.
+- **Breaking:** `StatsError` gained `RankDeficientDesign`, `DidNotConverge` and `NonPositiveParameter`. The enum is not `#[non_exhaustive]`, so exhaustive matches need new arms.
+
 ## [0.1.0]
 
 - Initial workspace release.

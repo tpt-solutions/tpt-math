@@ -10,7 +10,6 @@ All notable changes to this crate are documented here. Format based on
 
 - `numerical_gradient` scales its step with the coordinate, `h · max(1, |xᵢ|)`. An absolute step rounded to zero far from the origin and reported a flat gradient, which made the optimiser declare false convergence. Results are unchanged for `|xᵢ| ≤ 1`.
 
-
 ### Added
 
 - `Solution::report()`, returning a `tpt_math_numeric::SolveReport`: `Converged`, `Breakdown` for a stalled line search, or `NotConverged`.
@@ -19,7 +18,6 @@ All notable changes to this crate are documented here. Format based on
 ### Changed
 
 - `Solution` has a new public field `residual`. Code that builds a `Solution` with a struct literal must set it.
-
 
 - **`argmin`/`argmin-math` dependency removed entirely.** The solvers behind
   `minimize_gradient_descent`, `minimize_conjugate_gradient` and
@@ -42,6 +40,12 @@ All notable changes to this crate are documented here. Format based on
 - `minimize_nelder_mead` and `minimize_nelder_mead_with`: derivative-free simplex minimisation.
 - `numerical_gradient`: central finite-difference gradients.
 - `minimize_lbfgs` and `minimize_lbfgs_with`: limited-memory BFGS with the two-loop recursion and the strong-Wolfe line search.
+
+### Added
+
+- `levenberg_marquardt`: nonlinear least squares by Levenberg–Marquardt with Nielsen's damping update. It takes a residual function and its Jacobian, and returns a `LeastSquaresSolution` with the termination reason (`LsTermination`).
+- `curve_fit`: fits `y ≈ f(x; p)` with a central-difference Jacobian.
+- `LeastSquaresOptions::with_bounds`: componentwise box constraints. The solver projects each trial point onto the box and tests convergence on the projected gradient. This is a projected method, not an active-set one like L-BFGS-B.
 
 ## [0.1.0]
 

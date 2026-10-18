@@ -11,7 +11,6 @@ and this project adheres to semantic versioning.
 
 - `ComplexDMatrix::lu_with_tolerance` (absolute pivot threshold) and `lu_with_relative_tolerance` (scale-invariant). `lu()` keeps its `1e-12` default. A zero matrix is always rejected.
 
-
 ### Added
 
 - `ComplexDMatrix::try_eigenvalues`, the fallible form of `eigenvalues`.
@@ -27,6 +26,14 @@ and this project adheres to semantic versioning.
 ### Fixed
 
 - Division, `inv` and `norm` no longer overflow for large magnitudes (Smith's algorithm and a scaled hypot).
+
+### Added
+
+- Optional `simd` feature (needs Rust 1.95 or later, as `tpt-simd-blas` does): `solve`, `inverse` and `lu` use `getrf_c64`/`getrs_c64` for matrices of order 64 and above. `simd-runtime` adds run-time AVX2 detection and turns on the dispatch.
+
+### Changed
+
+- **Breaking:** `zeros`, `transpose`, `solve` and `inverse` need the `alloc` feature. `std` enables it, so default builds keep the same API.
 
 ## [0.1.0] - 2026-08-19
 

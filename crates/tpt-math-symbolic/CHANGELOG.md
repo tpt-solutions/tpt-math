@@ -10,7 +10,6 @@ All notable changes to this crate are documented here. Format based on
 
 - Sums and products are ordered by their printed form. `simplify` is now a normal form: a second pass returns the first pass's output. The order of terms in a simplified sum or product can differ from earlier versions.
 
-
 ### Added
 
 - Named functions `asin`, `acos`, `atan`, `sinh`, `cosh`, `tanh`: folded numerically by `simplify` and differentiated by the chain rule. Checked against central differences.
@@ -23,6 +22,12 @@ All notable changes to this crate are documented here. Format based on
 ### Added
 
 - Like terms are merged in sums: `2x + 3x` simplifies to `5x`, `x − x` to `0`, and `x·y + 2(x·y)` to `3(x·y)`.
+
+### Added
+
+- `parse_expr`: parses infix text such as `x^2 + sin(x)` into an `Expr`, with positioned `ParseError`s. Exponents must be non-negative integer literals.
+- `Expr::to_latex`: LaTeX output for an expression.
+- `compile`, `Expr::compile`, `Compiled` and `CompileError`: compiles an expression to a closure over an ordered variable list. Variable and function names are checked at compile time, and the closure returns the same values as `eval`, including `None` on division by zero.
 
 ## [0.1.0]
 

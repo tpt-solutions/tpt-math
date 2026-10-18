@@ -16,6 +16,17 @@ All notable changes to this crate are documented here. Format based on
 - `quadrature` module: composite `simpson` rule.
 - `ode` module: fixed-step classical Runge–Kutta, `rk4_step` and `rk4_integrate`, on fixed-size state arrays (no allocation).
 
+### Added
+
+- `ode::dopri5_dense` and `DenseSolution`: adaptive Dormand–Prince 5(4) with cubic Hermite dense output, `eval(t)` at any time within the span.
+- `ode::dopri5_events`, `Crossing`, `Event` and `EventRun`: locates sign changes of an event function `g(t, y)` by bisection on the dense output, with optional termination at the first event.
+- `stiff::rosenbrock2_integrate`: stiff solver, the L-stable second-order Rosenbrock method ROS2 with step-doubling error control. It takes the Jacobian and handles autonomous systems. Non-autonomous systems are made autonomous by adding `t` as a state.
+- The `alloc` feature now enables `extern crate alloc`, which the dense-output and event code needs.
+
+### Changed
+
+- The Dormand–Prince step is shared by `dopri5_integrate`, `dopri5_dense` and `dopri5_events`. `dopri5_integrate` behaves as before.
+
 ## [0.1.0]
 
 - Initial workspace release.

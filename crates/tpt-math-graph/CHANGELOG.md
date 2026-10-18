@@ -22,6 +22,13 @@ and this project adheres to semantic versioning.
 - `astar` no longer loops forever when every open `f` is infinite or NaN.
 - `max_flow` keeps small capacities; the tolerance is now relative to the largest capacity instead of an absolute `1e-12`.
 
+### Added
+
+- `dijkstra_path`: shortest path as the node route as well as its cost.
+- `bfs_order` and `dfs_order`: breadth-first and depth-first (preorder) traversal from a start node.
+- `has_path`, `is_cyclic`, `connected_components` (weakly connected for directed graphs) and `strongly_connected_components` (Tarjan), thin wraps over `petgraph`.
+- `minimum_spanning_tree`: Kruskal spanning forest as `(source, target, weight)` triples. Requires `N: Clone`, because the wrapped `petgraph` iterator does.
+
 ## [0.1.0] - 2026-08-19
 
 ### Added

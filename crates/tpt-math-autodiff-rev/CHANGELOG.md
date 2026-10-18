@@ -19,6 +19,11 @@ All notable changes to this crate are documented here. Format based on
 
 - The derivative of `Powi(a, 0)` and `Powf(a, 0)` is `0` at `a = 0` (it was NaN from `0 · 0⁻¹`).
 
+### Added
+
+- Reverse-mode `tanh`, `sinh`, `cosh`, `atan` and `atan2`. Each is checked against central differences.
+- `Op` gained variants for them, so `Op` is a minor-breaking change, as noted above.
+
 ## [0.1.0]
 
 - Initial workspace release.

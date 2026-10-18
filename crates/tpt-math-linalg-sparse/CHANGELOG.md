@@ -12,7 +12,6 @@ and this project adheres to SemVer.
 - `gmres_right_preconditioned_with_report`: GMRES returning a `SolveReport` for every outcome. The plain `gmres` and `gmres_right_preconditioned` report the same cases as errors, as before.
 - Benchmarks for CG and IC(0)-preconditioned CG on a 40x40 Laplacian.
 
-
 ### Added
 
 - `conjugate_gradient_with_report` and `bicgstab_with_report`: return `(x, SolveReport)` for every outcome, including breakdown and non-convergence, which the plain solvers report as errors. Only a dimension mismatch is an `Err`.
@@ -45,6 +44,19 @@ and this project adheres to SemVer.
 ### Fixed
 
 - BiCGSTAB exits early when the half-step residual `‖s‖` is already within tolerance.
+
+### Added
+
+- `LinearOperator` trait (`nrows`, `ncols`, `apply`), implemented for `CsrMatrix`. `matrix_free` wraps a closure as a square operator with no stored matrix.
+- `conjugate_gradient_op`: conjugate gradients for any `LinearOperator`, with the same relative-tolerance rule as `conjugate_gradient`.
+- `lanczos`, `Which` and `LanczosEigenpairs`: Lanczos eigensolver for symmetric operators. It uses full reorthogonalization, returns Ritz values and vectors with residual estimates, and picks the largest or smallest end of the spectrum.
+- `reverse_cuthill_mckee` (bandwidth-reducing ordering), `permute_symmetric` and `ReorderedCholesky` (Cholesky factorisation in an RCM order, with the permutation applied and undone internally).
+
+### Changed
+
+- The scalar conjugate-gradient loop is shared between `conjugate_gradient` and the operator form. Results are unchanged.
+- **Fixed:** the `x0` length is checked before the SIMD dispatch, so a wrong-length guess returns `DimensionMismatch` rather than panicking.
+- `to_csr`, `to_csc` and the transposes are gated behind `alloc`, as the other sparse containers are.
 
 ## [0.1.0] - 2026-08-19
 
