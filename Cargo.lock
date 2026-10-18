@@ -1277,6 +1277,7 @@ dependencies = [
  "criterion",
  "rand 0.9.5",
  "rand_distr",
+ "tpt-math-linalg-dense",
  "tpt-math-prob-core",
 ]
 
