@@ -11,11 +11,15 @@
 //! provides. On irregular meshes AMD usually gives less fill, and it is not
 //! implemented here.
 
-use alloc::{collections::VecDeque, vec, vec::Vec};
+use alloc::{
+    collections::{BTreeSet, VecDeque},
+    vec,
+    vec::Vec,
+};
 
 use tpt_math_linalg_dense::DVector;
 
-use crate::{CooMatrix, CsrMatrix, SparseCholesky, SparseError};
+use crate::{CooMatrix, CsrMatrix, SparseCholesky, SparseError, SparseLu};
 
 /// The adjacency lists of the symmetrised pattern of `a`, without self-loops.
 fn symmetric_adjacency(a: &CsrMatrix<f64>) -> Vec<Vec<usize>> {
@@ -147,6 +151,74 @@ pub fn reverse_cuthill_mckee(a: &CsrMatrix<f64>) -> Result<Vec<usize>, SparseErr
     Ok(order)
 }
 
+/// A minimum-degree ordering of the symmetrised pattern of `a`.
+///
+/// Repeatedly eliminates the unnumbered node of smallest current degree in the
+/// elimination graph, joining its remaining neighbours into a clique. This is
+/// the minimum-degree idea that AMD approximates. Degrees here are exact, so
+/// the cost grows with the square of the fill. That is fine for matrices of a
+/// few thousand unknowns, but not for very large problems. Ties go to the lowest
+/// index, so the result is deterministic.
+///
+/// Returns `perm` with `perm[new] = old`, the elimination order.
+///
+/// # Errors
+///
+/// Returns [`SparseError::DimensionMismatch`] if `a` is not square.
+///
+/// # Examples
+///
+/// ```
+/// use tpt_math_linalg_sparse::{minimum_degree_ordering, CooMatrix};
+///
+/// // An arrow matrix: the hub (node 0) should be eliminated last.
+/// let n = 5;
+/// let mut coo = CooMatrix::<f64>::new(n, n);
+/// for i in 0..n {
+///     coo.push(i, i, 2.0);
+///     coo.push(0, i, 1.0);
+///     coo.push(i, 0, 1.0);
+/// }
+/// let perm = minimum_degree_ordering(&coo.to_csr()).unwrap();
+/// assert_eq!(*perm.last().unwrap(), 0);
+/// ```
+pub fn minimum_degree_ordering(a: &CsrMatrix<f64>) -> Result<Vec<usize>, SparseError> {
+    let n = a.nrows();
+    if a.ncols() != n {
+        return Err(SparseError::DimensionMismatch);
+    }
+    let mut adj: Vec<BTreeSet<usize>> = vec![BTreeSet::new(); n];
+    for (i, j, _) in a.iter() {
+        if i != j {
+            adj[i].insert(j);
+            adj[j].insert(i);
+        }
+    }
+    let mut eliminated = vec![false; n];
+    let mut order = Vec::with_capacity(n);
+    for _ in 0..n {
+        let next = (0..n)
+            .filter(|&v| !eliminated[v])
+            .min_by_key(|&v| (adj[v].len(), v))
+            .ok_or(SparseError::DimensionMismatch)?;
+        eliminated[next] = true;
+        order.push(next);
+        let neighbours: Vec<usize> = adj[next].iter().copied().collect();
+        for &u in &neighbours {
+            adj[u].remove(&next);
+        }
+        // Eliminating `next` makes its neighbours a clique.
+        for (idx, &u) in neighbours.iter().enumerate() {
+            for &v in &neighbours[idx + 1..] {
+                adj[u].insert(v);
+                adj[v].insert(u);
+            }
+        }
+        adj[next].clear();
+    }
+    Ok(order)
+}
+
 /// The symmetric permutation `P A Pᵀ` of `a`, where `perm[new] = old`.
 ///
 /// Entry `(i, j)` of `a` moves to `(new(i), new(j))`, with `new` the inverse of
@@ -227,6 +299,95 @@ impl ReorderedCholesky {
         let permuted_rhs = DVector::from_fn(n, |new| b[self.perm[new]]);
         let y = self.factor.solve(&permuted_rhs)?;
         // `inverse[old]` is the position of `old` in the permuted numbering.
+        let mut inverse = vec![0; n];
+        for (new, &old) in self.perm.iter().enumerate() {
+            inverse[old] = new;
+        }
+        Ok(DVector::from_fn(n, |old| y[inverse[old]]))
+    }
+}
+
+/// The fill-reducing ordering used to number the unknowns before a factorisation.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FillOrdering {
+    /// Reverse Cuthill–McKee: keeps the bandwidth small.
+    ReverseCuthillMckee,
+    /// Minimum degree: the greedy elimination ordering (see
+    /// [`minimum_degree_ordering`]). Usually gives less fill than RCM.
+    MinimumDegree,
+}
+
+impl FillOrdering {
+    /// The permutation `perm[new] = old` for `a` under this ordering.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SparseError::DimensionMismatch`] if `a` is not square.
+    pub fn permutation(self, a: &CsrMatrix<f64>) -> Result<Vec<usize>, SparseError> {
+        match self {
+            FillOrdering::ReverseCuthillMckee => reverse_cuthill_mckee(a),
+            FillOrdering::MinimumDegree => minimum_degree_ordering(a),
+        }
+    }
+}
+
+impl ReorderedCholesky {
+    /// Factor the SPD matrix `a` after a reordering chosen by `ordering`.
+    ///
+    /// # Errors
+    ///
+    /// As [`ReorderedCholesky::factor`].
+    pub fn factor_with(a: &CsrMatrix<f64>, ordering: FillOrdering) -> Result<Self, SparseError> {
+        let perm = ordering.permutation(a)?;
+        let permuted = permute_symmetric(a, &perm)?;
+        let factor = SparseCholesky::factor(&permuted)?;
+        Ok(ReorderedCholesky { perm, factor })
+    }
+}
+
+/// A sparse LU factorisation computed after a symmetric fill-reducing reordering.
+///
+/// The matrix is permuted as `P A Pᵀ` before partial-pivoting LU, so the same
+/// numbering is applied to rows and columns. Pivoting can still move rows, but
+/// the ordering keeps the structure close to the symmetric pattern.
+#[derive(Debug)]
+pub struct ReorderedLu {
+    /// `perm[new] = old`.
+    perm: Vec<usize>,
+    lu: SparseLu,
+}
+
+impl ReorderedLu {
+    /// Factor `a` after a reordering chosen by `ordering`.
+    ///
+    /// # Errors
+    ///
+    /// Returns the errors of [`SparseLu::factor`] for the permuted matrix, and
+    /// [`SparseError::DimensionMismatch`] for a non-square `a`.
+    pub fn factor(a: &CsrMatrix<f64>, ordering: FillOrdering) -> Result<Self, SparseError> {
+        let perm = ordering.permutation(a)?;
+        let permuted = permute_symmetric(a, &perm)?;
+        let lu = SparseLu::factor(&permuted)?;
+        Ok(ReorderedLu { perm, lu })
+    }
+
+    /// The permutation used, with `perm[new] = old`.
+    pub fn permutation(&self) -> &[usize] {
+        &self.perm
+    }
+
+    /// Solve `A x = b` in the original numbering.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SparseError::DimensionMismatch`] if `b` has the wrong length.
+    pub fn solve(&self, b: &DVector<f64>) -> Result<DVector<f64>, SparseError> {
+        let n = self.perm.len();
+        if b.len() != n {
+            return Err(SparseError::DimensionMismatch);
+        }
+        let permuted_rhs = DVector::from_fn(n, |new| b[self.perm[new]]);
+        let y = self.lu.solve(&permuted_rhs)?;
         let mut inverse = vec![0; n];
         for (new, &old) in self.perm.iter().enumerate() {
             inverse[old] = new;
@@ -347,5 +508,87 @@ mod tests {
             reordered <= natural,
             "reordered {reordered}, natural {natural}"
         );
+    }
+
+    /// The 5-point Laplacian on a `k × k` grid (SPD), numbered row by row.
+    fn grid_laplacian(k: usize) -> CsrMatrix<f64> {
+        let n = k * k;
+        let mut coo = CooMatrix::new(n, n);
+        for r in 0..k {
+            for c in 0..k {
+                let i = r * k + c;
+                coo.push(i, i, 4.0);
+                if c + 1 < k {
+                    coo.push(i, i + 1, -1.0);
+                    coo.push(i + 1, i, -1.0);
+                }
+                if r + 1 < k {
+                    coo.push(i, i + k, -1.0);
+                    coo.push(i + k, i, -1.0);
+                }
+            }
+        }
+        coo.to_csr()
+    }
+
+    #[test]
+    fn minimum_degree_reduces_fill_on_a_grid() {
+        let a = grid_laplacian(8);
+        let natural = SparseCholesky::factor(&a).unwrap().nnz();
+        let md = ReorderedCholesky::factor_with(&a, FillOrdering::MinimumDegree)
+            .unwrap()
+            .nnz();
+        assert!(md < natural, "minimum degree {md}, natural {natural}");
+        assert!(is_permutation(&minimum_degree_ordering(&a).unwrap()));
+    }
+
+    #[test]
+    fn both_orderings_solve_in_the_original_numbering() {
+        let a = grid_laplacian(6);
+        let b = DVector::from_fn(36, |i| (i as f64 * 0.37).sin());
+        for ordering in [
+            FillOrdering::ReverseCuthillMckee,
+            FillOrdering::MinimumDegree,
+        ] {
+            let x = ReorderedCholesky::factor_with(&a, ordering)
+                .unwrap()
+                .solve(&b)
+                .unwrap();
+            let ax = a.matvec(&x).unwrap();
+            for i in 0..36 {
+                assert!((ax[i] - b[i]).abs() < 1e-10, "{ordering:?} row {i}");
+            }
+        }
+    }
+
+    #[test]
+    fn reordered_lu_solves_a_nonsymmetric_system() {
+        // Nonsymmetric, diagonally dominant band matrix.
+        let n = 9;
+        let mut coo = CooMatrix::new(n, n);
+        for i in 0..n {
+            coo.push(i, i, 5.0);
+            if i + 1 < n {
+                coo.push(i, i + 1, -1.0);
+            }
+            if i + 2 < n {
+                coo.push(i + 2, i, -2.0);
+            }
+        }
+        let a = coo.to_csr();
+        let b = DVector::from_fn(n, |i| 1.0 + i as f64);
+        for ordering in [
+            FillOrdering::ReverseCuthillMckee,
+            FillOrdering::MinimumDegree,
+        ] {
+            let x = ReorderedLu::factor(&a, ordering)
+                .unwrap()
+                .solve(&b)
+                .unwrap();
+            let ax = a.matvec(&x).unwrap();
+            for i in 0..n {
+                assert!((ax[i] - b[i]).abs() < 1e-10, "{ordering:?} row {i}");
+            }
+        }
     }
 }

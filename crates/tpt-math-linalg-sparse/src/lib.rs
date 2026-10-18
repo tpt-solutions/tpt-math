@@ -56,7 +56,10 @@ pub use operator::{
 #[cfg(feature = "alloc")]
 mod ordering;
 #[cfg(feature = "alloc")]
-pub use ordering::{permute_symmetric, reverse_cuthill_mckee, ReorderedCholesky};
+pub use ordering::{
+    minimum_degree_ordering, permute_symmetric, reverse_cuthill_mckee, FillOrdering,
+    ReorderedCholesky, ReorderedLu,
+};
 
 use alloc::vec::Vec;
 
