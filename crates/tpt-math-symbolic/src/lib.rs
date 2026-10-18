@@ -162,6 +162,16 @@ impl<C: Coefficient> Expr<C> {
     pub fn func(name: impl Into<String>, inner: Expr<C>) -> Expr<C> {
         Expr::Func(name.into(), Box::new(inner))
     }
+
+    /// Compile this expression to a closure over the variables `vars`.
+    ///
+    /// See [`compile`] for the calling convention and the error cases.
+    pub fn compile(&self, vars: &[&str]) -> Result<Compiled<C>, CompileError>
+    where
+        C: 'static,
+    {
+        compile(self, vars)
+    }
 }
 
 impl<C: Coefficient> Symbolic<C> for Expr<C> {
@@ -217,6 +227,8 @@ impl<C: Coefficient> Symbolic<C> for Expr<C> {
 /// `Expr<f64>` — the default, floating-point symbolic expression.
 pub type Expr64 = Expr<f64>;
 
+mod compile;
+pub use compile::{compile, CompileError, Compiled};
 mod syntax;
 pub use syntax::{parse_expr, ParseError};
 
@@ -479,23 +491,28 @@ fn to_f64<C: Coefficient>(c: C) -> f64 {
 /// names this crate does not know, so they stay symbolic instead of being
 /// silently treated as the identity.
 fn apply_func<C: Coefficient>(name: &str, c: C) -> Option<C> {
-    let f = to_f64(c);
-    let r = match name {
-        "sin" => f.sin(),
-        "cos" => f.cos(),
-        "tan" => f.tan(),
-        "exp" => f.exp(),
-        "ln" => f.ln(),
-        "sqrt" => f.sqrt(),
-        "asin" => f.asin(),
-        "acos" => f.acos(),
-        "atan" => f.atan(),
-        "sinh" => f.sinh(),
-        "cosh" => f.cosh(),
-        "tanh" => f.tanh(),
+    let f = func_pointer(name)?;
+    Some(C::from(f(to_f64(c))))
+}
+
+/// The `f64` implementation of a named unary function, or `None` if the name
+/// is unknown. Shared by [`apply_func`] and the closure compiler.
+fn func_pointer(name: &str) -> Option<fn(f64) -> f64> {
+    Some(match name {
+        "sin" => f64::sin,
+        "cos" => f64::cos,
+        "tan" => f64::tan,
+        "exp" => f64::exp,
+        "ln" => f64::ln,
+        "sqrt" => f64::sqrt,
+        "asin" => f64::asin,
+        "acos" => f64::acos,
+        "atan" => f64::atan,
+        "sinh" => f64::sinh,
+        "cosh" => f64::cosh,
+        "tanh" => f64::tanh,
         _ => return None,
-    };
-    Some(C::from(r))
+    })
 }
 
 fn derivative<C: Coefficient>(e: &Expr<C>, var: &str) -> Expr<C> {
