@@ -1,6 +1,6 @@
 //! Compiling an [`Expr`] to a closure.
 //!
-//! [`Expr::eval`] walks the tree and looks every variable up in a `HashMap` on
+//! [`eval`](crate::Symbolic::eval) walks the tree and looks every variable up in a `HashMap` on
 //! each call. For an expression evaluated many times (a root finder, a quadrature
 //! rule, a plotting loop) that is wasted work. [`compile`] builds the closure
 //! tree once, resolves variables to argument positions, and checks names up
@@ -11,7 +11,7 @@ use std::fmt;
 use crate::{func_pointer, to_f64, Coefficient, Expr};
 
 /// A compiled node: takes the argument slice and yields the value, or `None`
-/// where [`Expr::eval`] would (division by zero).
+/// where [`eval`](crate::Symbolic::eval) would (division by zero).
 type Node<C> = Box<dyn Fn(&[C]) -> Option<C>>;
 
 /// Why an expression could not be compiled.
@@ -39,7 +39,7 @@ impl std::error::Error for CompileError {}
 /// An expression compiled to a closure over an argument slice.
 ///
 /// Arguments are matched to the variable list given to [`compile`], by
-/// position. [`Compiled::call`] returns the same value as [`Expr::eval`] with
+/// position. [`Compiled::call`] returns the same value as [`eval`](crate::Symbolic::eval) with
 /// those bindings, or `None` where `eval` would return `None`.
 pub struct Compiled<C> {
     arity: usize,
@@ -56,7 +56,7 @@ impl<C> Compiled<C> {
     /// [`compile`].
     ///
     /// Returns `None` if `args.len()` differs from [`arity`](Self::arity), or
-    /// where [`Expr::eval`] would return `None` (division by zero).
+    /// where [`eval`](crate::Symbolic::eval) would return `None` (division by zero).
     pub fn call(&self, args: &[C]) -> Option<C> {
         if args.len() != self.arity {
             return None;

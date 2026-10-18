@@ -11,7 +11,7 @@
 //! ```
 //!
 //! Exponents must be non-negative integer literals, because [`Expr::Pow`]
-//! takes a `usize`. Function names are the ones [`Expr::eval`] understands.
+//! takes a `usize`. Function names are the ones [`eval`](crate::Symbolic::eval) understands.
 
 use core::fmt;
 

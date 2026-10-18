@@ -50,5 +50,5 @@ harness = false
 workspace = true
 
 [package.metadata.docs.rs]
-features = ["alloc"]
+all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
