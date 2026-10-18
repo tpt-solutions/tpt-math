@@ -20,7 +20,10 @@ pub use num_bigint::{BigInt, BigUint};
 pub use num_rational::BigRational;
 pub use tpt_math_numeric as numeric;
 
+pub mod certify;
 pub mod roots;
+
+pub use certify::{certified_solve, CertifyError};
 use tpt_math_numeric::FromPrimitive;
 
 /// Exact rational number type alias.
