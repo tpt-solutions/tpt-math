@@ -1489,10 +1489,16 @@ constant kernel) are checked in debug builds, and in release with the
 
 ### I.0 Benchmarks and baseline
 
-- [ ] `linalg-dense` benches: `solve`/`Lu::new` at 32/128/512, `inverse` 128,
+- [x] `linalg-dense` benches: `solve`/`Lu::new` at 32/128/512, `inverse` 128,
       `det` 128, `cholesky` 128/512, `svd` 64, `matrix_exp` 32
+      Status: Done, default features. Baseline saved as `before` (criterion, bench target
+      `linalg_dense_bench`). Medians: solve 32 / 128 / 512 = 12.5 µs / 558 µs / 30.9 ms;
+      inverse 128 = 1.63 ms; det 128 = 518 µs; cholesky 128 / 512 = 178 µs / 11.0 ms;
+      svd 64 = 2.28 ms; matrix_exp 32 = 938 µs.
 - [ ] `linalg-complex` benches: `mul`/`solve` 128. `stats` benches:
       `median`/`quantile`/`variance` at 1e6
+      Status: Partial: stats done (`before` baseline: median 26.4 ms, quantile 0.9 26.6 ms,
+      variance 4.19 ms at 1e6). Complex still has 64 and 256 sizes only, so 128 is not yet benched.
 - [ ] Save Criterion baselines (`-- --save-baseline before`), with and without
       `--features simd`
 
