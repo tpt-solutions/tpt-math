@@ -1027,7 +1027,8 @@ impl DMatrix<f64> {
 #[cfg(feature = "alloc")]
 #[derive(Clone, Debug)]
 pub struct Lu {
-    lu: Vec<Vec<f64>>,
+    /// Flat row-major `n × n` factors; see [`partial_pivot_lu_with`].
+    lu: Vec<f64>,
     piv: Vec<usize>,
 }
 
@@ -1091,7 +1092,7 @@ impl Lu {
 
     /// The dimension `n` of the factored `n × n` matrix.
     pub fn dim(&self) -> usize {
-        self.lu.len()
+        self.piv.len()
     }
 
     /// Solve `A x = b` using the stored factorisation.
@@ -1253,7 +1254,7 @@ impl DMatrix<f64> {
                     }
                 }
                 let sign = if (n - cycles) % 2 == 0 { 1.0 } else { -1.0 };
-                Ok(sign * (0..n).map(|i| lu[i][i]).product::<f64>())
+                Ok(sign * (0..n).map(|i| lu[i * n + i]).product::<f64>())
             }
             Err(DenseError::Singular { .. }) => Ok(0.0),
             Err(e) => Err(e),
@@ -1675,28 +1676,33 @@ const DEFAULT_PIVOT_RELATIVE: f64 = 1e-12;
 /// Returns the LU factorization (in place) and the row permutation, using the
 /// default relative pivot tolerance.
 #[cfg(feature = "alloc")]
-fn partial_pivot_lu(m: &DMatrix<f64>) -> Result<(Vec<Vec<f64>>, Vec<usize>), DenseError> {
+fn partial_pivot_lu(m: &DMatrix<f64>) -> Result<(Vec<f64>, Vec<usize>), DenseError> {
     let scale = m.iter().fold(0.0_f64, |acc, v| acc.max(v.abs()));
     partial_pivot_lu_with(m, DEFAULT_PIVOT_RELATIVE * scale)
 }
 
 /// [`partial_pivot_lu`] with an explicit absolute pivot tolerance.
+///
+/// The factors are returned as one flat row-major buffer of `n × n` entries,
+/// with `L` below the diagonal (unit diagonal implied) and `U` on and above it.
+/// Elimination works on whole row slices, so the inner loop is contiguous and
+/// vectorises.
 #[cfg(feature = "alloc")]
-fn partial_pivot_lu_with(
-    m: &DMatrix<f64>,
-    tol: f64,
-) -> Result<(Vec<Vec<f64>>, Vec<usize>), DenseError> {
+fn partial_pivot_lu_with(m: &DMatrix<f64>, tol: f64) -> Result<(Vec<f64>, Vec<usize>), DenseError> {
     let n = m.nrows;
-    let mut a: Vec<Vec<f64>> = (0..n)
-        .map(|i| (0..n).map(|j| m[(i, j)]).collect())
-        .collect();
+    let mut a: Vec<f64> = Vec::with_capacity(n * n);
+    for i in 0..n {
+        for j in 0..n {
+            a.push(m[(i, j)]);
+        }
+    }
     let mut piv: Vec<usize> = (0..n).collect();
 
     for k in 0..n {
         let mut p = k;
-        let mut max = a[k][k].abs();
+        let mut max = a[k * n + k].abs();
         for i in (k + 1)..n {
-            let v = a[i][k].abs();
+            let v = a[i * n + k].abs();
             if v > max {
                 max = v;
                 p = i;
@@ -1707,12 +1713,20 @@ fn partial_pivot_lu_with(
                 what: "partial_pivot_lu",
             });
         }
-        a.swap(k, p);
-        piv.swap(k, p);
-        for i in (k + 1)..n {
-            a[i][k] /= a[k][k];
-            for j in (k + 1)..n {
-                a[i][j] -= a[i][k] * a[k][j];
+        if p != k {
+            for j in 0..n {
+                a.swap(k * n + j, p * n + j);
+            }
+            piv.swap(k, p);
+        }
+        let (top, bottom) = a.split_at_mut((k + 1) * n);
+        let row_k = &top[k * n..];
+        let pivot = row_k[k];
+        for row_i in bottom.chunks_exact_mut(n) {
+            let factor = row_i[k] / pivot;
+            row_i[k] = factor;
+            for (x, &u) in row_i[k + 1..].iter_mut().zip(&row_k[k + 1..]) {
+                *x -= factor * u;
             }
         }
     }
@@ -1721,25 +1735,21 @@ fn partial_pivot_lu_with(
 
 /// Solve `A x = b` given an already-computed partial-pivot LU factorization.
 #[cfg(feature = "alloc")]
-fn solve_with_lu(lu: &[Vec<f64>], piv: &[usize], b: &DVector<f64>) -> Vec<f64> {
-    let n = lu.len();
-    // Forward solve L y = P b.
+fn solve_with_lu(lu: &[f64], piv: &[usize], b: &DVector<f64>) -> Vec<f64> {
+    let n = piv.len();
+    // Forward solve L y = P b. Row i of the flat buffer holds L[i][..i] first.
     let mut y = vec![0.0_f64; n];
     for i in 0..n {
-        let mut s = b[piv[i]];
-        for j in 0..i {
-            s -= lu[i][j] * y[j];
-        }
-        y[i] = s;
+        let row = &lu[i * n..i * n + i];
+        let dot: f64 = row.iter().zip(&y[..i]).map(|(l, yj)| l * yj).sum();
+        y[i] = b[piv[i]] - dot;
     }
     // Back solve U x = y.
     let mut x = vec![0.0_f64; n];
     for i in (0..n).rev() {
-        let mut s = y[i];
-        for j in (i + 1)..n {
-            s -= lu[i][j] * x[j];
-        }
-        x[i] = s / lu[i][i];
+        let row = &lu[i * n + i + 1..i * n + n];
+        let dot: f64 = row.iter().zip(&x[i + 1..]).map(|(u, xj)| u * xj).sum();
+        x[i] = (y[i] - dot) / lu[i * n + i];
     }
     x
 }
