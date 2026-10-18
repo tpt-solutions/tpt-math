@@ -43,6 +43,22 @@ pub(crate) fn mean_unchecked(samples: &[f64]) -> f64 {
 
 /// Unbiased (`n - 1`) sample variance of an all-finite sample of length >= 2.
 pub(crate) fn variance_unchecked(samples: &[f64]) -> f64 {
+    #[cfg(feature = "simd")]
+    {
+        // Two-pass with pairwise sums and a SIMD kernel. Faster, but it trades the
+        // compensated sums below for pairwise ones: the result differs by a few
+        // units in the last place on ordinary data.
+        tpt_simd_reduce::sample_variance_f64(samples)
+            .unwrap_or(0.0)
+            .max(0.0)
+    }
+    #[cfg(not(feature = "simd"))]
+    compensated_variance(samples)
+}
+
+/// The compensated two-pass variance behind [`variance_unchecked`].
+#[cfg(not(feature = "simd"))]
+fn compensated_variance(samples: &[f64]) -> f64 {
     let n = samples.len() as f64;
     let mean = mean_unchecked(samples);
 

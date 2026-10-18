@@ -16,9 +16,13 @@ categories = ["mathematics", "science", "algorithms"]
 [dependencies]
 tpt-math-prob-core = { workspace = true, features = ["std"] }
 tpt-math-linalg-dense = { workspace = true, features = ["alloc"] }
+# Optional SIMD reductions for the descriptive statistics (see the `simd` feature).
+tpt-simd-reduce = { version = "0.1.1", optional = true, default-features = false }
 
 [features]
 default = []
+# Route the mean and variance sums through tpt-simd-reduce.
+simd = ["dep:tpt-simd-reduce"]
 
 
 [lints]
