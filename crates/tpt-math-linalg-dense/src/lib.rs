@@ -40,11 +40,14 @@
 extern crate alloc;
 
 use core::fmt;
-use core::ops::{Add, Div, Index, Mul, Neg, Sub};
+use core::ops::Index;
+#[cfg(feature = "alloc")]
+use core::ops::{Add, Div, Mul, Neg, Sub};
 
 use tpt_math_numeric::Scalar;
 
-#[cfg(feature = "alloc")]
+// The storage types own a `Vec` whether or not the `alloc` feature is on, so the
+// import is unconditional. The feature gates the constructors and algorithms.
 use alloc::vec::Vec;
 
 #[cfg(feature = "alloc")]
@@ -948,6 +951,12 @@ pub enum DenseError {
         /// Human-readable description of the conflict.
         what: String,
     },
+    /// An iterative routine hit its sweep budget before converging, for example
+    /// because the input contains NaN or infinity.
+    NoConvergence {
+        /// Which routine failed to converge.
+        what: &'static str,
+    },
 }
 
 #[cfg(feature = "alloc")]
@@ -956,6 +965,7 @@ impl fmt::Display for DenseError {
         match self {
             DenseError::Singular { what } => write!(f, "singular matrix in {what}"),
             DenseError::DimensionMismatch { what } => write!(f, "dimension mismatch: {what}"),
+            DenseError::NoConvergence { what } => write!(f, "{what} did not converge"),
         }
     }
 }
@@ -1020,6 +1030,11 @@ pub struct Lu {
 impl Lu {
     /// Factor the square matrix `m`.
     ///
+    /// A pivot is treated as zero when it is below `1e-12` times the largest
+    /// entry magnitude of `m`, so the test is scale-invariant. This is also the
+    /// threshold used by [`DMatrix::solve`], [`DMatrix::inverse`] and
+    /// [`DMatrix::det`].
+    ///
     /// # Errors
     ///
     /// Returns [`DenseError::DimensionMismatch`] if `m` is not square, and
@@ -1037,8 +1052,9 @@ impl Lu {
     /// Factor `m`, treating a pivot as singular when its magnitude is below
     /// `tol` (an absolute threshold).
     ///
-    /// Use this when the matrix is legitimately small in scale, so the default
-    /// `1e-12` would reject it. `tol = 0.0` accepts any non-zero finite pivot.
+    /// Use this to pin the threshold explicitly, for example to keep the absolute
+    /// `1e-12` that [`Lu::new`] used before it became relative. `tol = 0.0`
+    /// accepts any non-zero finite pivot.
     ///
     /// # Errors
     ///
@@ -1201,8 +1217,10 @@ impl Qr {
 impl DMatrix<f64> {
     /// Determinant, from the LU factorisation.
     ///
-    /// A matrix the LU routine rejects as singular (pivot below `1e-12`) has
-    /// determinant `0.0`.
+    /// Singularity is judged relative to the largest entry (see
+    /// [`Lu::new`]), so a well-conditioned matrix of small scale such as
+    /// `1e-13 · I` has its true determinant. A numerically singular matrix
+    /// has determinant `0.0`.
     ///
     /// # Errors
     ///
@@ -1287,9 +1305,10 @@ impl DMatrix<f64> {
             });
         }
         let scale = self.iter().fold(0.0_f64, |acc, v| acc.max(v.abs()));
+        let frob_sq: f64 = self.iter().map(|v| v * v).sum();
         for i in 0..n {
             for j in 0..i {
-                if (self[(i, j)] - self[(j, i)]).abs() > 1e-12 * (1.0 + scale) {
+                if (self[(i, j)] - self[(j, i)]).abs() > 1e-12 * scale {
                     return Err(DenseError::DimensionMismatch {
                         what: "matrix is not symmetric".into(),
                     });
@@ -1308,7 +1327,9 @@ impl DMatrix<f64> {
                 .flat_map(|p| ((p + 1)..n).map(move |q| (p, q)))
                 .map(|(p, q)| a[p][q] * a[p][q])
                 .sum();
-            if off <= 1e-30 * (1.0 + scale * scale) {
+            // Stop once the off-diagonal part is at rounding level relative to
+            // ‖A‖_F, so tiny matrices such as [[0, 1e-16], [1e-16, 0]] still rotate.
+            if off <= f64::EPSILON * f64::EPSILON * frob_sq {
                 break;
             }
             for p in 0..n {
@@ -1411,6 +1432,11 @@ impl DMatrix<f64> {
     /// Uses one-sided Jacobi rotations, which give high relative accuracy for
     /// small singular values. Works for any shape.
     ///
+    /// # Errors
+    ///
+    /// Returns [`DenseError::NoConvergence`] if the rotations do not settle
+    /// within the sweep budget, for example on NaN or infinite input.
+    ///
     /// # Examples
     ///
     /// ```
@@ -1436,6 +1462,7 @@ impl DMatrix<f64> {
         let mut v: Vec<Vec<f64>> = (0..n)
             .map(|j| (0..n).map(|i| if i == j { 1.0 } else { 0.0 }).collect())
             .collect();
+        let mut converged = false;
         for _ in 0..SVD_MAX_SWEEPS {
             let mut rotated = false;
             for p in 0..n {
@@ -1456,8 +1483,12 @@ impl DMatrix<f64> {
                 }
             }
             if !rotated {
+                converged = true;
                 break;
             }
+        }
+        if !converged {
+            return Err(DenseError::NoConvergence { what: "svd" });
         }
 
         // The column norms of the orthogonalised U are the singular values.
@@ -1542,6 +1573,11 @@ impl DMatrix<f64> {
     ///
     /// # Errors
     ///
+    /// A matrix with a NaN or infinite entry has no finite exponential, so the
+    /// result is a matrix of NaNs.
+    ///
+    /// # Errors
+    ///
     /// Returns [`DenseError::DimensionMismatch`] if the matrix is not square.
     pub fn matrix_exp(&self) -> Result<DMatrix<f64>, DenseError> {
         let n = self.nrows();
@@ -1549,6 +1585,11 @@ impl DMatrix<f64> {
             return Err(DenseError::DimensionMismatch {
                 what: format!("matrix_exp needs a square matrix, got {n}x{}", self.ncols()),
             });
+        }
+        if self.iter().any(|v| !v.is_finite()) {
+            // Without this guard, an infinite norm makes the squaring loop below
+            // run forever.
+            return Ok(DMatrix::from_fn(n, n, |_, _| f64::NAN));
         }
         let norm = (0..n)
             .map(|i| (0..n).map(|j| self[(i, j)].abs()).sum::<f64>())
@@ -1580,16 +1621,22 @@ impl DMatrix<f64> {
     }
 }
 
-/// Returns the LU factorization (in place) and the row permutation.
+/// Default singularity threshold, relative to the largest entry magnitude of the
+/// matrix being factored. A pivot below `DEFAULT_PIVOT_RELATIVE · max|a_ij|` is
+/// treated as zero.
 #[cfg(feature = "alloc")]
-/// Pivot magnitude below which a matrix is reported singular by default.
-const DEFAULT_PIVOT_TOLERANCE: f64 = 1e-12;
+const DEFAULT_PIVOT_RELATIVE: f64 = 1e-12;
 
+/// Returns the LU factorization (in place) and the row permutation, using the
+/// default relative pivot tolerance.
+#[cfg(feature = "alloc")]
 fn partial_pivot_lu(m: &DMatrix<f64>) -> Result<(Vec<Vec<f64>>, Vec<usize>), DenseError> {
-    partial_pivot_lu_with(m, DEFAULT_PIVOT_TOLERANCE)
+    let scale = m.iter().fold(0.0_f64, |acc, v| acc.max(v.abs()));
+    partial_pivot_lu_with(m, DEFAULT_PIVOT_RELATIVE * scale)
 }
 
 /// [`partial_pivot_lu`] with an explicit absolute pivot tolerance.
+#[cfg(feature = "alloc")]
 fn partial_pivot_lu_with(
     m: &DMatrix<f64>,
     tol: f64,
@@ -2193,10 +2240,16 @@ mod lu_tolerance_tests {
     use super::*;
 
     #[test]
-    fn default_rejects_small_scale_but_explicit_tolerance_accepts_it() {
-        // Well-conditioned, but every pivot is below the default 1e-12.
+    fn default_accepts_small_scale_and_absolute_tolerance_still_rejects_it() {
+        // Well-conditioned, but every pivot is below the old absolute 1e-12.
         let m = DMatrix::from_row_slice(2, 2, &[1e-13, 0.0, 0.0, 2e-13]);
-        assert!(matches!(Lu::new(&m), Err(DenseError::Singular { .. })));
+        let lu = Lu::new(&m).unwrap();
+        let x = lu.solve(&DVector::from_vec(vec![1e-13, 2e-13])).unwrap();
+        assert!((x[0] - 1.0).abs() < 1e-12 && (x[1] - 1.0).abs() < 1e-12);
+        assert!(matches!(
+            Lu::with_pivot_tolerance(&m, 1e-12),
+            Err(DenseError::Singular { .. })
+        ));
         let lu = Lu::with_pivot_tolerance(&m, 0.0).unwrap();
         let x = lu.solve(&DVector::from_vec(vec![1e-13, 2e-13])).unwrap();
         assert!((x[0] - 1.0).abs() < 1e-12 && (x[1] - 1.0).abs() < 1e-12);
@@ -2208,8 +2261,8 @@ mod lu_tolerance_tests {
         let scaled = a.clone() * 1e-14;
         assert!(Lu::with_relative_tolerance(&a, 1e-10).is_ok());
         assert!(Lu::with_relative_tolerance(&scaled, 1e-10).is_ok());
-        // The default absolute test rejects the scaled copy, as it did before.
-        assert!(Lu::new(&scaled).is_err());
+        // The default test is relative, so the scaled copy is accepted too.
+        assert!(Lu::new(&scaled).is_ok());
     }
 
     #[test]
@@ -2262,5 +2315,57 @@ mod par_mul_tests {
         let a = DMatrix::<f64>::zeros(0, 3);
         let b = DMatrix::<f64>::zeros(3, 4);
         assert_eq!(a.par_mul(&b).nrows(), 0);
+    }
+}
+
+#[cfg(all(test, feature = "alloc"))]
+mod review_regression_tests {
+    use super::*;
+
+    #[test]
+    fn matrix_exp_returns_nan_for_non_finite_input() {
+        // Used to loop forever: the infinite norm never drops below 1/2.
+        let m = DMatrix::from_row_slice(2, 2, &[f64::INFINITY, 0.0, 0.0, 1.0]);
+        let e = m.matrix_exp().unwrap();
+        assert!(e.iter().all(|v| v.is_nan()));
+        let m = DMatrix::from_row_slice(2, 2, &[f64::NAN, 0.0, 0.0, 1.0]);
+        assert!(m.matrix_exp().unwrap().iter().all(|v| v.is_nan()));
+    }
+
+    #[test]
+    fn symmetric_eigen_resolves_values_at_rounding_scale() {
+        // Used to return [0, 0]: the stop test had an absolute floor.
+        let a = DMatrix::from_row_slice(2, 2, &[0.0, 1e-16, 1e-16, 0.0]);
+        let (vals, _) = a.symmetric_eigen().unwrap();
+        assert!((vals[0] + 1e-16).abs() < 1e-30, "got {}", vals[0]);
+        assert!((vals[1] - 1e-16).abs() < 1e-30, "got {}", vals[1]);
+    }
+
+    #[test]
+    fn symmetric_eigen_rejects_asymmetry_at_small_scale() {
+        // Relative asymmetry of 100%, at a scale where the old absolute slack hid it.
+        let a = DMatrix::from_row_slice(2, 2, &[0.0, 1e-16, 0.0, 0.0]);
+        assert!(a.symmetric_eigen().is_err());
+    }
+
+    #[test]
+    fn det_and_solve_work_for_small_scale_well_conditioned_matrices() {
+        // Used to return Ok(0.0) and to fail with Singular.
+        let a = DMatrix::from_row_slice(2, 2, &[1e-13, 0.0, 0.0, 1e-13]);
+        assert!((a.det().unwrap() - 1e-26).abs() < 1e-38);
+        let x = a.solve(&DVector::from_vec(vec![1e-13, 2e-13])).unwrap();
+        assert!((x[0] - 1.0).abs() < 1e-12 && (x[1] - 2.0).abs() < 1e-12);
+        let inv = a.inverse().unwrap();
+        assert!((inv[(0, 0)] - 1e13).abs() < 1e-3);
+    }
+
+    #[test]
+    fn svd_reports_non_convergence_instead_of_unconverged_factors() {
+        // NaN input never satisfies the rotation test, so the sweep budget runs out.
+        let a = DMatrix::from_row_slice(2, 2, &[f64::NAN, 1.0, 1.0, 1.0]);
+        assert!(matches!(
+            a.svd(),
+            Err(DenseError::NoConvergence { what: "svd" })
+        ));
     }
 }

@@ -57,7 +57,7 @@ jobs:
         with:
           targets: thumbv6m-none-eabi
       - uses: Swatinem/rust-cache@v2
-      # Builds the 8 `no_std = true` crates for a bare-metal target. Per ADR 0001
+      # Builds every `no_std = true` crate for a bare-metal target. Per ADR 0001
       # (tpt-rust-map/docs/adr/0001-no-std-via-features-not-forks.md) we build
       # only the no_std crates, not the whole workspace, so std-only crates don't
       # break the job. `xtask no-std` owns the crate/feature list.

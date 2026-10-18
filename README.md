@@ -33,11 +33,11 @@ Crates are organised into layers; lower layers never depend on higher ones.
 | Crate | Wraps / consolidates | `no_std` | Notes |
 |-------|----------------------|----------|-------|
 | `tpt-math-exact` | `num-bigint`, `num-rational` | yes (alloc) | Exact rational + interval arithmetic. |
-| `tpt-math-linalg-dense` | — (in-house; was `faer`) | yes (alloc) | Dense `DVector`/`DMatrix`, column-major `Vec` storage; storage backend for `tpt-math-linalg` / `-optimize`. |
+| `tpt-math-linalg-dense` | — (in-house; was `faer`) | yes (alloc) | Dense `DVector`/`DMatrix`, column-major `Vec` storage; storage backend for `tpt-math-linalg` / `-optimize`. Optional `simd` (via `tpt-simd-blas`) and `rayon` features. |
 | `tpt-math-linalg` | `tpt-math-linalg-dense` (in-house) | yes | Dimensionally-checked vectors/matrices over the in-house dense backend. |
 | `tpt-math-linalg-fixed` | — (in-house) | yes | Const-generic fixed-size vectors/matrices + closed-form det/inverse; no allocator. |
 | `tpt-math-linalg-complex` | — (in-house) | yes (alloc) | Complex-valued matrices, complex LU/Cholesky, QR eigenvalue solver for EM/quantum. |
-| `tpt-math-linalg-sparse` | — (in-house) | yes (alloc) | Sparse COO/CSR/CSC + iterative CG/BiCGSTAB solvers; hand-rolled, complements `tpt-fem-sparse`. |
+| `tpt-math-linalg-sparse` | — (in-house) | yes (alloc) | Sparse COO/CSR/CSC + iterative CG/BiCGSTAB solvers; hand-rolled, complements `tpt-fem-sparse`. Optional `simd` feature (via `tpt-simd-sparse`) for f32/f64 CG and BiCGSTAB. |
 | `tpt-math-geometry` | `tpt-math-linalg-fixed` (in-house) | yes | Points, rotations, quaternions, isometries, projections; no `nalgebra`. |
 
 ### Geometry & spatial
@@ -51,6 +51,11 @@ Crates are organised into layers; lower layers never depend on higher ones.
 | `tpt-math-graph` | `petgraph` (dual `Apache-2.0 OR MIT`) | yes (alloc) | Thin wrap for adjacency / toposort / Dijkstra / A*; in-house max-flow on top. |
 | `tpt-math-interpolate` | — (in-house) | yes (alloc) | RBF, ordinary Kriging, PCHIP, B-spline basis for scattered data / surrogates. |
 | `tpt-math-pde-operators` | — (in-house) | yes (alloc) | Gradient, divergence, Laplacian on structured grids (staggered layout); adjointness, conservation and Laplacian-sign contracts checked in debug builds. |
+
+### Facade
+| Crate | Wraps / consolidates | `no_std` | Notes |
+|-------|----------------------|----------|-------|
+| `tpt-math` | the crates above | no | One dependency with short feature names (`linalg`, `prob`, …), a `full` feature and a `prelude`. Nothing is enabled by default. |
 
 ### Probability
 | Crate | Wraps / consolidates | `no_std` | Notes |
@@ -101,6 +106,7 @@ tpt-math-numeric
        -> tpt-math-linalg-complex   (in-house; needs linalg-dense)
   -> tpt-math-graph                 (wraps petgraph; needs numeric)
   -> tpt-math-interpolate           (in-house; needs linalg-dense)
+  -> tpt-math-pde-operators         (in-house; needs numeric)
   -> tpt-math-autodiff-fwd
        -> tpt-math-autodiff-rev
             -> tpt-math-autodiff            (umbrella)
@@ -111,6 +117,8 @@ tpt-math-numeric
   -> tpt-math-signal-fft
        -> tpt-math-signal-filter
             -> tpt-math-signal        (umbrella)
+
+tpt-math                            (facade; re-exports the crates above behind features)
 ```
 
 ## Consuming `tpt-math`
@@ -136,7 +144,7 @@ Downstream repos depend only on the leaf / umbrella crates they need:
 
 ## Repository layout
 
-- `crates/*` — the 31 library workspace members.
+- `crates/*` — the 33 library workspace members (32 domain crates plus the `tpt-math` facade).
 - `xtask/` — the developer-tooling crate (`cargo xtask …`).
 - `examples/` — `tpt-math-examples`, four unpublished cross-crate demos.
 - `Cargo.toml` — workspace manifest (`resolver = "2"`, shared `[workspace.package]`).
@@ -162,6 +170,21 @@ To track `main` ahead of a release instead, depend on them directly from git:
 tpt-math-linalg = { git = "https://github.com/tpt-solutions/tpt-math", package = "tpt-math-linalg" }
 tpt-math-prob    = { git = "https://github.com/tpt-solutions/tpt-math", package = "tpt-math-prob" }
 ```
+
+Or depend on the facade and turn on only the areas you need:
+
+```toml
+[dependencies]
+tpt-math = { version = "0.1", features = ["linalg", "prob"] }
+```
+
+```rust
+use tpt_math::prelude::*;
+```
+
+The `simd` features on `tpt-math-linalg-dense` and `tpt-math-linalg-sparse` need
+Rust 1.95+ (edition 2024 dependencies); the default build keeps the workspace
+MSRV of 1.85.
 
 Pin to a commit or tag for reproducibility. The workspace also ships local
 tooling so you can sanity-check an integration before publishing:

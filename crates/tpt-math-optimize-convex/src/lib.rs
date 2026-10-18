@@ -56,7 +56,7 @@
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 
-use tpt_math_linalg_dense::{DMatrix, DVector};
+use tpt_math_linalg_dense::{DMatrix, DVector, Lu};
 
 /// Re-export of [`tpt_math_linalg_dense`] (in-house dense storage) for
 /// constructing dense inputs such as [`DMatrix`] and [`DVector`].
@@ -478,9 +478,14 @@ fn solve_kkt(
     });
 
     let rh = DVector::from_vec(rhs.to_vec());
-    let delta = k.solve(&rh).map_err(|_| ConvexError::Solver {
-        status: "singular KKT system (infeasible or ill-posed)".into(),
-    })?;
+    // Absolute 1e-12 pivot threshold, pinned explicitly: KKT pivots shrink as the
+    // barrier parameter goes to zero, so the relative default would change the
+    // solver's behaviour near the end of a solve.
+    let delta = Lu::with_pivot_tolerance(&k, 1e-12)
+        .and_then(|lu| lu.solve(&rh))
+        .map_err(|_| ConvexError::Solver {
+            status: "singular KKT system (infeasible or ill-posed)".into(),
+        })?;
     Ok(delta.iter().copied().collect())
 }
 

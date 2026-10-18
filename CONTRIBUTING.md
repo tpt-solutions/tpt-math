@@ -54,6 +54,18 @@ All workspace crates are `MIT OR Apache-2.0`. `deny.toml` enforces:
 When adding a new external wrap, confirm its license is on the allow-list before
 merging, and update the note in `deny.toml` if you add a new upstream family.
 
+## Tolerance conventions
+
+Solvers use one of two conventions. Pick the one the routine's family already
+uses, and say which one in its rustdoc.
+
+- **Relative to the data.** The default for new code. Dense LU, `det`, `solve`
+  and `inverse` treat a pivot as zero when it is below `1e-12 · max|a_ij|`.
+  The QR and the sparse CG and BiCGSTAB solvers stop when `‖r‖ ≤ tol · ‖b‖`
+  (absolute when `b = 0`). Results do not depend on the units of the input.
+- **Absolute.** Only where a caller needs a fixed threshold. `Lu::with_pivot_tolerance`
+  takes one, and the convex interior-point KKT solve pins `1e-12` through it.
+
 ## External `registry.toml` dependency
 
 Crate status and the `no_std` marking come from `../tpt-rust-map/registry.toml`,

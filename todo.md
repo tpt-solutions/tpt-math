@@ -5,7 +5,7 @@
 > published to crates.io in full (see `spec2.txt` / per-crate `CHANGELOG.md`).
 > Crates were stopped at `status = "git"` in the registry during the initial
 > build-out. License for every crate: `MIT OR Apache-2.0`. Author: TPT
-> Solutions. Toolchain MSRV: Rust 1.84 (workspace `rust-version`).
+> Solutions. Toolchain MSRV: Rust 1.85 (workspace `rust-version`).
 
 ## Phase 0 — Repo Bootstrap
 
@@ -1305,3 +1305,244 @@ constant kernel) are checked in debug builds, and in release with the
       `domain = "math.pde"`, `no_std = true`, `wraps = []`; `status = "planned"` → `"git"`
 - [ ] Refresh `Cargo.lock` with `cargo update -p tpt-math-pde-operators` once the
       `tpt-simd` sibling checkout is available (CI runs against it)
+
+---
+
+## Phase H — Platform Review (2026-10-18)
+
+> Findings from a review of the whole workspace. Clippy (`-D warnings`) and all
+> 1,065 tests passed with `--all-features` at the time. Items marked **(V)** were
+> reproduced with a scratch program or a real build. Delivery rule as in
+> Phase 7: every bug fix lands with a test that fails before the fix.
+
+### H.1 Correctness bugs
+
+- [x] **(V)** `tpt-math-linalg-dense` `matrix_exp`: never returns when an entry
+      is infinite. `while scaled_norm > 0.5` never exits for `inf`. Return an
+      error or a NaN matrix for non-finite input
+- [x] **(V)** `tpt-math-linalg-dense` `symmetric_eigen`: returns `[0, 0]` for
+      `[[0, 1e-16], [1e-16, 0]]` (want ±1e-16). The stop test
+      `off <= 1e-30·(1+scale²)` has an absolute floor. Use `off <= ε²·‖A‖²_F`.
+      The symmetry check `1e-12·(1+scale)` has the same flaw
+- [x] **(V)** `tpt-math-linalg-dense` `det`/`solve`/`inverse`: the absolute
+      `1e-12` pivot default rejects well-conditioned small-scale matrices.
+      `det(1e-13·I)` returns `Ok(0.0)`, and `solve` fails. 7.1 kept the default
+      because the convex IPM factors KKT systems with small pivots. Have the IPM
+      call `Lu::with_pivot_tolerance` explicitly, and make the public defaults
+      relative (`Qr` already is). At minimum, `det` should not report 0 for a
+      non-singular matrix. `RbfInterpolator::new` and `Kriging::new` inherit this
+- [x] **(V)** `tpt-math-linalg-dense` does not compile without `alloc`
+      (`cargo check -p tpt-math-linalg-dense --no-default-features`: 18 errors).
+      The `#[cfg(feature = "alloc")]` above `DEFAULT_PIVOT_TOLERANCE` (~line 1584)
+      was meant for `partial_pivot_lu`, and `partial_pivot_lu_with` has no gate.
+      Either gate them or make `alloc` mandatory. CI misses it because
+      `xtask no-std` always passes `alloc` (see H.4)
+- [x] **(V)** `tpt-math-prob-core::special` `gamma_p`/`gamma_q`: NaN for shape
+      ≥ ~1e7 (the series needs more than `MAX_ITER = 10_000` terms near
+      `x ≈ a`). This also breaks `poisson_cdf(1e7, 1e7)` and
+      `chi_squared_cdf(2e7, 2e7)`. Add Temme's uniform asymptotic expansion for
+      large `a`
+      Status: Done with a different method from the one above. Temme's expansion was not
+      used. For `a ≥ 10` the prefactor `x^a e^-x / Γ(a)` is computed from the Stirling
+      series (no cancellation), and the series and continued fraction get an iteration
+      budget of `max(10_000, 50·√a)`. `gamma_p(1e7, 1e7)` is now accurate; the old NaN is gone.
+- [x] **(V)** `tpt-math-prob-core::special` `ln_binomial`: `ln C(1e15, 1)`
+      returns 36 (want 34.5388). The three-`ln_gamma` difference cancels for
+      large `n`. Sum `ln((n-i)/(i+1))` for small `k`, or subtract the Stirling
+      remainders
+- [x] **(V)** `tpt-math-linalg-sparse` with `simd`: a wrong-length `x0` panics
+      in CG/BiCGSTAB, while the scalar path returns `Err(DimensionMismatch)`.
+      Check `x0.len()` before the `simd::applies` dispatch
+- [x] **(V)** Declared MSRV 1.84 does not build: `petgraph → indexmap 2.14 →
+      hashbrown 0.17` needs edition 2024. Rust 1.85 builds the workspace
+      cleanly. Raise `rust-version` to 1.85 (and fix the README and this file's
+      header), or cap `indexmap`. 7.5 marked the MSRV item done, but no MSRV job
+      exists
+      Status: Done: `rust-version` is 1.85 in `Cargo.toml`, README and PUBLISH_CHECKLIST are
+      updated, and the workspace builds on the 1.85 toolchain. Building on 1.84 fails
+      at dependency resolution (`clap_lex` needs edition 2024), not only at `indexmap`.
+- [x] `tpt-math-linalg-dense` `svd`: hitting `SVD_MAX_SWEEPS` returns the
+      unconverged factors silently. Return an error, or a `SolveReport`
+
+### H.2 Docs and hygiene
+
+- [x] `conjugate_gradient` rustdoc says `tol` is an absolute tolerance; the code
+      (since 7.1) treats it as relative (`‖r‖ ≤ tol·‖b‖`)
+- [x] `ci.yml` `no_std` job comment says it builds 8 crates; `NO_STD_CRATES`
+      lists 17
+- [x] `release-plz.toml` comment still says simd is a path dependency (also in
+      `PUBLISH_CHECKLIST.md`)
+- [x] Delete the stray tracked file `- [ ] Dense QR, least squares` in the repo
+      root (an older copy of this file)
+- [ ] Mark public error and status enums `#[non_exhaustive]` (only 6 of 28
+      are), and `QpSolution`. Do it in the release that already bumps
+      `autodiff-rev`, `optimize-convex` and `symbolic` to 0.2.0, so future
+      variants (like this release's `Op` change) are not breaking
+- [ ] Unify error detail: `SparseError::DimensionMismatch` carries nothing,
+      `DenseError::DimensionMismatch` carries a message
+- [x] One tolerance convention across solvers: dense LU absolute, QR and the
+      sparse solvers relative. Document the rule in CONTRIBUTING
+
+### H.3 Missing features
+
+- [ ] `tpt-math` facade: add features for `units-dyn`, `linalg-sparse`,
+      `linalg-complex`, `linalg-fixed` and `pde-operators`. Add a `std`/no_std
+      passthrough and a richer prelude (`Lu`, `Qr`, `Fft`, `Dual`,
+      `GradientTape`, `DynQuantity`). Do this before the facade's first publish
+- [ ] ODE: a stiff solver (BDF or Rosenbrock), event detection and dense output
+      in `tpt-math-numeric`
+- [ ] Optimisation: nonlinear least squares (Levenberg–Marquardt, a
+      `curve_fit`-style helper) and bound constraints (L-BFGS-B or projected)
+- [ ] Dense linalg: pseudo-inverse / minimum-norm least squares via SVD (`Qr`
+      rejects rank-deficient input), a tridiagonal/banded solver, a reusable
+      Cholesky solve object, and general real eigenvectors
+- [ ] Sparse linalg: a Lanczos/Arnoldi eigensolver, a fill-reducing ordering
+      (AMD/RCM) for `SparseLu`/`SparseCholesky`, and a matrix-free
+      `LinearOperator` trait for the Krylov solvers
+- [ ] Interpolation: N-D `RbfInterpolator` and `Kriging` (they are 1-D only),
+      RBF polynomial tail (thin-plate), natural cubic spline, bilinear/trilinear
+      grid interpolation
+- [ ] Distributions: binomial, negative binomial, lognormal, Weibull,
+      multivariate normal
+- [ ] Stats: multiple and logistic regression, Spearman and Kendall
+      correlation, kernel density estimation
+- [ ] Signal: STFT/spectrogram, Welch PSD, FFT convolution, zero-phase
+      `filtfilt`
+- [ ] `autodiff-rev`: `atan`, `tanh`, `atan2`, `sinh`/`cosh` (forward mode has
+      `atan` and `tanh`); Jacobian and Hessian helpers in the umbrella crate
+- [ ] `symbolic`: string parser (`"x^2 + sin(x)"`), compile an expression to a
+      closure, LaTeX output
+- [ ] `graph`: path reconstruction for `dijkstra`; re-export or wrap the
+      petgraph algorithms (BFS/DFS, topological sort, MST, components)
+
+### H.4 CI and automation
+
+- [ ] Run `cargo hack check --each-feature --no-dev-deps` for every crate.
+      This catches H.1's `alloc` build failure; the powerset job covers 10 crates
+- [ ] Add an MSRV job (`cargo +<msrv> check --workspace`, or
+      `cargo hack --rust-version`)
+- [ ] Run `cargo-semver-checks` on push to master, against the crates.io
+      baseline. It only runs on pull requests now, and work is pushed straight to
+      master, so it never runs
+- [ ] Add Windows and macOS to the test job (CI is Ubuntu-only)
+- [ ] `bench-smoke`: `cargo bench --no-run --workspace` (it builds 4 crates'
+      benches; every crate has one)
+- [ ] More fuzz targets: the `DynQuantity` `FromStr` parser, `from_triplets`,
+      and special-function invariants (no NaN on valid input, monotone CDFs,
+      `P + Q = 1`)
+- [ ] Golden-value accuracy suite: a script that generates reference tables
+      from mpmath/SciPy and a test that checks them. It would have caught the
+      large-shape gamma and `ln_binomial` bugs
+- [ ] Extend `xtask drift` to check that the facade exposes every library
+      crate and that the README crate count matches `cargo metadata`
+- [ ] Occasional `cargo-mutants` run to measure test strength
+
+### H.5 Innovation (pick one or two)
+
+- [ ] Certified linear solves and interval Newton (Krawczyk) for systems,
+      building on `exact::roots` and `Interval`, returning guaranteed error
+      bounds (for `tpt-formal`)
+- [ ] Diagnostics from dense solvers: `solve_with_report` with a condition
+      estimate, backward error and a warning when `cond·ε` exceeds the
+      tolerance, so every solver family returns a `SolveReport`
+- [ ] Autodiff-driven optimisers: `minimize_lbfgs_autodiff(|x| …)` takes the
+      gradient from `autodiff-rev`, so callers never write one
+- [ ] ODE solvers generic over `Dual` for forward sensitivity analysis
+- [ ] Interactive wasm docs playground (the `no_std` crates already build for
+      `wasm32`); Python bindings as a later reach
+
+---
+
+## Phase I — Performance, using tpt-simd 0.1.1 (2026-10-18)
+
+> tpt-math already depends on `tpt-simd-blas`/`tpt-simd-sparse` 0.1.1 but uses only
+> `gemm`/`gemv`/`dot`/`nrm` and the CG/BiCGSTAB kernels. 0.1.1 also ships blocked
+> `getrf`/`getrs`, `potrf`/`potrs`, `trsm`, complex `gemm_c64`/`getrf_c64`, and
+> `tpt-simd-reduce` has deterministic f64 reductions. `tpt-simd-math`, `-convolve`
+> and `-window` are f32/i16 only, so they don't fit the f64 APIs. Plan:
+> `~/.claude/plans/also-do-you-think-memoized-falcon.md`.
+>
+> Rules: benchmark first and keep a change only if it measurably wins (use a size
+> cutoff where SIMD loses on small `n`); keep today's singularity semantics (`1e-12`
+> default, `with_*_tolerance`); additive public API only; no result changes beyond
+> the documented few-ulp `simd` reassociation.
+
+### I.0 Benchmarks and baseline
+
+- [ ] `linalg-dense` benches: `solve`/`Lu::new` at 32/128/512, `inverse` 128,
+      `det` 128, `cholesky` 128/512, `svd` 64, `matrix_exp` 32
+- [ ] `linalg-complex` benches: `mul`/`solve` 128. `stats` benches:
+      `median`/`quantile`/`variance` at 1e6
+- [ ] Save Criterion baselines (`-- --save-baseline before`), with and without
+      `--features simd`
+
+### I.1 Default path: flat column-major dense LU
+
+- [ ] Rewrite `partial_pivot_lu_with` to factor a copy of `m.data` (already
+      column-major) in place, with column-oriented right-looking updates that
+      autovectorise. Same pivot-tolerance check
+- [ ] `Lu` internals become `{ n, lu: Vec<f64>, piv }` (private); flat
+      `solve_with_lu`
+- [ ] Add `Lu::solve_matrix(&DMatrix<f64>)` (multi-RHS); `inverse` uses it instead
+      of n allocating single solves
+- [ ] Fix the misplaced `#[cfg(feature = "alloc")]` on the LU helpers (H.1)
+- [ ] Inherited by `solve`/`inverse`/`det`, `linalg` `Mat::solve`/`inverse`, the
+      convex IPM, the Newton step, and RBF/Kriging. Confirm with their benches
+
+### I.2 `simd` path: LU and Cholesky through `tpt-simd-blas`
+
+- [ ] For `n >= CUTOFF` (from I.0), LU via `getrf_f64`. Apply the existing tolerance
+      check to `|U_kk|` afterwards (ignore its exact-zero `Err`); non-finite pivot is
+      singular
+- [ ] Handle the LAPACK swap-sequence pivots: `getrs_f64` for solves, `det` sign
+      from `#{i : ipiv[i] != i}`
+- [ ] `inverse` / `Lu::solve_matrix`: one `getrs_f64` call with `nrhs = n`
+- [ ] `cholesky` via `potrf_f64`; zero the strictly upper triangle to match today's
+      output
+- [ ] Tests: simd vs scalar agree to ~1e-12 relative at n = 5, 33, 200; singular
+      and near-singular inputs give the same `Err` on both paths; `det` sign under
+      many swaps
+
+### I.3 Default path: other dense routines
+
+- [ ] `matrix_exp`: drop the Index-based `matmul_square` for `mul_matrix_into` with
+      reused buffers (picks up SIMD `gemm` under `simd`); replace the 30-term Taylor
+      series with Higham's Padé(13) scaling and squaring; add the non-finite guard
+      (H.1 hang). Test against closed forms and the old result
+- [ ] `svd`: carry squared column norms between rotations
+      (`alpha_p -= t·gamma`, `alpha_q += t·gamma`), recomputed exactly each sweep.
+      That's one dot product per pair instead of three. Test `‖A − UΣVᵀ‖` on
+      ill-conditioned input
+- [ ] `Qr::new` and default-path `cholesky` on flat column-major storage, same
+      operation order
+
+### I.4 `linalg-complex` `simd` feature
+
+- [ ] Add `simd = ["alloc", "dep:tpt-simd-blas"]` (`tpt-simd-blas = "0.1.1"`; needs
+      Rust 1.95, noted in Cargo.toml and README)
+- [ ] For `n >= CUTOFF`: matmul via split re/im planes and `gemm_c64`;
+      `solve`/`inverse`/`det` via `getrf_c64`/`getrs_c64`. Public `lu()` unchanged
+- [ ] CI `--exclude-features simd` handling and the `simd` test commands in
+      `PUBLISH_CHECKLIST.md`
+
+### I.5 Algorithmic wins
+
+- [ ] `stats` `try_median`/`try_quantile`: `select_nth_unstable_by(f64::total_cmp)`
+      instead of a full sort (O(n), identical results). Test against a sort-based
+      reference
+- [ ] Optional `stats` `simd` feature with `tpt-simd-reduce = "0.1.1"` for mean,
+      variance and covariance. Keep only if I.0 shows a win at large `n`
+
+### I.6 Wrap-up
+
+- [ ] Re-run benches against the `before` baselines (with and without `simd`);
+      revert any step that does not win; record speedups in each CHANGELOG
+      `[Unreleased]`
+- [ ] `cargo test --workspace` (default and `--all-features`), `--features simd`
+      for dense and complex, clippy `-D warnings`, `cargo xtask check`
+
+### I.7 Deferred (each needs its own design pass)
+
+- [ ] AMD/RCM fill-reducing ordering for `SparseLu`/`SparseCholesky`
+- [ ] `tpt-simd-rng` lane-parallel sampling in `prob-monte-carlo` (changes the
+      random streams, so decide on stream compatibility first)

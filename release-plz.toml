@@ -4,5 +4,6 @@
 [workspace]
 publish = false
 git_release_enable = false
-# The simd dependency is a path dependency on a sibling checkout, so `cargo package`
-# cannot run for the crates that depend on it. Leave those to a manual release.
+# The simd dependencies (tpt-simd-*) are published crates on crates.io, so
+# `cargo package` resolves them. Publishing stays off until the ordered first
+# release; see PUBLISH_CHECKLIST.md.

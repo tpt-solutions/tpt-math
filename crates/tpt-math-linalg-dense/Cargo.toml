@@ -18,7 +18,7 @@ tpt-math-numeric = { workspace = true, default-features = false }
 # Parallel f64 matrix product (`DMatrix::par_mul`). Needs std.
 rayon = { workspace = true, optional = true }
 # Optional SIMD kernels (see the `simd` feature). Needs Rust 1.95+ (edition 2024);
-# the workspace MSRV (1.84) covers the default build only.
+# the workspace MSRV (1.85) covers the default build only.
 tpt-simd-blas = { version = "0.1.1", optional = true, default-features = false, features = [
     "alloc",
 ] }

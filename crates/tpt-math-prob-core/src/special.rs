@@ -148,8 +148,18 @@ pub fn ln_binomial(n: u64, k: u64) -> f64 {
     if k > n {
         return f64::NEG_INFINITY;
     }
+    // Symmetry: C(n, k) = C(n, n - k). Use the smaller index.
+    let k = k.min(n - k);
+    if k <= DIRECT_BINOMIAL_TERMS {
+        // Sum the ratios directly. Subtracting three ln-gamma values cancels
+        // catastrophically when n is large: ln C(1e15, 1) came out as 36, not 34.54.
+        return (0..k).map(|i| ((n - i) as f64 / (i + 1) as f64).ln()).sum();
+    }
     ln_gamma(n as f64 + 1.0) - ln_gamma(k as f64 + 1.0) - ln_gamma((n - k) as f64 + 1.0)
 }
+
+/// Largest `min(k, n - k)` for which [`ln_binomial`] sums the ratios directly.
+const DIRECT_BINOMIAL_TERMS: u64 = 1024;
 
 /// Natural logarithm of the factorial, `ln(n!)`.
 pub fn ln_factorial(n: u64) -> f64 {
@@ -221,17 +231,44 @@ pub fn gamma_q(a: f64, x: f64) -> f64 {
     }
 }
 
+/// Iteration budget for the incomplete-gamma series and continued fraction at
+/// shape `a`. Both need on the order of `sqrt(a)` terms near `x ≈ a`, so the
+/// fixed [`MAX_ITER`] is too small once `a` is large (about 1e7).
+fn gamma_iteration_budget(a: f64) -> usize {
+    MAX_ITER.max((50.0 * a.sqrt()) as usize)
+}
+
+/// `-x + a ln x - ln Γ(a)`, the log of the gamma-function prefactor.
+///
+/// For `a ≥ 10` this is rewritten as `a (ln(1+d) − d) + ½ ln(a / 2π) − corr(a)`
+/// with `d = (x − a)/a` and the Stirling correction `corr(a)`. The direct form
+/// subtracts two terms of size about `a ln a`, which loses roughly `log10(a ln a)`
+/// digits; this form does not.
+fn ln_gamma_prefactor(a: f64, x: f64) -> f64 {
+    if a < 10.0 {
+        return -x + a * x.ln() - ln_gamma(a);
+    }
+    let d = (x - a) / a;
+    a * (d.ln_1p() - d) + 0.5 * (a / (2.0 * PI)).ln() - stirling_correction(a)
+}
+
+/// The Stirling series remainder `ln Γ(a) − [(a − ½) ln a − a + ½ ln 2π]` for `a ≥ 10`.
+fn stirling_correction(a: f64) -> f64 {
+    let a2 = a * a;
+    (1.0 / 12.0 - (1.0 / 360.0 - (1.0 / 1260.0 - 1.0 / (1680.0 * a2)) / a2) / a2) / a
+}
+
 /// Series evaluation of `P(a, x)` (Numerical Recipes `gser`).
 fn gamma_p_series(a: f64, x: f64) -> f64 {
     let mut ap = a;
     let mut del = 1.0 / a;
     let mut sum = del;
-    for _ in 0..MAX_ITER {
+    for _ in 0..gamma_iteration_budget(a) {
         ap += 1.0;
         del *= x / ap;
         sum += del;
         if del.abs() < sum.abs() * EPS {
-            return (-x + a * x.ln() - ln_gamma(a)).exp() * sum;
+            return ln_gamma_prefactor(a, x).exp() * sum;
         }
     }
     f64::NAN
@@ -245,7 +282,7 @@ fn gamma_q_cf(a: f64, x: f64) -> f64 {
     let mut c = 1.0 / TINY;
     let mut d = 1.0 / b;
     let mut h = d;
-    for i in 1..=MAX_ITER {
+    for i in 1..=gamma_iteration_budget(a) {
         let i = i as f64;
         let an = -i * (i - a);
         b += 2.0;
@@ -261,7 +298,7 @@ fn gamma_q_cf(a: f64, x: f64) -> f64 {
         let del = d * c;
         h *= del;
         if (del - 1.0).abs() < EPS {
-            return (-x + a * x.ln() - ln_gamma(a)).exp() * h;
+            return ln_gamma_prefactor(a, x).exp() * h;
         }
     }
     f64::NAN
@@ -573,6 +610,18 @@ mod tests {
     }
 
     #[test]
+    fn ln_binomial_is_accurate_for_large_n() {
+        // Used to return 36 for C(1e15, 1) from the three-ln-gamma difference.
+        assert!((ln_binomial(1_000_000_000_000_000, 1) - 1e15f64.ln()).abs() < 1e-12);
+        let pairs = 1e15f64 * (1e15 - 1.0) / 2.0;
+        assert!((ln_binomial(1_000_000_000_000_000, 2) - pairs.ln()).abs() < 1e-9);
+        // Symmetry, on both sides of the direct/ln-gamma switch.
+        assert_eq!(ln_binomial(100, 3), ln_binomial(100, 97));
+        let big = ln_binomial(5000, 2000);
+        assert!((ln_binomial(5000, 3000) - big).abs() < 1e-9);
+    }
+
+    #[test]
     fn xlogy_handles_zero_weight() {
         assert_eq!(xlogy(0.0, 0.0), 0.0);
         assert_eq!(xlogy(0.0, 1.0), 0.0);
@@ -601,9 +650,37 @@ mod tests {
     fn incomplete_gamma_rejects_bad_shape_and_reports_nonconvergence() {
         assert!(gamma_p(0.0, 1.0).is_nan());
         assert!(gamma_q(-1.0, 1.0).is_nan());
-        // The series needs ~sqrt(a) terms here, far beyond the budget, so the
-        // result is NaN rather than a silently unconverged value.
-        assert!(gamma_p(1e12, 1e12).is_nan());
+    }
+
+    #[test]
+    fn incomplete_gamma_is_accurate_at_large_shape() {
+        // The fixed 10_000-term budget used to return NaN here (the series needs
+        // ~sqrt(a) terms near x = a). The median of Gamma(a) sits just below a,
+        // so P(a, a) is just above 1/2.
+        for a in [1e6, 1e7] {
+            let p = gamma_p(a, a);
+            let q = gamma_q(a, a);
+            assert!((p + q - 1.0).abs() < 1e-12, "a = {a}");
+            assert!((p - 0.5).abs() < 1e-3, "a = {a}, P = {p}");
+        }
+        // P(a, a - c√a) falls as the lower tail is probed; check monotonicity.
+        let a = 1e7;
+        let lo = gamma_p(a, a - 3.0 * a.sqrt());
+        let hi = gamma_p(a, a + 3.0 * a.sqrt());
+        assert!(lo < 0.01 && hi > 0.99, "lo {lo}, hi {hi}");
+    }
+
+    #[test]
+    fn large_shape_prefactor_matches_direct_form() {
+        // The Stirling-based prefactor must agree with the direct formula on the
+        // overlap where both are well-conditioned.
+        for a in [10.0_f64, 50.0, 200.0] {
+            for x in [0.7 * a, a, 1.3 * a] {
+                let direct = -x + a * x.ln() - ln_gamma(a);
+                let stable = ln_gamma_prefactor(a, x);
+                assert!((direct - stable).abs() < 1e-10, "a {a}, x {x}");
+            }
+        }
     }
 
     #[test]

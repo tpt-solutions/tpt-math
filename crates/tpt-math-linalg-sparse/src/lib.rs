@@ -445,7 +445,7 @@ fn to_csr_impl<T: Scalar + Copy>(
     // Column-bucket first, then stable row-bucket: the result is row-major with
     // columns ascending inside each row, so duplicates are adjacent.
     assert!(
-        ncols <= u32::MAX as usize + 1,
+        ncols as u64 <= u64::from(u32::MAX) + 1,
         "CsrMatrix supports at most 2^32 columns"
     );
     let entries = zip_triplets(rows, cols, vals);
@@ -513,7 +513,8 @@ fn to_csc_impl<T: Scalar + Copy>(
 /// * `a` — system matrix in CSR form (must be square and SPD).
 /// * `b` — right-hand side.
 /// * `x0` — optional starting guess; zeros are used if `None`.
-/// * `tol` — absolute residual-norm tolerance.
+/// * `tol` — relative residual tolerance: stop when `‖r‖ ≤ tol·‖b‖` (absolute if
+///   `b = 0`).
 /// * `max_iter` — iteration cap.
 ///
 /// # Errors
@@ -551,7 +552,11 @@ pub fn conjugate_gradient_with_report<T: Scalar + Copy + 'static>(
     tol: T,
     max_iter: usize,
 ) -> Result<(DVector<T>, SolveReport<T>), SparseError> {
-    if a.nrows() != a.ncols() || b.len() != a.nrows() {
+    // Check x0 before the SIMD dispatch: the SIMD kernels index it directly.
+    if a.nrows() != a.ncols()
+        || b.len() != a.nrows()
+        || x0.as_ref().is_some_and(|v| v.len() != a.nrows())
+    {
         return Err(SparseError::DimensionMismatch);
     }
     #[cfg(feature = "simd")]
@@ -914,7 +919,11 @@ pub fn bicgstab_with_report<T: Scalar + Copy + 'static>(
     tol: T,
     max_iter: usize,
 ) -> Result<(DVector<T>, SolveReport<T>), SparseError> {
-    if a.nrows() != a.ncols() || b.len() != a.nrows() {
+    // Check x0 before the SIMD dispatch: the SIMD kernels index it directly.
+    if a.nrows() != a.ncols()
+        || b.len() != a.nrows()
+        || x0.as_ref().is_some_and(|v| v.len() != a.nrows())
+    {
         return Err(SparseError::DimensionMismatch);
     }
     #[cfg(feature = "simd")]
@@ -2765,6 +2774,22 @@ mod tests {
         assert_eq!(back.row_ptr, vec![0, 2, 3]);
         assert_eq!(back.col_idx, vec![0, 2, 1]);
         assert_eq!(back.values, vec![1.0, 2.0, 3.0]);
+    }
+
+    #[test]
+    fn krylov_rejects_wrong_length_initial_guess() {
+        // Under `simd` this used to panic in the kernel instead of returning Err.
+        let a = dense_2x2_csr();
+        let b = DVector::from_vec(vec![1.0_f64, 2.0]);
+        let bad = DVector::from_vec(vec![0.0_f64; 3]);
+        assert_eq!(
+            conjugate_gradient(&a, &b, Some(bad.clone()), 1e-10, 10).unwrap_err(),
+            SparseError::DimensionMismatch
+        );
+        assert_eq!(
+            bicgstab(&a, &b, Some(bad), 1e-10, 10).unwrap_err(),
+            SparseError::DimensionMismatch
+        );
     }
 
     #[test]
