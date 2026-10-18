@@ -46,6 +46,18 @@
 
 extern crate alloc;
 
+#[cfg(feature = "alloc")]
+mod operator;
+#[cfg(feature = "alloc")]
+pub use operator::{
+    conjugate_gradient_op, lanczos, matrix_free, LanczosEigenpairs, LinearOperator, MatrixFree,
+    Which,
+};
+#[cfg(feature = "alloc")]
+mod ordering;
+#[cfg(feature = "alloc")]
+pub use ordering::{permute_symmetric, reverse_cuthill_mckee, ReorderedCholesky};
+
 use alloc::vec::Vec;
 
 #[cfg(feature = "alloc")]
@@ -574,8 +586,31 @@ pub fn conjugate_gradient_with_report<T: Scalar + Copy + 'static>(
         }
     }
     let n = b.len();
+    cg_core(n, |p, ap| a.matvec_into(p, ap), b, x0, tol, max_iter)
+}
+
+/// The scalar conjugate-gradient loop, generic over how `A·p` is applied.
+///
+/// `apply(p, ap)` must write `A·p` into `ap`. The CSR path passes
+/// [`CsrMatrix::matvec_into`], and matrix-free callers pass their operator.
+/// `b` must have length `n`.
+#[cfg(feature = "alloc")]
+pub(crate) fn cg_core<T, A>(
+    n: usize,
+    mut apply: A,
+    b: &DVector<T>,
+    x0: Option<DVector<T>>,
+    tol: T,
+    max_iter: usize,
+) -> Result<(DVector<T>, SolveReport<T>), SparseError>
+where
+    T: Scalar + Copy,
+    A: FnMut(&[T], &mut [T]) -> Result<(), SparseError>,
+{
     let mut x = x0.unwrap_or_else(|| DVector::zeros(n));
-    let mut r = b.clone() - a.matvec(&x)?;
+    let mut ax = DVector::zeros(n);
+    apply(x.as_slice(), ax.as_mut_slice())?;
+    let mut r = b.clone() - ax;
     // Relative tolerance: stop when ‖r‖ ≤ tol·‖b‖ (absolute tol if b = 0).
     let b_norm = b.norm();
     let target = if b_norm > T::zero() {
@@ -591,7 +626,7 @@ pub fn conjugate_gradient_with_report<T: Scalar + Copy + 'static>(
     let mut ap = DVector::zeros(n);
     let mut rs_old = r.dot(&r);
     for it in 0..max_iter {
-        a.matvec_into(p.as_slice(), ap.as_mut_slice())?;
+        apply(p.as_slice(), ap.as_mut_slice())?;
         let p_ap = p.dot(&ap);
         // For SPD A, pᵀAp > 0 until convergence; anything else (including NaN)
         // means the method cannot continue.
