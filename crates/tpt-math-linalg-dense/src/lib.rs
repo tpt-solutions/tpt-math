@@ -1123,6 +1123,12 @@ impl Lu {
                 what: format!("rhs has {} rows, expected {n}", b.nrows()),
             });
         }
+        #[cfg(feature = "simd-runtime")]
+        {
+            if n >= SIMD_DENSE_CUTOFF {
+                return simd_lu::solve_matrix(&self.lu, &self.piv, b);
+            }
+        }
         let mut out = Vec::with_capacity(n * b.ncols());
         for col in 0..b.ncols() {
             let column = DVector::from_fn(n, |i| b[(i, col)]);
@@ -1298,30 +1304,46 @@ impl DMatrix<f64> {
                 what: format!("matrix is {}x{}, expected square", n, self.ncols),
             });
         }
-        // Flat row-major factor. Row i of `L` is `l[i*n..i*n + n]`, so each inner
-        // sum is a dot product of two contiguous slices.
-        let mut l = vec![0.0_f64; n * n];
-        for j in 0..n {
-            let row_j_head: f64 = l[j * n..j * n + j].iter().map(|x| x * x).sum();
-            let d = self[(j, j)] - row_j_head;
-            if d.is_nan() || d <= 0.0 {
-                return Err(DenseError::Singular {
-                    what: "cholesky (not positive definite)",
-                });
-            }
-            let ljj = sqrt_f64(d);
-            l[j * n + j] = ljj;
-            let (upto_i, from_i) = l.split_at_mut((j + 1) * n);
-            let row_j = &upto_i[j * n..j * n + j];
-            for (r, row_i) in from_i.chunks_exact_mut(n).enumerate() {
-                let i = j + 1 + r;
-                let dot: f64 = row_i[..j].iter().zip(row_j).map(|(a, b)| a * b).sum();
-                row_i[j] = (self[(i, j)] - dot) / ljj;
+        #[cfg(feature = "simd-runtime")]
+        {
+            if n >= SIMD_DENSE_CUTOFF {
+                return simd_chol::factor(self);
             }
         }
-        Ok(DMatrix::from_fn(n, n, |i, j| l[i * n + j]))
+        scalar_cholesky(self)
     }
+}
 
+/// The portable Cholesky kernel behind [`DMatrix::cholesky`].
+#[cfg(feature = "alloc")]
+fn scalar_cholesky(a: &DMatrix<f64>) -> Result<DMatrix<f64>, DenseError> {
+    let n = a.nrows;
+    // Flat row-major factor. Row i of `L` is `l[i*n..i*n + n]`, so each inner
+    // sum is a dot product of two contiguous slices.
+    let mut l = vec![0.0_f64; n * n];
+    for j in 0..n {
+        let row_j_head: f64 = l[j * n..j * n + j].iter().map(|x| x * x).sum();
+        let d = a[(j, j)] - row_j_head;
+        if d.is_nan() || d <= 0.0 {
+            return Err(DenseError::Singular {
+                what: "cholesky (not positive definite)",
+            });
+        }
+        let ljj = sqrt_f64(d);
+        l[j * n + j] = ljj;
+        let (upto_i, from_i) = l.split_at_mut((j + 1) * n);
+        let row_j = &upto_i[j * n..j * n + j];
+        for (r, row_i) in from_i.chunks_exact_mut(n).enumerate() {
+            let i = j + 1 + r;
+            let dot: f64 = row_i[..j].iter().zip(row_j).map(|(a, b)| a * b).sum();
+            row_i[j] = (a[(i, j)] - dot) / ljj;
+        }
+    }
+    Ok(DMatrix::from_fn(n, n, |i, j| l[i * n + j]))
+}
+
+#[cfg(feature = "alloc")]
+impl DMatrix<f64> {
     /// Eigendecomposition of a symmetric matrix by the cyclic Jacobi method.
     ///
     /// Returns `(values, vectors)` with the eigenvalues in ascending order and
@@ -1771,7 +1793,7 @@ fn partial_pivot_lu(m: &DMatrix<f64>) -> Result<(Vec<f64>, Vec<usize>), DenseErr
 fn partial_pivot_lu_with(m: &DMatrix<f64>, tol: f64) -> Result<(Vec<f64>, Vec<usize>), DenseError> {
     #[cfg(feature = "simd-runtime")]
     {
-        if m.nrows >= SIMD_LU_CUTOFF {
+        if m.nrows >= SIMD_DENSE_CUTOFF {
             return simd_lu::factor(m, tol);
         }
     }
@@ -1781,7 +1803,7 @@ fn partial_pivot_lu_with(m: &DMatrix<f64>, tol: f64) -> Result<(Vec<f64>, Vec<us
 /// Dimension from which the `simd` feature factors with `tpt-simd-blas`. Below
 /// this the scalar loop is as fast, and the conversion overhead is not repaid.
 #[cfg(feature = "simd-runtime")]
-const SIMD_LU_CUTOFF: usize = 64;
+const SIMD_DENSE_CUTOFF: usize = 64;
 
 /// The portable LU kernel behind [`partial_pivot_lu_with`].
 #[cfg(feature = "alloc")]
@@ -2757,6 +2779,31 @@ mod svd_norm_carry_tests {
     }
 }
 
+/// Cholesky through `tpt-simd-blas`'s blocked `potrf`. Only the lower triangle
+/// of the input is read, and the result is returned with a zero upper triangle,
+/// as the scalar path does.
+#[cfg(feature = "simd-runtime")]
+mod simd_chol {
+    use super::*;
+
+    pub(super) fn factor(m: &DMatrix<f64>) -> Result<DMatrix<f64>, DenseError> {
+        let n = m.nrows;
+        let mut a = m.data.clone();
+        if tpt_simd_blas::potrf_f64(n, &mut a, n).is_err() {
+            return Err(DenseError::Singular {
+                what: "cholesky (not positive definite)",
+            });
+        }
+        Ok(DMatrix::from_fn(n, n, |i, j| {
+            if i >= j {
+                a[i + j * n]
+            } else {
+                0.0
+            }
+        }))
+    }
+}
+
 /// LU through `tpt-simd-blas`'s blocked `getrf`. The kernel works on column-major
 /// storage and returns LAPACK-style sequential swaps, so this module converts both
 /// ways and produces the same row-major layout and permutation as the scalar path.
@@ -2794,6 +2841,41 @@ mod simd_lu {
             piv.swap(i, p);
         }
         Ok((a, piv))
+    }
+
+    /// Solve `A X = B` for all right-hand sides at once with `getrs`, from the
+    /// row-major factors and permutation that [`factor`] produces.
+    pub(super) fn solve_matrix(
+        lu: &[f64],
+        piv: &[usize],
+        b: &DMatrix<f64>,
+    ) -> Result<DMatrix<f64>, DenseError> {
+        let n = piv.len();
+        let nrhs = b.ncols();
+        // Column-major factors, as the kernel expects.
+        let mut colmajor = vec![0.0_f64; n * n];
+        for i in 0..n {
+            for j in 0..n {
+                colmajor[i + j * n] = lu[i * n + j];
+            }
+        }
+        // The kernel takes LAPACK-style sequential swaps. Rebuild them from the
+        // permutation: position k must end up holding original row `piv[k]`.
+        let mut current: Vec<usize> = (0..n).collect();
+        let mut ipiv = vec![0usize; n];
+        for k in 0..n {
+            let p = (k..n)
+                .find(|&p| current[p] == piv[k])
+                .ok_or(DenseError::Singular {
+                    what: "solve_matrix",
+                })?;
+            current.swap(k, p);
+            ipiv[k] = p;
+        }
+        // `DMatrix` is column-major, so the right-hand sides can be passed as is.
+        let mut x = b.data.clone();
+        tpt_simd_blas::getrs_f64(n, nrhs, &colmajor, n, &ipiv, &mut x, n);
+        Ok(DMatrix::from_vec(n, nrhs, x))
     }
 
     #[cfg(test)]
@@ -2842,6 +2924,116 @@ mod simd_lu {
                 scalar_lu(&a, 0.0),
                 Err(DenseError::Singular { .. })
             ));
+        }
+    }
+}
+
+#[cfg(all(test, feature = "simd-runtime"))]
+mod simd_dense_solve_tests {
+    use super::*;
+
+    fn dominant_nonsymmetric(n: usize) -> DMatrix<f64> {
+        DMatrix::from_fn(n, n, |i, j| {
+            if i == j {
+                n as f64 + 1.0
+            } else {
+                ((i * 3 + j * 5) as f64).sin()
+            }
+        })
+    }
+
+    fn spd(n: usize) -> DMatrix<f64> {
+        // Symmetric, strictly diagonally dominant, so positive definite.
+        DMatrix::from_fn(n, n, |i, j| {
+            if i == j {
+                n as f64 + 2.0
+            } else {
+                1.0 / (1.0 + i.abs_diff(j) as f64)
+            }
+        })
+    }
+
+    #[test]
+    fn simd_solve_matrix_agrees_with_the_scalar_solve() {
+        for n in [5usize, 33, 200] {
+            let a = dominant_nonsymmetric(n);
+            let (lu, piv) = scalar_lu(&a, 0.0).unwrap();
+            let rhs = DMatrix::from_fn(n, 3, |i, j| (i as f64 * 0.3 + j as f64).cos());
+            let simd = simd_lu::solve_matrix(&lu, &piv, &rhs).unwrap();
+            for col in 0..3 {
+                let column = DVector::from_fn(n, |i| rhs[(i, col)]);
+                let want = solve_with_lu(&lu, &piv, &column);
+                for i in 0..n {
+                    let got = simd[(i, col)];
+                    assert!(
+                        (got - want[i]).abs() <= 1e-10 * want[i].abs().max(1.0),
+                        "n = {n}, col {col}, row {i}: {got} vs {}",
+                        want[i]
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn simd_cholesky_agrees_with_the_scalar_cholesky() {
+        for n in [5usize, 33, 200] {
+            let a = spd(n);
+            let want = scalar_cholesky(&a).unwrap();
+            let got = simd_chol::factor(&a).unwrap();
+            for i in 0..n {
+                for j in 0..n {
+                    assert!(
+                        (got[(i, j)] - want[(i, j)]).abs() <= 1e-10 * want[(i, j)].abs().max(1.0),
+                        "n = {n} at ({i}, {j})"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn simd_cholesky_rejects_an_indefinite_matrix() {
+        let n = 80;
+        let a = DMatrix::from_fn(n, n, |i, j| {
+            if i == j {
+                if i == 40 {
+                    -1.0
+                } else {
+                    2.0
+                }
+            } else {
+                0.0
+            }
+        });
+        assert!(simd_chol::factor(&a).is_err());
+        assert!(a.cholesky().is_err());
+    }
+
+    #[test]
+    fn determinant_sign_is_right_after_many_row_swaps() {
+        // The cyclic shift on n rows is an n-cycle, with n − 1 transpositions, so
+        // its determinant is (−1)^(n−1). Here n = 66 is above the SIMD cutoff.
+        let n = 66;
+        let shift = DMatrix::from_fn(n, n, |i, j| if j == (i + 1) % n { 1.0 } else { 0.0 });
+        let det = shift.det().unwrap();
+        assert!((det + 1.0).abs() < 1e-12, "det = {det}");
+    }
+
+    #[test]
+    fn lu_solve_matrix_dispatch_matches_small_path() {
+        // Above the cutoff, `Lu::solve_matrix` takes the SIMD branch; check it
+        // against a solve column by column.
+        let n = 70;
+        let a = dominant_nonsymmetric(n);
+        let lu = Lu::new(&a).unwrap();
+        let rhs = DMatrix::from_fn(n, 2, |i, j| (i + j) as f64);
+        let x = lu.solve_matrix(&rhs).unwrap();
+        let back = a.clone() * x;
+        for i in 0..n {
+            for j in 0..2 {
+                assert!((back[(i, j)] - rhs[(i, j)]).abs() < 1e-9);
+            }
         }
     }
 }
