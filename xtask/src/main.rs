@@ -205,6 +205,7 @@ fn drift() -> Result<(), String> {
     }
 
     let mut problems = unreachable_from_facade()?;
+    problems.extend(crate_count_drift(&readme)?);
     for (label, other) in [
         ("NO_STD_CRATES", &listed),
         ("the README no_std column", &documented),
@@ -276,6 +277,47 @@ fn which(name: &str) -> bool {
 /// Crates under `crates/` that the `tpt-math` facade cannot reach, directly or
 /// through another workspace crate's `[dependencies]`. Dev-dependencies are not
 /// followed, because they are not part of what a user of the facade gets.
+/// Compares the crate count the README states with the number of `crates/*`
+/// packages `cargo metadata` reports for the workspace.
+fn crate_count_drift(readme: &str) -> Result<Vec<String>, String> {
+    let output = std::process::Command::new("cargo")
+        .args(["metadata", "--no-deps", "--format-version", "1"])
+        .output()
+        .map_err(|e| format!("running cargo metadata: {e}"))?;
+    if !output.status.success() {
+        return Err(format!(
+            "cargo metadata failed:\n{}",
+            String::from_utf8_lossy(&output.stderr)
+        ));
+    }
+    let metadata = String::from_utf8_lossy(&output.stdout);
+    // Each package carries an id like `path+file:///…/crates/<name>#<version>`.
+    let actual = metadata
+        .split("\"id\":\"path+file://")
+        .skip(1)
+        .filter(|rest| rest.split('"').next().unwrap_or("").contains("/crates/"))
+        .count();
+
+    let stated = readme
+        .lines()
+        .find_map(|line| {
+            let before = line.split(" library workspace members").next()?;
+            if before.len() == line.len() {
+                return None;
+            }
+            before.split_whitespace().last()?.parse::<usize>().ok()
+        })
+        .ok_or("README.md does not state the library crate count")?;
+
+    if stated == actual {
+        Ok(Vec::new())
+    } else {
+        Ok(vec![format!(
+            "README.md says {stated} library crates but cargo metadata lists {actual} under crates/"
+        )])
+    }
+}
+
 fn unreachable_from_facade() -> Result<Vec<String>, String> {
     use std::collections::{BTreeMap, BTreeSet};
     use std::fs;

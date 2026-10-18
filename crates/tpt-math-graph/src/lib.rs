@@ -492,6 +492,121 @@ where
 }
 
 // ===========================================================================
+// Traversal, spanning trees and components (thin wraps over petgraph)
+// ===========================================================================
+
+/// Nodes reachable from `start` in breadth-first order, `start` first.
+///
+/// Edges are followed in their stored direction for directed graphs.
+pub fn bfs_order<N, E, Ty, Ix>(
+    graph: &petgraph::Graph<N, E, Ty, Ix>,
+    start: NodeIndex<Ix>,
+) -> Vec<NodeIndex<Ix>>
+where
+    Ty: petgraph::EdgeType,
+    Ix: IndexType,
+{
+    let mut order = Vec::new();
+    let mut bfs = petgraph::visit::Bfs::new(graph, start);
+    while let Some(n) = bfs.next(graph) {
+        order.push(n);
+    }
+    order
+}
+
+/// Nodes reachable from `start` in depth-first (preorder) order, `start` first.
+///
+/// Edges are followed in their stored direction for directed graphs.
+pub fn dfs_order<N, E, Ty, Ix>(
+    graph: &petgraph::Graph<N, E, Ty, Ix>,
+    start: NodeIndex<Ix>,
+) -> Vec<NodeIndex<Ix>>
+where
+    Ty: petgraph::EdgeType,
+    Ix: IndexType,
+{
+    let mut order = Vec::new();
+    let mut dfs = petgraph::visit::Dfs::new(graph, start);
+    while let Some(n) = dfs.next(graph) {
+        order.push(n);
+    }
+    order
+}
+
+/// Whether a directed path from `from` to `to` exists (`from == to` is `true`).
+pub fn has_path<N, E, Ix>(
+    graph: &Graph<N, E, Directed, Ix>,
+    from: NodeIndex<Ix>,
+    to: NodeIndex<Ix>,
+) -> bool
+where
+    Ix: IndexType,
+{
+    petgraph::algo::has_path_connecting(graph, from, to, None)
+}
+
+/// Whether the directed graph contains a cycle.
+pub fn is_cyclic<N, E, Ix>(graph: &Graph<N, E, Directed, Ix>) -> bool
+where
+    Ix: IndexType,
+{
+    petgraph::algo::is_cyclic_directed(graph)
+}
+
+/// The number of connected components of an undirected graph.
+///
+/// Edge directions are ignored. For a directed graph this counts the weakly
+/// connected components.
+pub fn connected_components<N, E, Ty, Ix>(graph: &petgraph::Graph<N, E, Ty, Ix>) -> usize
+where
+    Ty: petgraph::EdgeType,
+    Ix: IndexType,
+{
+    petgraph::algo::connected_components(graph)
+}
+
+/// The strongly connected components of a directed graph, in reverse
+/// topological order of the condensation (Tarjan's algorithm).
+pub fn strongly_connected_components<N, E, Ix>(
+    graph: &Graph<N, E, Directed, Ix>,
+) -> Vec<Vec<NodeIndex<Ix>>>
+where
+    Ix: IndexType,
+{
+    petgraph::algo::tarjan_scc(graph)
+}
+
+/// A minimum spanning forest, as `(source, target, weight)` triples.
+///
+/// Edge directions are ignored. Each component of the input contributes a
+/// spanning tree, so a disconnected graph yields a forest. Ties are broken by
+/// petgraph's ordering, so the result is deterministic for a given graph.
+///
+/// The total weight can be summed by the caller; the edges are returned in the
+/// order Kruskal's algorithm accepts them.
+pub fn minimum_spanning_tree<N, E, Ty, Ix>(
+    graph: &petgraph::Graph<N, E, Ty, Ix>,
+) -> Vec<(NodeIndex<Ix>, NodeIndex<Ix>, E)>
+where
+    N: Clone,
+    E: Clone + PartialOrd,
+    Ty: petgraph::EdgeType,
+    Ix: IndexType,
+{
+    use petgraph::data::Element;
+    petgraph::algo::min_spanning_tree(graph)
+        .filter_map(|element| match element {
+            Element::Edge {
+                source,
+                target,
+                weight,
+            } => Some((NodeIndex::new(source), NodeIndex::new(target), weight)),
+            Element::Node { .. } => None,
+        })
+        .collect()
+}
+
+// ===========================================================================
 // Tests
 // ===========================================================================
 
@@ -727,5 +842,106 @@ mod tests {
             try_astar(&g, a, |n| n == b, |_| 0.0),
             Err(GraphError::InvalidWeight)
         );
+    }
+}
+
+#[cfg(test)]
+mod traversal_tests {
+    use super::*;
+
+    fn chain() -> (Graph<u8, f64>, Vec<NodeIndex>) {
+        // 0 -> 1 -> 2, 0 -> 3, 4 isolated.
+        let mut g: Graph<u8, f64> = Graph::new();
+        let n: Vec<NodeIndex> = (0..5).map(|i| g.add_node(i)).collect();
+        g.add_edge(n[0], n[1], 1.0);
+        g.add_edge(n[1], n[2], 1.0);
+        g.add_edge(n[0], n[3], 1.0);
+        (g, n)
+    }
+
+    #[test]
+    fn bfs_visits_by_level() {
+        let (g, n) = chain();
+        let order = bfs_order(&g, n[0]);
+        assert_eq!(order[0], n[0]);
+        assert_eq!(order.len(), 4);
+        // Both children of 0 come before the grandchild 2.
+        let pos = |x: NodeIndex| order.iter().position(|&y| y == x).unwrap();
+        assert!(pos(n[1]) < pos(n[2]));
+        assert!(pos(n[3]) < pos(n[2]));
+        assert!(!order.contains(&n[4]));
+    }
+
+    #[test]
+    fn dfs_goes_deep_first() {
+        let (g, n) = chain();
+        let order = dfs_order(&g, n[0]);
+        // Preorder: 0, then the first child's subtree before its sibling.
+        assert_eq!(order.len(), 4);
+        let pos = |x: NodeIndex| order.iter().position(|&y| y == x).unwrap();
+        assert!(pos(n[2]) < pos(n[3]) || pos(n[1]) < pos(n[3]));
+        assert_eq!(order[0], n[0]);
+    }
+
+    #[test]
+    fn reachability_and_cycles() {
+        let (mut g, n) = chain();
+        assert!(has_path(&g, n[0], n[2]));
+        assert!(!has_path(&g, n[2], n[0]));
+        assert!(has_path(&g, n[4], n[4]));
+        assert!(!is_cyclic(&g));
+        g.add_edge(n[2], n[0], 1.0);
+        assert!(is_cyclic(&g));
+    }
+
+    #[test]
+    fn components_ignore_direction() {
+        let (g, _) = chain();
+        // {0,1,2,3} and {4}.
+        assert_eq!(connected_components(&g), 2);
+    }
+
+    #[test]
+    fn strongly_connected_components_split_a_cycle() {
+        let mut g: Graph<(), ()> = Graph::new();
+        let a = g.add_node(());
+        let b = g.add_node(());
+        let c = g.add_node(());
+        g.add_edge(a, b, ());
+        g.add_edge(b, a, ());
+        g.add_edge(b, c, ());
+        let sccs = strongly_connected_components(&g);
+        assert_eq!(sccs.len(), 2);
+        let big = sccs.iter().find(|s| s.len() == 2).unwrap();
+        assert!(big.contains(&a) && big.contains(&b));
+    }
+
+    #[test]
+    fn spanning_tree_of_a_weighted_square() {
+        // Square 0-1-2-3-0 with a heavy diagonal 0-2 that must be skipped.
+        let mut g: Graph<(), f64> = Graph::new();
+        let n: Vec<NodeIndex> = (0..4).map(|_| g.add_node(())).collect();
+        g.add_edge(n[0], n[1], 1.0);
+        g.add_edge(n[1], n[2], 2.0);
+        g.add_edge(n[2], n[3], 3.0);
+        g.add_edge(n[3], n[0], 4.0);
+        g.add_edge(n[0], n[2], 10.0);
+        let mst = minimum_spanning_tree(&g);
+        assert_eq!(mst.len(), 3);
+        let total: f64 = mst.iter().map(|&(_, _, w)| w).sum();
+        assert_eq!(total, 6.0);
+    }
+
+    #[test]
+    fn spanning_forest_for_disconnected_graph() {
+        let (g, _) = {
+            let mut g: Graph<(), f64> = Graph::new();
+            let n: Vec<NodeIndex> = (0..4).map(|_| g.add_node(())).collect();
+            g.add_edge(n[0], n[1], 1.0);
+            g.add_edge(n[2], n[3], 2.0);
+            (g, n)
+        };
+        // Two components, so two edges: a forest with n - c = 2 edges.
+        assert_eq!(minimum_spanning_tree(&g).len(), 2);
     }
 }
