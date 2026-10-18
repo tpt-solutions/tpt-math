@@ -16,10 +16,14 @@
 //! [`num_traits`]: num_traits
 //! [`libm`]: libm
 
+#[cfg(feature = "alloc")]
+extern crate alloc;
+
 pub mod ode;
 pub mod quadrature;
 pub mod report;
 pub mod roots;
+pub mod stiff;
 
 pub use report::{SolveReport, SolveStatus};
 
