@@ -1447,9 +1447,15 @@ constant kernel) are checked in debug builds, and in release with the
 - [x] Add Windows and macOS to the test job (CI is Ubuntu-only)
 - [x] `bench-smoke`: `cargo bench --no-run --workspace` (it builds 4 crates'
       benches; every crate has one)
-- [ ] More fuzz targets: the `DynQuantity` `FromStr` parser, `from_triplets`,
+- [x] More fuzz targets: the `DynQuantity` `FromStr` parser, `from_triplets`,
       and special-function invariants (no NaN on valid input, monotone CDFs,
       `P + Q = 1`)
+      Status: Done: `units_dyn_parse`, `sparse_triplets` and `special_functions` are in `fuzz/`,
+      and all three build. The first run of `units_dyn_parse` found a real bug, which is fixed:
+      `Display` printed compound units such as `m^2·kg·s^-2`, and the parser rejected them. The
+      parser now reads canonical base-unit expressions. The runs here are short smoke tests
+      without coverage feedback on Windows, because libFuzzer cannot run coverage-guided on MSVC.
+      A longer run on Linux is still needed.
 - [ ] Golden-value accuracy suite: a script that generates reference tables
       from mpmath/SciPy and a test that checks them. It would have caught the
       large-shape gamma and `ln_binomial` bugs

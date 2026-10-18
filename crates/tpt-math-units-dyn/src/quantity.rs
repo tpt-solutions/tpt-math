@@ -5,7 +5,7 @@ use core::ops::{Add, Div, Mul, Neg, Sub};
 use core::str::FromStr;
 use std::borrow::Cow;
 
-use crate::dimension::Dimension;
+use crate::dimension::{parse_base_expression, Dimension};
 use crate::error::{Result, UnitError};
 use crate::unit::{builtin_registry, UnitRegistry};
 
@@ -426,7 +426,15 @@ impl FromStr for DynQuantity {
         if unit.is_empty() {
             Ok(Self::dimensionless(value))
         } else {
-            Self::parse(value, unit)
+            // A registered symbol first; otherwise a canonical base-unit expression,
+            // which is what `Display` prints for compound quantities.
+            match Self::parse(value, unit) {
+                Ok(quantity) => Ok(quantity),
+                Err(err) => match parse_base_expression(unit) {
+                    Some(dim) => Ok(Self::from_base(value, dim)),
+                    None => Err(err),
+                },
+            }
         }
     }
 }
@@ -771,5 +779,35 @@ mod tests {
         assert!(a.approx_eq(&b, 1e-3));
         assert!(!a.approx_eq(&b, 1e-9));
         assert!(!a.approx_eq(&q(1000.0, "kg"), 1e-3));
+    }
+}
+
+#[cfg(test)]
+mod display_round_trip_tests {
+    use super::*;
+
+    #[test]
+    fn compound_quantities_parse_back_from_their_display() {
+        // Found by fuzzing: `Display` printed "m^2·kg·s^-2", which the parser rejected.
+        for q in [
+            DynQuantity::from_base(2.0, Dimension::from_exponents([2, 1, -2, 0, 0, 0, 0])),
+            DynQuantity::from_base(-0.5, Dimension::from_exponents([-3, 1, 0, 0, 0, 0, 0])),
+            DynQuantity::from_base(7.0, Dimension::from_exponents([1, 0, -1, 0, 0, 0, 0])),
+        ] {
+            let shown = q.to_string();
+            let back: DynQuantity = shown.parse().unwrap_or_else(|e| panic!("{shown}: {e}"));
+            assert_eq!(back, q, "round trip through {shown:?}");
+        }
+    }
+
+    #[test]
+    fn unit_expressions_accept_star_and_reject_garbage() {
+        let q: DynQuantity = "3 m*s^-1".parse().unwrap();
+        assert_eq!(q.value(), 3.0);
+        assert_eq!(*q.dim(), Dimension::from_exponents([1, 0, -1, 0, 0, 0, 0]));
+        assert!("1 m^x".parse::<DynQuantity>().is_err());
+        assert!("1 q^2".parse::<DynQuantity>().is_err());
+        assert!("1 m^200".parse::<DynQuantity>().is_err());
+        assert!("1 m··s".parse::<DynQuantity>().is_err());
     }
 }

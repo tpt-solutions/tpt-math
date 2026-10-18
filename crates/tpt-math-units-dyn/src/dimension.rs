@@ -420,6 +420,34 @@ impl Div for Dimension {
     }
 }
 
+/// Reads a canonical SI base-unit expression such as `m^2·kg·s^-2` (or `m^2*kg`)
+/// back into a dimension. This is the inverse of `Display for Dimension`, so
+/// every string a quantity prints can be parsed again.
+///
+/// Returns `None` for an unknown symbol, a malformed exponent, an empty factor, or
+/// an empty expression. Exponents that overflow `i8` are also rejected.
+pub(crate) fn parse_base_expression(text: &str) -> Option<Dimension> {
+    let mut exponents = [0i8; BASE_COUNT];
+    let mut any = false;
+    for factor in text.split(['·', '*']) {
+        let factor = factor.trim();
+        if factor.is_empty() {
+            return None;
+        }
+        let (symbol, exponent) = match factor.split_once('^') {
+            Some((symbol, exp)) => (symbol.trim(), exp.trim().parse::<i8>().ok()?),
+            None => (factor, 1),
+        };
+        let base = BaseDimension::ALL
+            .into_iter()
+            .find(|base| base.symbol() == symbol)?;
+        let slot = &mut exponents[base.index()];
+        *slot = slot.checked_add(exponent)?;
+        any = true;
+    }
+    any.then(|| Dimension::from_exponents(exponents))
+}
+
 impl fmt::Display for Dimension {
     /// Formats the dimension in SI base units, e.g. `m^2·kg·s^-2`.
     ///

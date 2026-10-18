@@ -11,6 +11,10 @@ cargo-fuzz = true
 libfuzzer-sys = "0.4"
 tpt-math-symbolic = { path = "../crates/tpt-math-symbolic" }
 tpt-math-exact = { path = "../crates/tpt-math-exact" }
+tpt-math-units-dyn = { path = "../crates/tpt-math-units-dyn" }
+tpt-math-linalg-sparse = { path = "../crates/tpt-math-linalg-sparse" }
+tpt-math-linalg-dense = { path = "../crates/tpt-math-linalg-dense" }
+tpt-math-prob-core = { path = "../crates/tpt-math-prob-core" }
 
 # Separate workspace, so the main workspace does not build the fuzzers.
 [workspace]
@@ -26,6 +30,27 @@ bench = false
 [[bin]]
 name = "exact_rational"
 path = "fuzz_targets/exact_rational.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "units_dyn_parse"
+path = "fuzz_targets/units_dyn_parse.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "sparse_triplets"
+path = "fuzz_targets/sparse_triplets.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "special_functions"
+path = "fuzz_targets/special_functions.rs"
 test = false
 doc = false
 bench = false

@@ -149,7 +149,26 @@ version = "0.0.0"
 dependencies = [
  "libfuzzer-sys",
  "tpt-math-exact",
+ "tpt-math-linalg-dense",
+ "tpt-math-linalg-sparse",
+ "tpt-math-prob-core",
  "tpt-math-symbolic",
+ "tpt-math-units-dyn",
+]
+
+[[package]]
+name = "tpt-math-linalg-dense"
+version = "0.1.0"
+dependencies = [
+ "tpt-math-numeric",
+]
+
+[[package]]
+name = "tpt-math-linalg-sparse"
+version = "0.1.0"
+dependencies = [
+ "tpt-math-linalg-dense",
+ "tpt-math-numeric",
 ]
 
 [[package]]
@@ -160,8 +179,46 @@ dependencies = [
 ]
 
 [[package]]
+name = "tpt-math-prob-core"
+version = "0.1.0"
+dependencies = [
+ "tpt-math-numeric",
+]
+
+[[package]]
 name = "tpt-math-symbolic"
 version = "0.1.0"
 dependencies = [
  "num-traits",
+]
+
+[[package]]
+name = "tpt-math-units"
+version = "0.1.0"
+dependencies = [
+ "num-traits",
+ "uom",
+]
+
+[[package]]
+name = "tpt-math-units-dyn"
+version = "0.1.0"
+dependencies = [
+ "tpt-math-units",
+]
+
+[[package]]
+name = "typenum"
+version = "1.20.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b6f5e870be6c3b371b77fe0ee0bafb859fa4964b4404c27de1d380043c4dda20"
+
+[[package]]
+name = "uom"
+version = "0.38.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a739f83872836c82a4f2527d4e54b37007b3de68cafe7edde95fd695968bf4b9"
+dependencies = [
+ "num-traits",
+ "typenum",
 ]
