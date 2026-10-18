@@ -16,7 +16,9 @@ fn dominant(n: usize) -> DMatrix<f64> {
 fn spd(n: usize) -> DMatrix<f64> {
     let b = DMatrix::from_fn(n, n, |i, j| ((i * 7 + j * 3) as f64).cos());
     let bbt = b.clone() * b.transpose();
-    DMatrix::from_fn(n, n, |i, j| bbt[(i, j)] + if i == j { n as f64 } else { 0.0 })
+    DMatrix::from_fn(n, n, |i, j| {
+        bbt[(i, j)] + if i == j { n as f64 } else { 0.0 }
+    })
 }
 
 fn bench_matrix_vector(c: &mut Criterion) {
@@ -39,7 +41,7 @@ fn bench_matrix_matrix(c: &mut Criterion) {
 /// Phase I plan.
 fn bench_lu(c: &mut Criterion) {
     let mut group = c.benchmark_group("lu");
-    for n in [32, 128, 512] {
+    for n in [32, 64, 128, 512] {
         let m = dominant(n);
         let rhs = DVector::from_fn(n, |i| i as f64);
         group.bench_with_input(BenchmarkId::new("solve", n), &n, |b, _| {
@@ -68,7 +70,9 @@ fn bench_inverse_32(c: &mut Criterion) {
 
 fn bench_det(c: &mut Criterion) {
     let m = dominant(128);
-    c.bench_function("dmatrix_det_128", |b| b.iter(|| black_box(&m).det().unwrap()));
+    c.bench_function("dmatrix_det_128", |b| {
+        b.iter(|| black_box(&m).det().unwrap())
+    });
 }
 
 fn bench_cholesky(c: &mut Criterion) {
@@ -84,7 +88,9 @@ fn bench_cholesky(c: &mut Criterion) {
 
 fn bench_svd(c: &mut Criterion) {
     let m = DMatrix::from_fn(64, 64, |i, j| ((i * 13 + j * 7) as f64).sin());
-    c.bench_function("dmatrix_svd_64", |b| b.iter(|| black_box(&m).svd().unwrap()));
+    c.bench_function("dmatrix_svd_64", |b| {
+        b.iter(|| black_box(&m).svd().unwrap())
+    });
 }
 
 fn bench_matrix_exp(c: &mut Criterion) {

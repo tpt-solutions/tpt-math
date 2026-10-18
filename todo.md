@@ -1519,9 +1519,16 @@ constant kernel) are checked in debug builds, and in release with the
 
 ### I.2 `simd` path: LU and Cholesky through `tpt-simd-blas`
 
-- [ ] For `n >= CUTOFF` (from I.0), LU via `getrf_f64`. Apply the existing tolerance
+- [x] For `n >= CUTOFF` (from I.0), LU via `getrf_f64`. Apply the existing tolerance
       check to `|U_kk|` afterwards (ignore its exact-zero `Err`); non-finite pivot is
       singular
+      Status: Done under `simd-runtime`, not `simd`. Cutoff 64. The `simd` build alone was
+      slower than scalar at every size measured (factor 128: 148 us -> 262 us; 512: 13.5 ms ->
+      15.2 ms), so the dispatch needs the run-time AVX2 detection. With `simd-runtime`: factor 64
+      -7%, 128 -17% (148 us -> 128 us), 512 -65% (13.5 ms -> 4.8 ms). The kernel is a
+      column-major getrf, so the result is converted to the row-major layout, and the sequential
+      swaps are turned into the permutation. Tests check the factors and permutation against the
+      scalar path at n = 5, 33 and 200, and singular input.
 - [ ] Handle the LAPACK swap-sequence pivots: `getrs_f64` for solves, `det` sign
       from `#{i : ipiv[i] != i}`
 - [ ] `inverse` / `Lu::solve_matrix`: one `getrs_f64` call with `nrhs = n`

@@ -1678,11 +1678,16 @@ impl DMatrix<f64> {
         let norm = (0..n)
             .map(|j| (0..n).map(|i| self[(i, j)].abs()).sum::<f64>())
             .fold(0.0, f64::max);
+        // Halve until the norm is at most θ₁₃: the count is ⌈log₂(norm/θ₁₃)⌉, found
+        // without log2 or powi, which the no_std build does not have.
         let mut squarings = 0i32;
-        if norm > PADE13_THETA {
-            squarings = (norm / PADE13_THETA).log2().ceil() as i32;
+        let mut scaled_norm = norm;
+        let mut scale = 1.0_f64;
+        while scaled_norm > PADE13_THETA {
+            scaled_norm *= 0.5;
+            scale *= 0.5;
+            squarings += 1;
         }
-        let scale = 0.5_f64.powi(squarings);
         let a = DMatrix::from_fn(n, n, |i, j| self[(i, j)] * scale);
 
         let identity = DMatrix::from_fn(n, n, |i, j| if i == j { 1.0 } else { 0.0 });
@@ -1710,11 +1715,23 @@ impl DMatrix<f64> {
         ];
         // U = A [A⁶(b₁₃A⁶ + b₁₁A⁴ + b₉A²) + b₇A⁶ + b₅A⁴ + b₃A² + b₁I]
         let inner_u = lin(&[(B[13], &a6), (B[11], &a4), (B[9], &a2)]);
-        let u_poly = lin(&[(1.0, &matmul_square(&a6, &inner_u)), (B[7], &a6), (B[5], &a4), (B[3], &a2), (B[1], &identity)]);
+        let u_poly = lin(&[
+            (1.0, &matmul_square(&a6, &inner_u)),
+            (B[7], &a6),
+            (B[5], &a4),
+            (B[3], &a2),
+            (B[1], &identity),
+        ]);
         let u = matmul_square(&a, &u_poly);
         // V = A⁶(b₁₂A⁶ + b₁₀A⁴ + b₈A²) + b₆A⁶ + b₄A⁴ + b₂A² + b₀I
         let inner_v = lin(&[(B[12], &a6), (B[10], &a4), (B[8], &a2)]);
-        let v = lin(&[(1.0, &matmul_square(&a6, &inner_v)), (B[6], &a6), (B[4], &a4), (B[2], &a2), (B[0], &identity)]);
+        let v = lin(&[
+            (1.0, &matmul_square(&a6, &inner_v)),
+            (B[6], &a6),
+            (B[4], &a4),
+            (B[2], &a2),
+            (B[0], &identity),
+        ]);
         // exp(A) ≈ (V − U)⁻¹ (V + U)
         let p = lin(&[(1.0, &v), (1.0, &u)]);
         let q = lin(&[(1.0, &v), (-1.0, &u)]);
@@ -1748,6 +1765,23 @@ fn partial_pivot_lu(m: &DMatrix<f64>) -> Result<(Vec<f64>, Vec<usize>), DenseErr
 /// vectorises.
 #[cfg(feature = "alloc")]
 fn partial_pivot_lu_with(m: &DMatrix<f64>, tol: f64) -> Result<(Vec<f64>, Vec<usize>), DenseError> {
+    #[cfg(feature = "simd-runtime")]
+    {
+        if m.nrows >= SIMD_LU_CUTOFF {
+            return simd_lu::factor(m, tol);
+        }
+    }
+    scalar_lu(m, tol)
+}
+
+/// Dimension from which the `simd` feature factors with `tpt-simd-blas`. Below
+/// this the scalar loop is as fast, and the conversion overhead is not repaid.
+#[cfg(feature = "simd-runtime")]
+const SIMD_LU_CUTOFF: usize = 64;
+
+/// The portable LU kernel behind [`partial_pivot_lu_with`].
+#[cfg(feature = "alloc")]
+fn scalar_lu(m: &DMatrix<f64>, tol: f64) -> Result<(Vec<f64>, Vec<usize>), DenseError> {
     let n = m.nrows;
     let mut a: Vec<f64> = Vec::with_capacity(n * n);
     for i in 0..n {
@@ -2527,7 +2561,13 @@ mod solve_matrix_tests {
 
     #[test]
     fn solve_matrix_matches_column_by_column_solves() {
-        let a = DMatrix::from_fn(4, 4, |i, j| if i == j { 5.0 } else { ((i + 2 * j) as f64).sin() });
+        let a = DMatrix::from_fn(4, 4, |i, j| {
+            if i == j {
+                5.0
+            } else {
+                ((i + 2 * j) as f64).sin()
+            }
+        });
         let b = DMatrix::from_fn(4, 3, |i, j| (i * 3 + j) as f64 - 4.0);
         let lu = Lu::new(&a).unwrap();
         let x = lu.solve_matrix(&b).unwrap();
@@ -2608,7 +2648,11 @@ mod svd_norm_carry_tests {
         // A Hilbert-like matrix has condition number about 1e10.
         let h = DMatrix::from_fn(8, 8, |i, j| 1.0 / (i + j + 1) as f64);
         let scale = h.iter().fold(0.0_f64, |m, v| m.max(v.abs()));
-        assert!(residual(&h) < 1e-13 * scale * 8.0, "residual {}", residual(&h));
+        assert!(
+            residual(&h) < 1e-13 * scale * 8.0,
+            "residual {}",
+            residual(&h)
+        );
         let tall = DMatrix::from_fn(10, 4, |i, j| ((i + 1) as f64).powi(j as i32));
         let scale = tall.iter().fold(0.0_f64, |m, v| m.max(v.abs()));
         assert!(residual(&tall) < 1e-12 * scale * 10.0);
@@ -2623,5 +2667,94 @@ mod svd_norm_carry_tests {
         let a = rot.clone() * d * rot.transpose();
         let sv = a.singular_values().unwrap();
         assert!((sv[0] - 3.0).abs() < 1e-12 && (sv[1] - 1.0).abs() < 1e-12);
+    }
+}
+
+/// LU through `tpt-simd-blas`'s blocked `getrf`. The kernel works on column-major
+/// storage and returns LAPACK-style sequential swaps, so this module converts both
+/// ways and produces the same row-major layout and permutation as the scalar path.
+#[cfg(feature = "simd-runtime")]
+mod simd_lu {
+    use super::*;
+
+    pub(super) fn factor(m: &DMatrix<f64>, tol: f64) -> Result<(Vec<f64>, Vec<usize>), DenseError> {
+        let n = m.nrows;
+        let singular = DenseError::Singular {
+            what: "partial_pivot_lu",
+        };
+        // `DMatrix` is already column-major, which is the kernel's layout.
+        let mut colmajor = m.data.clone();
+        let mut ipiv = vec![0usize; n];
+        if tpt_simd_blas::getrf_f64(n, n, &mut colmajor, n, &mut ipiv).is_err() {
+            return Err(singular);
+        }
+        let mut a = vec![0.0_f64; n * n];
+        for j in 0..n {
+            for i in 0..n {
+                a[i * n + j] = colmajor[i + j * n];
+            }
+        }
+        // The same singularity test as the scalar path, on the pivots actually used.
+        for k in 0..n {
+            let u = a[k * n + k].abs();
+            if !u.is_finite() || u == 0.0 || u < tol {
+                return Err(singular);
+            }
+        }
+        // Sequential swaps applied to the identity give the permutation `piv`.
+        let mut piv: Vec<usize> = (0..n).collect();
+        for (i, &p) in ipiv.iter().enumerate() {
+            piv.swap(i, p);
+        }
+        Ok((a, piv))
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        fn dominant(n: usize) -> DMatrix<f64> {
+            DMatrix::from_fn(n, n, |i, j| {
+                if i == j {
+                    n as f64 + 1.0
+                } else {
+                    ((i * 3 + j * 5) as f64).sin()
+                }
+            })
+        }
+
+        #[test]
+        fn simd_factors_agree_with_scalar_factors() {
+            for n in [5usize, 33, 200] {
+                let a = dominant(n);
+                let (s_lu, s_piv) = scalar_lu(&a, 0.0).unwrap();
+                let (v_lu, v_piv) = factor(&a, 0.0).unwrap();
+                assert_eq!(s_piv, v_piv, "permutation, n = {n}");
+                for (x, y) in s_lu.iter().zip(&v_lu) {
+                    assert!(
+                        (x - y).abs() <= 1e-12 * (1.0 + x.abs()),
+                        "n = {n}: {x} vs {y}"
+                    );
+                }
+            }
+        }
+
+        #[test]
+        fn simd_reports_singular_like_scalar() {
+            // Two identical rows: exactly singular.
+            let n = 80;
+            let a = DMatrix::from_fn(n, n, |i, j| {
+                if i <= 1 {
+                    ((j + 1) as f64).sin()
+                } else {
+                    ((i * 7 + j) as f64).cos() + if i == j { 3.0 } else { 0.0 }
+                }
+            });
+            assert!(matches!(factor(&a, 0.0), Err(DenseError::Singular { .. })));
+            assert!(matches!(
+                scalar_lu(&a, 0.0),
+                Err(DenseError::Singular { .. })
+            ));
+        }
     }
 }
