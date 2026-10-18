@@ -23,6 +23,8 @@ pub mod ode;
 pub mod quadrature;
 pub mod report;
 pub mod roots;
+#[cfg(feature = "alloc")]
+pub mod sensitivity;
 pub mod stiff;
 
 pub use report::{SolveReport, SolveStatus};
