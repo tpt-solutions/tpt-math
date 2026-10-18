@@ -1456,7 +1456,7 @@ constant kernel) are checked in debug builds, and in release with the
       parser now reads canonical base-unit expressions. The runs here are short smoke tests
       without coverage feedback on Windows, because libFuzzer cannot run coverage-guided on MSVC.
       A longer run on Linux is still needed.
-- [ ] Golden-value accuracy suite: a script that generates reference tables
+- [x] Golden-value accuracy suite: a script that generates reference tables
       from mpmath/SciPy and a test that checks them. It would have caught the
       large-shape gamma and `ln_binomial` bugs
 - [ ] Extend `xtask drift` to check that the facade exposes every library
