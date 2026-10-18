@@ -1422,10 +1422,10 @@ constant kernel) are checked in debug builds, and in release with the
       Status: Done: `stft` (complex frames, so `|·|²` gives the spectrogram), `welch`
       (one-sided PSD), `fft_convolve` in `tpt-math-signal-fft`, and `zero_phase_filter`
       (odd-extension filtfilt over a biquad cascade) in `tpt-math-signal-filter`.
-- [ ] `autodiff-rev`: `atan`, `tanh`, `atan2`, `sinh`/`cosh` (forward mode has
+- [x] `autodiff-rev`: `atan`, `tanh`, `atan2`, `sinh`/`cosh` (forward mode has
       `atan` and `tanh`); Jacobian and Hessian helpers in the umbrella crate
-      Status: Partial: the reverse-mode operators are done (`tanh`, `sinh`, `cosh`, `atan`,
-      `atan2`), each checked against central differences. Jacobian and Hessian helpers are open.
+      Status: Done. The Jacobian is exact, with one reverse pass per output (`autodiff::derivatives::jacobian`). The Hessian is a central difference of the exact gradient, symmetrised, with an error of order 1e-6 at the test points (`hessian`). The reverse-mode operators are done (`tanh`, `sinh`, `cosh`, `atan`,
+      `atan2`), each checked against central differences.
 - [ ] `symbolic`: string parser (`"x^2 + sin(x)"`), compile an expression to a
       closure, LaTeX output
       Status: Partial: `parse_expr` (infix grammar with positioned errors) and `to_latex`

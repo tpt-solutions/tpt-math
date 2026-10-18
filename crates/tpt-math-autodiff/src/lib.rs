@@ -14,3 +14,6 @@ pub use tpt_math_autodiff_fwd as fwd;
 
 #[cfg(feature = "tpt-math-autodiff-rev")]
 pub use tpt_math_autodiff_rev as rev;
+
+#[cfg(feature = "tpt-math-autodiff-rev")]
+pub mod derivatives;
