@@ -1351,6 +1351,7 @@ dependencies = [
  "criterion",
  "tpt-math-linalg-dense",
  "tpt-math-prob-core",
+ "tpt-simd-reduce",
 ]
 
 [[package]]
@@ -1399,6 +1400,25 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3f6d2b7995b52808c524fb945620e1caca9b57ee90c9219c078c7ec74f78b2b2"
 dependencies = [
  "tpt-simd-vector",
+]
+
+[[package]]
+name = "tpt-simd-horizontal"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a475a5495eacef8a58f8571dccc4fe931c8a0a0ce56223e9b5f5b4364e40ac3a"
+dependencies = [
+ "tpt-simd-core",
+]
+
+[[package]]
+name = "tpt-simd-reduce"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8c5940716f0bd5722627ed5fe301652725717622655cf10e42da6a18b92d2b5f"
+dependencies = [
+ "tpt-simd-core",
+ "tpt-simd-horizontal",
 ]
 
 [[package]]
