@@ -47,6 +47,10 @@ All notable changes to this crate are documented here. Format based on
 - `curve_fit`: fits `y ≈ f(x; p)` with a central-difference Jacobian.
 - `LeastSquaresOptions::with_bounds`: componentwise box constraints. The solver projects each trial point onto the box and tests convergence on the projected gradient. This is a projected method, not an active-set one like L-BFGS-B.
 
+### Added
+
+- `minimize_lbfgs_autodiff`: L-BFGS with the gradient from reverse-mode autodiff. The cost is written once on the tape. The last evaluated point is cached, so each iterate is taped once. This adds a dependency on `tpt-math-autodiff-rev`.
+
 ## [0.1.0]
 
 - Initial workspace release.

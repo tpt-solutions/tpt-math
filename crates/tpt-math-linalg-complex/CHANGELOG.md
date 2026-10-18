@@ -35,6 +35,11 @@ and this project adheres to semantic versioning.
 
 - **Breaking:** `zeros`, `transpose`, `solve` and `inverse` need the `alloc` feature. `std` enables it, so default builds keep the same API.
 
+### Added
+
+- `ComplexDMatrix<f64>::det`: determinant from the LU factors, zero for a numerically singular matrix.
+- `ComplexDMatrix<f64>::product`: matrix product. With `simd-runtime` and order 64 or more it uses `gemm_c64`. The `*` operator is unchanged, since it is generic over the scalar type.
+
 ## [0.1.0] - 2026-08-19
 
 ### Added

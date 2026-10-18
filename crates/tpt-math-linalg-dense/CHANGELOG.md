@@ -54,6 +54,12 @@ and this project adheres to SemVer.
 - Measured on the default (scalar) build, from the Phase I benchmarks: LU factorisation of order 128 went from 524 µs to 148 µs, and of order 512 solves dropped from 30.9 ms to 13.6 ms. Inverse of order 128 went from 1.63 ms to 1.00 ms.
 - Measured with `simd-runtime` against the scalar build on the same machine: solve of order 512 12.8 ms → 5.2 ms, Cholesky of order 512 10.8 ms → 2.8 ms, inverse of order 128 1.04 ms → 0.45 ms, and the 64 × 64 product 42 µs → 15 µs. `matrix_exp` of order 32 was about 2.5% slower in the same run; it is below the SIMD cutoff, so that difference is within the noise of this measurement.
 
+### Added
+
+- `DMatrix::eigenvalues`: all eigenvalues of a general real matrix, by Householder reduction to Hessenberg form and Francis double-shift QR. Returns `Eigenvalue { re, im }` values, complex ones in conjugate pairs. Use `symmetric_eigen` for symmetric matrices, which gives sorted values and eigenvectors.
+- `DMatrix::solve_with_report`: solves `A x = b` and returns `SolveDiagnostics` with the residual (as a `SolveReport`), the normwise backward error, the 1-norm condition number (exact, from the inverse), and an `ill_conditioned` flag when `cond · ε` exceeds `1e-8`.
+- `solve_banded`: banded LU with partial pivoting. An entry outside the declared band is an error, not silently ignored.
+
 ## [0.1.0] - Unreleased
 
 ### Added

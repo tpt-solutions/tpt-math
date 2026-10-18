@@ -58,6 +58,13 @@ and this project adheres to SemVer.
 - **Fixed:** the `x0` length is checked before the SIMD dispatch, so a wrong-length guess returns `DimensionMismatch` rather than panicking.
 - `to_csr`, `to_csc` and the transposes are gated behind `alloc`, as the other sparse containers are.
 
+### Added
+
+- `arnoldi` and `ArnoldiRitz`: Arnoldi eigensolver for general operators. It returns the Ritz values of largest modulus, with residual estimates for the real ones (`None` for complex pairs, whose eigenvectors are not formed).
+- `bicgstab_op` and `gmres_op`: BiCGSTAB and restarted GMRES for any `LinearOperator`. The CSR forms now share their loops with these, so results are unchanged.
+- `minimum_degree_ordering` and `FillOrdering`: a minimum-degree fill-reducing ordering, with exact degrees on the elimination graph. This is the idea AMD approximates; it is not AMD, and it costs more on very large matrices.
+- `ReorderedLu`: sparse LU after a symmetric fill-reducing permutation, solving in the original numbering. `ReorderedCholesky::factor_with` takes a `FillOrdering`.
+
 ## [0.1.0] - 2026-08-19
 
 ### Added
