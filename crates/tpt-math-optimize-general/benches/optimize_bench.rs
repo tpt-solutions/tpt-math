@@ -1,5 +1,9 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use tpt_math_optimize_general::{minimize_lbfgs_with, tpt_math_linalg_dense::DVector, Options};
+use tpt_math_optimize_general::{
+    minimize_lbfgs_with, minimize_newton,
+    tpt_math_linalg_dense::{DMatrix, DVector},
+    Options,
+};
 
 fn rosenbrock(x: &DVector<f64>) -> f64 {
     (0..x.len() - 1)
@@ -31,5 +35,41 @@ fn bench_optimize(c: &mut Criterion) {
     });
 }
 
-criterion_group!(benches, bench_optimize);
+fn bench_newton(c: &mut Criterion) {
+    // Newton on the same 4-D Rosenbrock, with the analytic Hessian.
+    // Hessian of Σ 100(x_{i+1} − x_i²)² + (1 − x_i)²: tridiagonal in 4-D.
+    let hess = |x: &DVector<f64>| {
+        DMatrix::from_fn(4, 4, |r, c| {
+            if r == c {
+                let mut v = 0.0;
+                if r < 3 {
+                    v += 1200.0 * x[r] * x[r] - 400.0 * x[r + 1] + 2.0;
+                }
+                if r >= 1 {
+                    v += 200.0;
+                }
+                v
+            } else if r + 1 == c {
+                -400.0 * x[r]
+            } else if c + 1 == r {
+                -400.0 * x[c]
+            } else {
+                0.0
+            }
+        })
+    };
+    c.bench_function("Newton Rosenbrock 4-D", |b| {
+        b.iter(|| {
+            black_box(minimize_newton(
+                rosenbrock,
+                rosenbrock_grad,
+                hess,
+                DVector::from_vec(vec![-1.2, 1.0, -1.2, 1.0]),
+                200,
+            ))
+        })
+    });
+}
+
+criterion_group!(benches, bench_optimize, bench_newton);
 criterion_main!(benches);

@@ -14,5 +14,24 @@ fn bench_matvec(c: &mut Criterion) {
     });
 }
 
-criterion_group!(benches, bench_matvec);
+fn bench_solve_inverse(c: &mut Criterion) {
+    // A diagonally dominant 32 × 32 system, so both calls succeed.
+    let n = 32;
+    let m = Mat::<f64, f64>::from_raw(DMatrix::<f64>::from_fn(n, n, |i, j| {
+        if i == j {
+            n as f64 + 1.0
+        } else {
+            ((i + 2 * j) as f64).sin()
+        }
+    }));
+    let rhs = Vec::<f64>::from_raw(DVector::<f64>::from_fn(n, |i| i as f64));
+    c.bench_function("Mat solve 32", |b| {
+        b.iter(|| black_box(m.solve(black_box(&rhs)).unwrap()))
+    });
+    c.bench_function("Mat inverse 32", |b| {
+        b.iter(|| black_box(m.inverse().unwrap()))
+    });
+}
+
+criterion_group!(benches, bench_matvec, bench_solve_inverse);
 criterion_main!(benches);
