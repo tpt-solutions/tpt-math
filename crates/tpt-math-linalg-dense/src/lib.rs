@@ -1421,10 +1421,11 @@ pub type SvdFactors = (DMatrix<f64>, DVector<f64>, DMatrix<f64>);
 #[cfg(feature = "alloc")]
 const SVD_MAX_SWEEPS: usize = 60;
 
-/// Taylor terms for [`DMatrix::matrix_exp`]. After scaling the norm is at most
-/// 1/2, so 30 terms leave a truncation error near `0.5^30 / 30!`.
+/// Largest 1-norm for which the degree-13 Padé approximant meets unit-roundoff
+/// accuracy without scaling (Higham 2005, θ₁₃). Above it the matrix is halved
+/// until it is below.
 #[cfg(feature = "alloc")]
-const EXP_TAYLOR_TERMS: usize = 30;
+const PADE13_THETA: f64 = 5.371_920_351_148_152;
 
 /// Rotates columns `p` and `q` of `cols` by the plane rotation `(c, s)`.
 #[cfg(feature = "alloc")]
@@ -1655,33 +1656,56 @@ impl DMatrix<f64> {
             // run forever.
             return Ok(DMatrix::from_fn(n, n, |_, _| f64::NAN));
         }
+        // Higham (2005), Padé approximant of degree 13 with scaling and squaring.
+        // The 1-norm (largest absolute column sum) decides how far to scale.
         let norm = (0..n)
-            .map(|i| (0..n).map(|j| self[(i, j)].abs()).sum::<f64>())
+            .map(|j| (0..n).map(|i| self[(i, j)].abs()).sum::<f64>())
             .fold(0.0, f64::max);
         let mut squarings = 0i32;
-        let mut scaled_norm = norm;
-        while scaled_norm > 0.5 {
-            scaled_norm *= 0.5;
-            squarings += 1;
+        if norm > PADE13_THETA {
+            squarings = (norm / PADE13_THETA).log2().ceil() as i32;
         }
-        let mut scale = 1.0;
-        for _ in 0..squarings {
-            scale *= 0.5;
-        }
+        let scale = 0.5_f64.powi(squarings);
         let a = DMatrix::from_fn(n, n, |i, j| self[(i, j)] * scale);
 
         let identity = DMatrix::from_fn(n, n, |i, j| if i == j { 1.0 } else { 0.0 });
-        let mut term = identity.clone();
-        let mut sum = identity;
-        for k in 1..=EXP_TAYLOR_TERMS {
-            term = matmul_square(&term, &a);
-            term = DMatrix::from_fn(n, n, |i, j| term[(i, j)] / k as f64);
-            sum = DMatrix::from_fn(n, n, |i, j| sum[(i, j)] + term[(i, j)]);
-        }
+        let a2 = matmul_square(&a, &a);
+        let a4 = matmul_square(&a2, &a2);
+        let a6 = matmul_square(&a4, &a2);
+        let lin = |terms: &[(f64, &DMatrix<f64>)]| {
+            DMatrix::from_fn(n, n, |i, j| terms.iter().map(|(c, m)| c * m[(i, j)]).sum())
+        };
+        const B: [f64; 14] = [
+            64_764_752_532_480_000.0,
+            32_382_376_266_240_000.0,
+            7_771_770_303_897_600.0,
+            1_187_353_796_428_800.0,
+            129_060_195_264_000.0,
+            10_559_470_521_600.0,
+            670_442_572_800.0,
+            33_522_128_640.0,
+            1_323_241_920.0,
+            40_840_800.0,
+            960_960.0,
+            16_380.0,
+            182.0,
+            1.0,
+        ];
+        // U = A [A⁶(b₁₃A⁶ + b₁₁A⁴ + b₉A²) + b₇A⁶ + b₅A⁴ + b₃A² + b₁I]
+        let inner_u = lin(&[(B[13], &a6), (B[11], &a4), (B[9], &a2)]);
+        let u_poly = lin(&[(1.0, &matmul_square(&a6, &inner_u)), (B[7], &a6), (B[5], &a4), (B[3], &a2), (B[1], &identity)]);
+        let u = matmul_square(&a, &u_poly);
+        // V = A⁶(b₁₂A⁶ + b₁₀A⁴ + b₈A²) + b₆A⁶ + b₄A⁴ + b₂A² + b₀I
+        let inner_v = lin(&[(B[12], &a6), (B[10], &a4), (B[8], &a2)]);
+        let v = lin(&[(1.0, &matmul_square(&a6, &inner_v)), (B[6], &a6), (B[4], &a4), (B[2], &a2), (B[0], &identity)]);
+        // exp(A) ≈ (V − U)⁻¹ (V + U)
+        let p = lin(&[(1.0, &v), (1.0, &u)]);
+        let q = lin(&[(1.0, &v), (-1.0, &u)]);
+        let mut result = Lu::new(&q)?.solve_matrix(&p)?;
         for _ in 0..squarings {
-            sum = matmul_square(&sum, &sum);
+            result = matmul_square(&result, &result);
         }
-        Ok(sum)
+        Ok(result)
     }
 }
 
@@ -2499,5 +2523,47 @@ mod solve_matrix_tests {
             }
         }
         assert!(lu.solve_matrix(&DMatrix::zeros(3, 1)).is_err());
+    }
+}
+
+#[cfg(all(test, feature = "alloc"))]
+mod pade_exp_tests {
+    use super::*;
+
+    #[test]
+    fn rotation_generator_gives_a_rotation() {
+        // exp([[0, -t], [t, 0]]) is the rotation by t.
+        for t in [0.3_f64, 2.5, 7.0, 40.0] {
+            let g = DMatrix::from_row_slice(2, 2, &[0.0, -t, t, 0.0]);
+            let e = g.matrix_exp().unwrap();
+            assert!((e[(0, 0)] - t.cos()).abs() < 1e-11, "t = {t}");
+            assert!((e[(1, 0)] - t.sin()).abs() < 1e-11, "t = {t}");
+            assert!((e[(0, 1)] + t.sin()).abs() < 1e-11, "t = {t}");
+        }
+    }
+
+    #[test]
+    fn large_norm_diagonal_matches_scalar_exp() {
+        // The 1-norm is 20, far past θ₁₃, so several squarings run.
+        let d = DMatrix::from_row_slice(2, 2, &[20.0, 0.0, 0.0, -3.0]);
+        let e = d.matrix_exp().unwrap();
+        assert!(((e[(0, 0)] - 20.0_f64.exp()) / 20.0_f64.exp()).abs() < 1e-12);
+        assert!(((e[(1, 1)] - (-3.0_f64).exp()) / (-3.0_f64).exp()).abs() < 1e-12);
+        assert!(e[(0, 1)].abs() < 1e-30 && e[(1, 0)].abs() < 1e-30);
+    }
+
+    #[test]
+    fn exp_of_zero_is_identity_and_nilpotent_is_exact() {
+        let z = DMatrix::<f64>::zeros(3, 3);
+        let e = z.matrix_exp().unwrap();
+        for i in 0..3 {
+            for j in 0..3 {
+                assert!((e[(i, j)] - if i == j { 1.0 } else { 0.0 }).abs() < 1e-14);
+            }
+        }
+        // N = [[0, 1], [0, 0]] has exp(N) = I + N exactly.
+        let nil = DMatrix::from_row_slice(2, 2, &[0.0, 1.0, 0.0, 0.0]);
+        let en = nil.matrix_exp().unwrap();
+        assert!((en[(0, 1)] - 1.0).abs() < 1e-14 && (en[(0, 0)] - 1.0).abs() < 1e-14);
     }
 }
