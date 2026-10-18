@@ -143,6 +143,108 @@ pub fn pearson_correlation(x: &[f64], y: &[f64]) -> f64 {
     try_pearson_correlation(x, y).unwrap_or_else(|e| panic!("pearson_correlation: {e}"))
 }
 
+/// Average ranks (1-based) of `v`; tied values share the mean of their ranks.
+fn average_ranks(v: &[f64]) -> Vec<f64> {
+    let mut order: Vec<usize> = (0..v.len()).collect();
+    order.sort_by(|&i, &j| v[i].total_cmp(&v[j]));
+    let mut ranks = vec![0.0; v.len()];
+    let mut start = 0;
+    while start < order.len() {
+        let mut end = start;
+        while end + 1 < order.len() && v[order[end + 1]] == v[order[start]] {
+            end += 1;
+        }
+        // Positions start..=end share the average of ranks start+1 ..= end+1.
+        let rank = (start + end) as f64 / 2.0 + 1.0;
+        for &k in &order[start..=end] {
+            ranks[k] = rank;
+        }
+        start = end + 1;
+    }
+    ranks
+}
+
+/// Spearman rank correlation: the Pearson correlation of the average ranks.
+///
+/// Ties receive the average of the ranks they span, so the result is the
+/// tie-corrected coefficient. Returns `NaN` when either sample is constant.
+///
+/// # Errors
+///
+/// As [`try_pearson_correlation`].
+///
+/// # Examples
+///
+/// ```
+/// # use tpt_math_stats::try_spearman_correlation;
+/// // Monotone but non-linear: Spearman is exactly 1.
+/// let x = [1.0, 2.0, 3.0, 4.0];
+/// let y = [1.0, 8.0, 27.0, 64.0];
+/// assert!((try_spearman_correlation(&x, &y).unwrap() - 1.0).abs() < 1e-12);
+/// ```
+pub fn try_spearman_correlation(x: &[f64], y: &[f64]) -> Result<f64, StatsError> {
+    check_equal_len(x.len(), y.len())?;
+    check_min_len("x", x, 2)?;
+    check_all_finite("x", x)?;
+    check_all_finite("y", y)?;
+    try_pearson_correlation(&average_ranks(x), &average_ranks(y))
+}
+
+/// Kendall's τ-b rank correlation, which corrects for ties in either sample.
+///
+/// `τ_b = (C − D) / √((n₀ − n₁)(n₀ − n₂))`, with `n₀ = n(n−1)/2`, `n₁` and `n₂`
+/// the tied pairs in `x` and `y`, and `C`, `D` the concordant and discordant
+/// pairs. Costs O(n²). Returns `NaN` when either sample is constant.
+///
+/// # Errors
+///
+/// As [`try_pearson_correlation`].
+///
+/// # Examples
+///
+/// ```
+/// # use tpt_math_stats::try_kendall_tau;
+/// // Of the six pairs, five are concordant and one is discordant: (5 − 1) / 6.
+/// let x = [1.0, 2.0, 3.0, 4.0];
+/// let y = [1.0, 3.0, 2.0, 4.0];
+/// assert!((try_kendall_tau(&x, &y).unwrap() - 2.0 / 3.0).abs() < 1e-12);
+/// ```
+pub fn try_kendall_tau(x: &[f64], y: &[f64]) -> Result<f64, StatsError> {
+    check_equal_len(x.len(), y.len())?;
+    check_min_len("x", x, 2)?;
+    check_all_finite("x", x)?;
+    check_all_finite("y", y)?;
+    let n = x.len();
+    let (mut concordant, mut discordant) = (0.0_f64, 0.0_f64);
+    let (mut ties_x, mut ties_y) = (0.0_f64, 0.0_f64);
+    for i in 0..n {
+        for j in (i + 1)..n {
+            let dx = x[i].total_cmp(&x[j]);
+            let dy = y[i].total_cmp(&y[j]);
+            let (tx, ty) = (x[i] == x[j], y[i] == y[j]);
+            if tx {
+                ties_x += 1.0;
+            }
+            if ty {
+                ties_y += 1.0;
+            }
+            if !tx && !ty {
+                if dx == dy {
+                    concordant += 1.0;
+                } else {
+                    discordant += 1.0;
+                }
+            }
+        }
+    }
+    let n0 = (n * (n - 1)) as f64 / 2.0;
+    let denom = ((n0 - ties_x) * (n0 - ties_y)).sqrt();
+    if denom == 0.0 {
+        return Ok(f64::NAN);
+    }
+    Ok((concordant - discordant) / denom)
+}
+
 /// Ordinary least-squares fit of `y = slope · x + intercept`.
 ///
 /// ```text
@@ -403,5 +505,52 @@ mod tests {
     #[should_panic(expected = "linear_regression")]
     fn linear_regression_panics_on_mismatched_lengths() {
         let _ = linear_regression(&[1.0, 2.0, 3.0], &[1.0, 2.0]);
+    }
+}
+
+#[cfg(test)]
+mod rank_correlation_tests {
+    use super::*;
+
+    #[test]
+    fn average_ranks_share_ties() {
+        assert_eq!(average_ranks(&[10.0, 30.0, 20.0]), vec![1.0, 3.0, 2.0]);
+        assert_eq!(
+            average_ranks(&[1.0, 2.0, 2.0, 3.0]),
+            vec![1.0, 2.5, 2.5, 4.0]
+        );
+    }
+
+    #[test]
+    fn spearman_is_pearson_on_ranks_and_handles_ties() {
+        let x = [1.0, 2.0, 2.0, 3.0, 5.0];
+        let y = [2.0, 1.0, 4.0, 3.0, 9.0];
+        let want = try_pearson_correlation(&average_ranks(&x), &average_ranks(&y)).unwrap();
+        assert_eq!(try_spearman_correlation(&x, &y).unwrap(), want);
+        let mono = [1.0, 2.0, 3.0, 4.0];
+        let down = [4.0, 3.0, 2.0, 1.0];
+        assert!((try_spearman_correlation(&mono, &down).unwrap() + 1.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn kendall_tau_b_corrects_for_ties() {
+        // All pairs concordant, but x has one tied pair: n0 = 6, n1 = 1, n2 = 0.
+        // τ_b = 5 / √(5 · 6).
+        let x = [1.0, 1.0, 2.0, 3.0];
+        let y = [1.0, 2.0, 3.0, 4.0];
+        let want = 5.0 / (5.0_f64 * 6.0).sqrt();
+        assert!((try_kendall_tau(&x, &y).unwrap() - want).abs() < 1e-12);
+        let down = [4.0, 3.0, 2.0, 1.0];
+        assert!((try_kendall_tau(&y, &down).unwrap() + 1.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn constant_sample_gives_nan_and_bad_input_errors() {
+        let flat = [2.0, 2.0, 2.0];
+        let v = [1.0, 2.0, 3.0];
+        assert!(try_spearman_correlation(&flat, &v).unwrap().is_nan());
+        assert!(try_kendall_tau(&flat, &v).unwrap().is_nan());
+        assert!(try_kendall_tau(&v, &[1.0]).is_err());
+        assert!(try_spearman_correlation(&[1.0], &[1.0]).is_err());
     }
 }

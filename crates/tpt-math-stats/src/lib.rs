@@ -135,8 +135,8 @@ pub use nonparametric::{
     try_mann_whitney_u, try_wilcoxon_signed_rank, wilcoxon_signed_rank,
 };
 pub use regression::{
-    covariance, linear_regression, pearson_correlation, try_covariance, try_linear_regression,
-    try_pearson_correlation,
+    covariance, linear_regression, pearson_correlation, try_covariance, try_kendall_tau,
+    try_linear_regression, try_pearson_correlation, try_spearman_correlation,
 };
 pub use special::{beta, beta_reg, erf, erfc, gamma, gamma_p, gamma_q, lgamma};
 

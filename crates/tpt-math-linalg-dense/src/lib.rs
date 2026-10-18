@@ -1560,6 +1560,46 @@ impl DMatrix<f64> {
         Ok(s[0] / s_min)
     }
 
+    /// Moore–Penrose pseudo-inverse `A⁺ = V Σ⁺ Uᵀ`, from the thin SVD.
+    ///
+    /// Singular values at or below the [`DMatrix::rank`] tolerance are treated
+    /// as zero, so rank-deficient and non-square matrices are handled. The
+    /// result is `n × m` for an `m × n` input.
+    ///
+    /// # Errors
+    ///
+    /// As [`DMatrix::svd`].
+    pub fn pseudo_inverse(&self) -> Result<DMatrix<f64>, DenseError> {
+        let (m, n) = (self.nrows(), self.ncols());
+        let (u, s, v) = self.svd()?;
+        let tol = self.rank_tolerance(&s);
+        let kept: Vec<usize> = (0..s.len()).filter(|&r| s[r] > tol).collect();
+        Ok(DMatrix::from_fn(n, m, |i, j| {
+            kept.iter().map(|&r| v[(i, r)] * u[(j, r)] / s[r]).sum()
+        }))
+    }
+
+    /// Minimum-norm least-squares solution of `min ‖A x − b‖₂`, which is
+    /// `A⁺ b`. Unlike [`Qr::solve_least_squares`] it accepts rank-deficient
+    /// and wide matrices, and among the minimisers it returns the one of least
+    /// norm.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`DenseError::DimensionMismatch`] if `b` does not have one entry
+    /// per row, and as [`DMatrix::svd`] otherwise.
+    pub fn solve_min_norm(&self, b: &DVector<f64>) -> Result<DVector<f64>, DenseError> {
+        if b.len() != self.nrows() {
+            return Err(DenseError::DimensionMismatch {
+                what: format!("rhs has length {}, expected {}", b.len(), self.nrows()),
+            });
+        }
+        let pinv = self.pseudo_inverse()?;
+        Ok(DVector::from_fn(self.ncols(), |i| {
+            (0..self.nrows()).map(|j| pinv[(i, j)] * b[j]).sum()
+        }))
+    }
+
     fn rank_tolerance(&self, s: &DVector<f64>) -> f64 {
         let sigma_max = s.iter().copied().fold(0.0, f64::max);
         self.nrows().max(self.ncols()) as f64 * sigma_max * f64::EPSILON
@@ -2367,5 +2407,42 @@ mod review_regression_tests {
             a.svd(),
             Err(DenseError::NoConvergence { what: "svd" })
         ));
+    }
+
+    #[test]
+    fn pseudo_inverse_satisfies_penrose_identities() {
+        // Rank-deficient 3x2, and a wide 2x3 of rank 2.
+        let tall = DMatrix::from_row_slice(3, 2, &[1.0, 2.0, 2.0, 4.0, 3.0, 6.0]);
+        let wide = DMatrix::from_row_slice(2, 3, &[1.0, 0.0, 2.0, 0.0, 1.0, 1.0]);
+        for a in [tall, wide] {
+            let p = a.pseudo_inverse().unwrap();
+            assert_eq!((p.nrows(), p.ncols()), (a.ncols(), a.nrows()));
+            let apa = a.clone() * p.clone() * a.clone();
+            let pap = p.clone() * a.clone() * p.clone();
+            for i in 0..a.nrows() {
+                for j in 0..a.ncols() {
+                    assert!((apa[(i, j)] - a[(i, j)]).abs() < 1e-10);
+                }
+            }
+            for i in 0..p.nrows() {
+                for j in 0..p.ncols() {
+                    assert!((pap[(i, j)] - p[(i, j)]).abs() < 1e-10);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn min_norm_solve_handles_rank_deficiency() {
+        // Columns are dependent, so the minimisers form a line: x = (t, 1 - t) with
+        // the minimum-norm point at t = 1/2.
+        let a = DMatrix::from_row_slice(2, 2, &[1.0, 1.0, 1.0, 1.0]);
+        let x = a
+            .solve_min_norm(&DVector::from_vec(vec![1.0, 1.0]))
+            .unwrap();
+        assert!((x[0] - 0.5).abs() < 1e-12 && (x[1] - 0.5).abs() < 1e-12);
+        assert!(a
+            .solve_min_norm(&DVector::from_vec(vec![1.0, 2.0, 3.0]))
+            .is_err());
     }
 }

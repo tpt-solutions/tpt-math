@@ -80,6 +80,17 @@ pub enum Op {
     DivC(usize, f64),
     /// `c / a` for a literal `c`.
     CDiv(f64, usize),
+    /// `tanh(a)`
+    Tanh(usize),
+    /// `sinh(a)`
+    Sinh(usize),
+    /// `cosh(a)`
+    Cosh(usize),
+    /// `atan(a)`
+    Atan(usize),
+    /// `atan2(y, x)`, the angle of the point `(x, y)`. The first operand is `y`.
+    /// Undefined (NaN derivatives) at the origin.
+    Atan2(usize, usize),
 }
 
 impl Op {
@@ -124,6 +135,17 @@ impl Op {
             Op::Cos(a) => Partials::unary(a, -values[a].sin()),
             // d/dx tan(x) = sec^2(x) = 1 + tan^2(x), and `value` is tan(x).
             Op::Tan(a) => Partials::unary(a, 1.0 + value * value),
+            // `value` is tanh(a), so d/da tanh(a) = 1 - tanh²(a).
+            Op::Tanh(a) => Partials::unary(a, 1.0 - value * value),
+            Op::Sinh(a) => Partials::unary(a, values[a].cosh()),
+            Op::Cosh(a) => Partials::unary(a, values[a].sinh()),
+            Op::Atan(a) => Partials::unary(a, 1.0 / (1.0 + values[a] * values[a])),
+            // ∂/∂y atan2(y, x) = x / (x² + y²), and ∂/∂x = −y / (x² + y²).
+            Op::Atan2(y, x) => {
+                let (yv, xv) = (values[y], values[x]);
+                let den = xv * xv + yv * yv;
+                Partials::binary(y, xv / den, x, -yv / den)
+            }
             // `value` is already exp(a).
             Op::Exp(a) => Partials::unary(a, value),
             Op::Ln(a) => Partials::unary(a, 1.0 / values[a]),

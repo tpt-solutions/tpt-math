@@ -319,6 +319,87 @@ where
     }
 }
 
+/// A path as its total cost and the node sequence from source to target.
+pub type ShortestPath<Ix> = (f64, Vec<NodeIndex<Ix>>);
+
+/// Shortest path from `source` to `target`, as its total cost and the node
+/// sequence `source, …, target`.
+///
+/// Returns `Ok(None)` when `target` is unreachable. Uses the in-house Dijkstra
+/// loop on every feature set, so the predecessor bookkeeping is the same under
+/// `std` and `no_std`. [`dijkstra`] returns distances only.
+///
+/// # Errors
+///
+/// Returns [`GraphError::InvalidWeight`] if any edge weight is negative or NaN.
+///
+/// # Examples
+///
+/// ```
+/// use tpt_math_graph::{Graph, NodeIndex};
+///
+/// let mut g: Graph<(), f64> = Graph::new();
+/// let a = g.add_node(());
+/// let b = g.add_node(());
+/// let c = g.add_node(());
+/// g.add_edge(a, b, 1.0);
+/// g.add_edge(b, c, 1.0);
+/// g.add_edge(a, c, 5.0);
+/// let (cost, path) = tpt_math_graph::dijkstra_path(&g, a, c).unwrap().unwrap();
+/// assert_eq!(cost, 2.0);
+/// assert_eq!(path, vec![a, b, c]);
+/// ```
+pub fn dijkstra_path<N, Ix>(
+    graph: &Graph<N, f64, Directed, Ix>,
+    source: NodeIndex<Ix>,
+    target: NodeIndex<Ix>,
+) -> Result<Option<ShortestPath<Ix>>, GraphError>
+where
+    Ix: IndexType,
+{
+    check_non_negative(graph)?;
+    let goal = target.index();
+    let mut dist: BTreeMap<usize, f64> = BTreeMap::new();
+    let mut pred: BTreeMap<usize, usize> = BTreeMap::new();
+    let mut settled: BTreeMap<usize, bool> = BTreeMap::new();
+    dist.insert(source.index(), 0.0);
+    let mut heap = BinaryHeap::new();
+    heap.push(OpenNode {
+        f: 0.0,
+        node: source.index(),
+    });
+    while let Some(OpenNode { f: d, node: u }) = heap.pop() {
+        if settled.contains_key(&u) {
+            continue;
+        }
+        settled.insert(u, true);
+        if u == goal {
+            break;
+        }
+        for e in graph.edges_directed(NodeIndex::<Ix>::new(u), Direction::Outgoing) {
+            let v = e.target().index();
+            let nd = d + *e.weight();
+            if nd < dist.get(&v).copied().unwrap_or(f64::INFINITY) {
+                dist.insert(v, nd);
+                pred.insert(v, u);
+                heap.push(OpenNode { f: nd, node: v });
+            }
+        }
+    }
+    if !settled.contains_key(&goal) {
+        return Ok(None);
+    }
+    let cost = dist[&goal];
+    let mut path = vec![NodeIndex::<Ix>::new(goal)];
+    let mut cur = goal;
+    while cur != source.index() {
+        cur = pred[&cur];
+        path.push(NodeIndex::<Ix>::new(cur));
+    }
+    path.reverse();
+    Ok(Some((cost, path)))
+}
+
 /// A* shortest path from `start` to the first node satisfying `is_goal`,
 /// using edge weights as costs and `heuristic` as the admissible estimate.
 /// Returns `(cost, path)` or `None` if no path exists.
@@ -449,6 +530,39 @@ mod tests {
         let dist = dijkstra(&g, a, Some(c));
         // Direct a->c costs 1.0; a->b->c also costs 2.0; shortest is 1.0.
         assert!((dist[&c.index()] - 1.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn dijkstra_path_reconstructs_the_shortest_route() {
+        let (g, a, _b, c) = small_dag();
+        // Direct a->c and a->b->c both cost 1.0 in small_dag, so a tie is allowed.
+        let (cost, path) = dijkstra_path(&g, a, c).unwrap().unwrap();
+        assert!((cost - 1.0).abs() < 1e-12);
+        assert_eq!(path.first(), Some(&a));
+        assert_eq!(path.last(), Some(&c));
+        // Path edges must exist and sum to the cost.
+        let mut total = 0.0;
+        for w in path.windows(2) {
+            let e = g.find_edge(w[0], w[1]).expect("path uses real edges");
+            total += g[e];
+        }
+        assert!((total - cost).abs() < 1e-12);
+        assert_eq!(dijkstra_path(&g, a, a).unwrap(), Some((0.0, vec![a])));
+        assert_eq!(dijkstra_path(&g, c, a).unwrap(), None);
+    }
+
+    #[test]
+    fn dijkstra_path_prefers_the_longer_cheaper_route() {
+        let mut g: Graph<(), f64> = Graph::new();
+        let a = g.add_node(());
+        let b = g.add_node(());
+        let c = g.add_node(());
+        g.add_edge(a, b, 1.0);
+        g.add_edge(b, c, 1.0);
+        g.add_edge(a, c, 5.0);
+        let (cost, path) = dijkstra_path(&g, a, c).unwrap().unwrap();
+        assert_eq!(cost, 2.0);
+        assert_eq!(path, vec![a, b, c]);
     }
 
     #[test]

@@ -1396,6 +1396,8 @@ constant kernel) are checked in debug builds, and in release with the
 - [ ] Dense linalg: pseudo-inverse / minimum-norm least squares via SVD (`Qr`
       rejects rank-deficient input), a tridiagonal/banded solver, a reusable
       Cholesky solve object, and general real eigenvectors
+      Status: Partial: `DMatrix::pseudo_inverse` and `DMatrix::solve_min_norm` (SVD) are done.
+      Still open: the banded solver, the Cholesky solve object, real eigenvectors.
 - [ ] Sparse linalg: a Lanczos/Arnoldi eigensolver, a fill-reducing ordering
       (AMD/RCM) for `SparseLu`/`SparseCholesky`, and a matrix-free
       `LinearOperator` trait for the Krylov solvers
@@ -1404,16 +1406,24 @@ constant kernel) are checked in debug builds, and in release with the
       grid interpolation
 - [ ] Distributions: binomial, negative binomial, lognormal, Weibull,
       multivariate normal
+      Status: Partial: binomial (pmf, cdf, moments), lognormal and Weibull (pdf, cdf,
+      quantile, moments) are done. Negative binomial and multivariate normal are open.
 - [ ] Stats: multiple and logistic regression, Spearman and Kendall
       correlation, kernel density estimation
+      Status: Partial: Spearman (tie-corrected) and Kendall τ-b are done. Multiple and
+      logistic regression and kernel density estimation are open.
 - [ ] Signal: STFT/spectrogram, Welch PSD, FFT convolution, zero-phase
       `filtfilt`
 - [ ] `autodiff-rev`: `atan`, `tanh`, `atan2`, `sinh`/`cosh` (forward mode has
       `atan` and `tanh`); Jacobian and Hessian helpers in the umbrella crate
+      Status: Partial: the reverse-mode operators are done (`tanh`, `sinh`, `cosh`, `atan`,
+      `atan2`), each checked against central differences. Jacobian and Hessian helpers are open.
 - [ ] `symbolic`: string parser (`"x^2 + sin(x)"`), compile an expression to a
       closure, LaTeX output
 - [ ] `graph`: path reconstruction for `dijkstra`; re-export or wrap the
       petgraph algorithms (BFS/DFS, topological sort, MST, components)
+      Status: Partial: `dijkstra_path` returns the route as well as its cost. The
+      petgraph re-exports (BFS/DFS, topological sort, MST, components) are open.
 
 ### H.4 CI and automation
 

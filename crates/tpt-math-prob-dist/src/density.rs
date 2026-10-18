@@ -17,9 +17,10 @@
 //! assert!((normal_quantile(0.0, 1.0, 0.975) - 1.959_963_984_540_054).abs() < 1e-9);
 //! ```
 
+use core::f64::consts::PI;
 use tpt_math_prob_core::special::{
-    gamma_p, gamma_q, ln_beta, ln_gamma, regularized_incomplete_beta, standard_normal_cdf,
-    standard_normal_pdf, standard_normal_quantile,
+    gamma_p, gamma_q, ln_beta, ln_binomial, ln_gamma, regularized_incomplete_beta,
+    standard_normal_cdf, standard_normal_pdf, standard_normal_quantile,
 };
 
 /// `true` for a strictly positive parameter. NaN is rejected.
@@ -596,6 +597,137 @@ mod moment_tests {
     }
 }
 
+/// Lognormal density: `ln X ~ N(μ, σ²)`.
+pub fn lognormal_pdf(mu: f64, sigma: f64, x: f64) -> f64 {
+    if !is_positive(sigma) {
+        return f64::NAN;
+    }
+    if x <= 0.0 {
+        return 0.0;
+    }
+    let z = (x.ln() - mu) / sigma;
+    (-0.5 * z * z).exp() / (x * sigma * (2.0 * PI).sqrt())
+}
+
+/// Lognormal cumulative distribution function.
+pub fn lognormal_cdf(mu: f64, sigma: f64, x: f64) -> f64 {
+    if !is_positive(sigma) {
+        return f64::NAN;
+    }
+    if x <= 0.0 {
+        return 0.0;
+    }
+    standard_normal_cdf((x.ln() - mu) / sigma)
+}
+
+/// Lognormal quantile, `exp(μ + σ Φ⁻¹(p))`.
+pub fn lognormal_quantile(mu: f64, sigma: f64, p: f64) -> f64 {
+    if !is_positive(sigma) || !(0.0..=1.0).contains(&p) {
+        return f64::NAN;
+    }
+    (mu + sigma * standard_normal_quantile(p)).exp()
+}
+
+/// Mean and variance of the lognormal distribution,
+/// `(e^{μ + σ²/2}, (e^{σ²} − 1) e^{2μ + σ²})`.
+pub fn lognormal_moments(mu: f64, sigma: f64) -> (f64, f64) {
+    if !is_positive(sigma) {
+        return (f64::NAN, f64::NAN);
+    }
+    let s2 = sigma * sigma;
+    let mean = (mu + 0.5 * s2).exp();
+    let var = s2.exp_m1() * (2.0 * mu + s2).exp();
+    (mean, var)
+}
+
+/// Weibull density with shape `k` and scale `λ`.
+///
+/// At `x = 0` the density is `∞` for `k < 1`, `1/λ` for `k = 1` and `0` for `k > 1`.
+pub fn weibull_pdf(shape: f64, scale: f64, x: f64) -> f64 {
+    if !is_positive(shape) || !is_positive(scale) {
+        return f64::NAN;
+    }
+    if x < 0.0 {
+        return 0.0;
+    }
+    if x == 0.0 {
+        return match shape.partial_cmp(&1.0) {
+            Some(core::cmp::Ordering::Less) => f64::INFINITY,
+            Some(core::cmp::Ordering::Equal) => 1.0 / scale,
+            _ => 0.0,
+        };
+    }
+    let z = x / scale;
+    (shape / scale) * z.powf(shape - 1.0) * (-z.powf(shape)).exp()
+}
+
+/// Weibull cumulative distribution function, `1 − e^{−(x/λ)^k}`.
+pub fn weibull_cdf(shape: f64, scale: f64, x: f64) -> f64 {
+    if !is_positive(shape) || !is_positive(scale) {
+        return f64::NAN;
+    }
+    if x <= 0.0 {
+        return 0.0;
+    }
+    -(-(x / scale).powf(shape)).exp_m1()
+}
+
+/// Weibull quantile, `λ (−ln(1 − p))^{1/k}`.
+pub fn weibull_quantile(shape: f64, scale: f64, p: f64) -> f64 {
+    if !is_positive(shape) || !is_positive(scale) || !(0.0..=1.0).contains(&p) {
+        return f64::NAN;
+    }
+    scale * (-(-p).ln_1p()).powf(1.0 / shape)
+}
+
+/// Mean and variance of the Weibull distribution,
+/// `(λ Γ(1 + 1/k), λ² (Γ(1 + 2/k) − Γ(1 + 1/k)²))`.
+pub fn weibull_moments(shape: f64, scale: f64) -> (f64, f64) {
+    if !is_positive(shape) || !is_positive(scale) {
+        return (f64::NAN, f64::NAN);
+    }
+    let g1 = ln_gamma(1.0 + 1.0 / shape).exp();
+    let g2 = ln_gamma(1.0 + 2.0 / shape).exp();
+    (scale * g1, scale * scale * (g2 - g1 * g1))
+}
+
+/// Binomial probability mass at `k` for `n` trials with success probability `p`.
+pub fn binomial_pmf(n: u64, p: f64, k: u64) -> f64 {
+    if !(0.0..=1.0).contains(&p) {
+        return f64::NAN;
+    }
+    if k > n {
+        return 0.0;
+    }
+    if p == 0.0 {
+        return if k == 0 { 1.0 } else { 0.0 };
+    }
+    if p == 1.0 {
+        return if k == n { 1.0 } else { 0.0 };
+    }
+    (ln_binomial(n, k) + k as f64 * p.ln() + (n - k) as f64 * (-p).ln_1p()).exp()
+}
+
+/// `P(X ≤ k)` for a binomial variable, `I_{1−p}(n − k, k + 1)`.
+pub fn binomial_cdf(n: u64, p: f64, k: u64) -> f64 {
+    if !(0.0..=1.0).contains(&p) {
+        return f64::NAN;
+    }
+    if k >= n {
+        return 1.0;
+    }
+    regularized_incomplete_beta((n - k) as f64, (k + 1) as f64, 1.0 - p)
+}
+
+/// Mean and variance of the binomial distribution, `(np, np(1 − p))`.
+pub fn binomial_moments(n: u64, p: f64) -> (f64, f64) {
+    if !(0.0..=1.0).contains(&p) {
+        return (f64::NAN, f64::NAN);
+    }
+    let n = n as f64;
+    (n * p, n * p * (1.0 - p))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -809,5 +941,68 @@ mod quantile_tests {
         assert!(poisson_quantile(-1.0, 0.5).is_nan());
         assert_eq!(gamma_quantile(2.0, 1.0, 1.0), f64::INFINITY);
         assert_eq!(student_t_quantile(3.0, 0.0), f64::NEG_INFINITY);
+    }
+}
+
+#[cfg(test)]
+mod new_distribution_tests {
+    use super::*;
+
+    #[test]
+    fn lognormal_known_values() {
+        // Median is e^μ; standard lognormal has mean √e.
+        assert!((lognormal_cdf(0.0, 1.0, 1.0) - 0.5).abs() < 1e-14);
+        assert!((lognormal_quantile(0.0, 1.0, 0.5) - 1.0).abs() < 1e-14);
+        let (mean, var) = lognormal_moments(0.0, 1.0);
+        assert!((mean - 0.5_f64.exp()).abs() < 1e-12);
+        assert!((var - (1.0_f64.exp() - 1.0) * 1.0_f64.exp()).abs() < 1e-12);
+        // Density integrates to the CDF (checked by a midpoint rule).
+        let (a, b, n) = (1e-9, 3.0, 200_000);
+        let h = (b - a) / n as f64;
+        let integral: f64 = (0..n)
+            .map(|i| lognormal_pdf(0.2, 0.7, a + (i as f64 + 0.5) * h) * h)
+            .sum();
+        assert!((integral - lognormal_cdf(0.2, 0.7, b)).abs() < 1e-6);
+        assert!(lognormal_pdf(0.0, 0.0, 1.0).is_nan());
+        assert_eq!(lognormal_cdf(0.0, 1.0, -1.0), 0.0);
+    }
+
+    #[test]
+    fn weibull_with_unit_shape_is_exponential() {
+        let (scale, rate) = (2.0, 0.5);
+        for x in [0.1, 1.0, 3.7] {
+            assert!((weibull_pdf(1.0, scale, x) - exponential_pdf(rate, x)).abs() < 1e-14);
+            assert!((weibull_cdf(1.0, scale, x) - exponential_cdf(rate, x)).abs() < 1e-14);
+        }
+        let (mean, var) = weibull_moments(1.0, scale);
+        assert!((mean - scale).abs() < 1e-12);
+        assert!((var - scale * scale).abs() < 1e-10);
+        assert_eq!(weibull_pdf(1.0, scale, 0.0), 1.0 / scale);
+        assert_eq!(weibull_pdf(2.0, scale, 0.0), 0.0);
+        assert_eq!(weibull_pdf(0.5, scale, 0.0), f64::INFINITY);
+    }
+
+    #[test]
+    fn weibull_quantile_inverts_cdf() {
+        for p in [0.01, 0.3, 0.9, 0.999] {
+            let x = weibull_quantile(1.7, 3.0, p);
+            assert!((weibull_cdf(1.7, 3.0, x) - p).abs() < 1e-12);
+        }
+    }
+
+    #[test]
+    fn binomial_known_values_and_normalisation() {
+        // C(10, 5) / 2^10 = 252 / 1024; the cumulative sum to 5 is 638 / 1024.
+        assert!((binomial_pmf(10, 0.5, 5) - 252.0 / 1024.0).abs() < 1e-14);
+        assert!((binomial_cdf(10, 0.5, 5) - 638.0 / 1024.0).abs() < 1e-12);
+        let total: f64 = (0..=12).map(|k| binomial_pmf(12, 0.3, k)).sum();
+        assert!((total - 1.0).abs() < 1e-12);
+        let direct: f64 = (0..=4).map(|k| binomial_pmf(12, 0.3, k)).sum();
+        assert!((binomial_cdf(12, 0.3, 4) - direct).abs() < 1e-12);
+        let (mean, var) = binomial_moments(12, 0.3);
+        assert!((mean - 3.6).abs() < 1e-12 && (var - 2.52).abs() < 1e-12);
+        assert_eq!(binomial_pmf(5, 0.0, 0), 1.0);
+        assert_eq!(binomial_pmf(5, 1.0, 4), 0.0);
+        assert!(binomial_pmf(5, 1.5, 2).is_nan());
     }
 }

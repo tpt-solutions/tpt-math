@@ -102,6 +102,38 @@ impl<'t> Variable<'t> {
         self.unary(Op::Tan, self.value.tan())
     }
 
+    /// `tanh(self)`, with local derivative `1 − tanh²(self)`.
+    #[must_use]
+    pub fn tanh(self) -> Variable<'t> {
+        self.unary(Op::Tanh, self.value.tanh())
+    }
+
+    /// `sinh(self)`, with local derivative `cosh(self)`.
+    #[must_use]
+    pub fn sinh(self) -> Variable<'t> {
+        self.unary(Op::Sinh, self.value.sinh())
+    }
+
+    /// `cosh(self)`, with local derivative `sinh(self)`.
+    #[must_use]
+    pub fn cosh(self) -> Variable<'t> {
+        self.unary(Op::Cosh, self.value.cosh())
+    }
+
+    /// `atan(self)`, with local derivative `1 / (1 + self²)`.
+    #[must_use]
+    pub fn atan(self) -> Variable<'t> {
+        self.unary(Op::Atan, self.value.atan())
+    }
+
+    /// `atan2(self, x)`: the angle of the point `(x, self)`, so `self` is `y`.
+    /// Its partials are `x / (x² + y²)` and `−y / (x² + y²)`.
+    #[must_use]
+    pub fn atan2(self, x: Variable<'t>) -> Variable<'t> {
+        let value = self.value.atan2(x.value);
+        self.binary(x, Op::Atan2, value)
+    }
+
     /// `exp(self)`, with local derivative `exp(self)`.
     #[must_use]
     pub fn exp(self) -> Variable<'t> {

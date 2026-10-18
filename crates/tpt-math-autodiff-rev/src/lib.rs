@@ -318,3 +318,63 @@ mod tests {
         assert!((y - 1.0).abs() < 1e-3, "y = {y}");
     }
 }
+
+#[cfg(test)]
+mod hyperbolic_and_atan_tests {
+    use super::*;
+
+    /// Gradient of `f` at `point`, checked against central differences.
+    fn check_gradient<F>(point: &[f64], f: F)
+    where
+        F: for<'t> Fn(&[Variable<'t>]) -> Variable<'t>,
+    {
+        let tape = GradientTape::new();
+        let vars: Vec<Variable<'_>> = point.iter().map(|&v| tape.var(v)).collect();
+        let out = f(&vars);
+        let grad = tape.gradient(out, &vars);
+        let h = 1e-6;
+        for i in 0..point.len() {
+            let mut hi = point.to_vec();
+            let mut lo = point.to_vec();
+            hi[i] += h;
+            lo[i] -= h;
+            let eval = |p: &[f64]| {
+                let t = GradientTape::new();
+                let v: Vec<Variable<'_>> = p.iter().map(|&x| t.var(x)).collect();
+                f(&v).value()
+            };
+            let fd = (eval(&hi) - eval(&lo)) / (2.0 * h);
+            assert!(
+                (grad[i] - fd).abs() < 1e-6,
+                "component {i}: reverse {} vs finite difference {fd}",
+                grad[i]
+            );
+        }
+    }
+
+    #[test]
+    fn tanh_sinh_cosh_atan_match_finite_differences() {
+        check_gradient(&[0.7], |v| v[0].tanh());
+        check_gradient(&[-0.4], |v| v[0].sinh());
+        check_gradient(&[0.9], |v| v[0].cosh());
+        check_gradient(&[1.3], |v| v[0].atan());
+    }
+
+    #[test]
+    fn atan2_gradient_matches_finite_differences() {
+        check_gradient(&[0.6, -1.1], |v| v[0].atan2(v[1]));
+    }
+
+    #[test]
+    fn atan2_partials_have_the_documented_form() {
+        let tape = GradientTape::new();
+        let y = tape.var(3.0);
+        let x = tape.var(4.0);
+        let out = y.atan2(x);
+        let g = tape.gradient(out, &[y, x]);
+        // ∂/∂y = x/(x²+y²) = 4/25, ∂/∂x = −y/(x²+y²) = −3/25.
+        assert!((g[0] - 4.0 / 25.0).abs() < 1e-12);
+        assert!((g[1] + 3.0 / 25.0).abs() < 1e-12);
+        assert!((out.value() - 3.0_f64.atan2(4.0)).abs() < 1e-14);
+    }
+}
