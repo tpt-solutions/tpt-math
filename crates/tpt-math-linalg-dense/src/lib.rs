@@ -54,6 +54,10 @@ use alloc::vec::Vec;
 use alloc::{format, string::String, vec};
 
 #[cfg(feature = "alloc")]
+mod eig;
+#[cfg(feature = "alloc")]
+pub use eig::Eigenvalue;
+#[cfg(feature = "alloc")]
 mod banded;
 #[cfg(feature = "alloc")]
 pub use banded::solve_banded;
