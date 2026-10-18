@@ -1533,7 +1533,7 @@ constant kernel) are checked in debug builds, and in release with the
 
 ### I.3 Default path: other dense routines
 
-- [x] `matrix_exp`: drop the Index-based `matmul_square` for `mul_matrix_into` with
+- [ ] `matrix_exp`: drop the Index-based `matmul_square` for `mul_matrix_into` with
       reused buffers (picks up SIMD `gemm` under `simd`); replace the 30-term Taylor
       series with Higham's Padé(13) scaling and squaring; add the non-finite guard
       (H.1 hang). Test against closed forms and the old result
@@ -1542,7 +1542,8 @@ constant kernel) are checked in debug builds, and in release with the
       buffer reuse, which waits for the matrix kernels. Result at n = 32: 938 µs -> 254 µs (-74%).
       Closed forms (rotation generator at large angles, nilpotent, zero, large-norm diagonal)
       are tested. The old result was not compared directly.
-- [ ] `svd`: carry squared column norms between rotations
+- [x] `svd`: carry squared column norms between rotations
+      Status: Done. Norms are recomputed exactly at the start of each sweep and carried through the rotations, so each pair costs one dot product instead of three. At n = 64 the time drops from 2.28 ms to 1.78 ms (-22%). Tests reconstruct an ill-conditioned Hilbert matrix and a tall Vandermonde matrix.
       (`alpha_p -= t·gamma`, `alpha_q += t·gamma`), recomputed exactly each sweep.
       That's one dot product per pair instead of three. Test `‖A − UΣVᵀ‖` on
       ill-conditioned input

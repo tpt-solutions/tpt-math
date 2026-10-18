@@ -1488,12 +1488,18 @@ impl DMatrix<f64> {
             .map(|j| (0..n).map(|i| if i == j { 1.0 } else { 0.0 }).collect())
             .collect();
         let mut converged = false;
+        // Squared column norms. They are recomputed exactly at the start of each
+        // sweep and then carried through the rotations, which costs one dot
+        // product per pair (the cross term) instead of three.
+        let mut norms: Vec<f64> = vec![0.0; n];
         for _ in 0..SVD_MAX_SWEEPS {
+            for (j, col) in u.iter().enumerate() {
+                norms[j] = col.iter().map(|x| x * x).sum();
+            }
             let mut rotated = false;
             for p in 0..n {
                 for q in (p + 1)..n {
-                    let alpha: f64 = u[p].iter().map(|x| x * x).sum();
-                    let beta: f64 = u[q].iter().map(|x| x * x).sum();
+                    let (alpha, beta) = (norms[p], norms[q]);
                     let gamma: f64 = u[p].iter().zip(&u[q]).map(|(x, y)| x * y).sum();
                     if gamma == 0.0 || gamma.abs() <= f64::EPSILON * sqrt_f64(alpha * beta) {
                         continue;
@@ -1505,6 +1511,10 @@ impl DMatrix<f64> {
                     let s = c * t;
                     rotate_columns(&mut u, p, q, c, s);
                     rotate_columns(&mut v, p, q, c, s);
+                    // With the rotation chosen to annihilate the cross term, the new
+                    // squared norms are α − tγ and β + tγ.
+                    norms[p] = alpha - t * gamma;
+                    norms[q] = beta + t * gamma;
                 }
             }
             if !rotated {
@@ -2565,5 +2575,46 @@ mod pade_exp_tests {
         let nil = DMatrix::from_row_slice(2, 2, &[0.0, 1.0, 0.0, 0.0]);
         let en = nil.matrix_exp().unwrap();
         assert!((en[(0, 1)] - 1.0).abs() < 1e-14 && (en[(0, 0)] - 1.0).abs() < 1e-14);
+    }
+}
+
+#[cfg(all(test, feature = "alloc"))]
+mod svd_norm_carry_tests {
+    use super::*;
+
+    /// ‖A − U Σ Vᵀ‖_F for the thin factors returned by `svd`.
+    fn residual(a: &DMatrix<f64>) -> f64 {
+        let (u, s, v) = a.svd().unwrap();
+        let k = s.len();
+        let mut err = 0.0;
+        for i in 0..a.nrows() {
+            for j in 0..a.ncols() {
+                let rec: f64 = (0..k).map(|r| u[(i, r)] * s[r] * v[(j, r)]).sum();
+                err += (a[(i, j)] - rec).powi(2);
+            }
+        }
+        err.sqrt()
+    }
+
+    #[test]
+    fn reconstructs_ill_conditioned_input() {
+        // A Hilbert-like matrix has condition number about 1e10.
+        let h = DMatrix::from_fn(8, 8, |i, j| 1.0 / (i + j + 1) as f64);
+        let scale = h.iter().fold(0.0_f64, |m, v| m.max(v.abs()));
+        assert!(residual(&h) < 1e-13 * scale * 8.0, "residual {}", residual(&h));
+        let tall = DMatrix::from_fn(10, 4, |i, j| ((i + 1) as f64).powi(j as i32));
+        let scale = tall.iter().fold(0.0_f64, |m, v| m.max(v.abs()));
+        assert!(residual(&tall) < 1e-12 * scale * 10.0);
+    }
+
+    #[test]
+    fn singular_values_match_known_spectrum() {
+        // diag(3, 1) rotated by an orthogonal matrix keeps singular values 3 and 1.
+        let (c, s) = (0.6_f64, 0.8_f64);
+        let rot = DMatrix::from_row_slice(2, 2, &[c, -s, s, c]);
+        let d = DMatrix::from_row_slice(2, 2, &[3.0, 0.0, 0.0, 1.0]);
+        let a = rot.clone() * d * rot.transpose();
+        let sv = a.singular_values().unwrap();
+        assert!((sv[0] - 3.0).abs() < 1e-12 && (sv[1] - 1.0).abs() < 1e-12);
     }
 }
