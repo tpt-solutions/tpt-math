@@ -74,6 +74,15 @@ pub enum StatsError {
         freedom: f64,
     },
 
+    /// A scalar parameter that must be strictly positive (such as a kernel
+    /// bandwidth) was zero or negative.
+    NonPositiveParameter {
+        /// Name of the offending parameter.
+        parameter: &'static str,
+        /// The offending value.
+        value: f64,
+    },
+
     /// The regression design matrix does not have full column rank, so the
     /// coefficients are not identified.
     RankDeficientDesign,
@@ -120,6 +129,9 @@ impl fmt::Display for StatsError {
                 "{freedom} is not a valid number of degrees of freedom \
                  (expected a finite value > 0)"
             ),
+            StatsError::NonPositiveParameter { parameter, value } => {
+                write!(f, "`{parameter}` is {value}, expected a value > 0")
+            }
             StatsError::RankDeficientDesign => write!(
                 f,
                 "the design matrix is rank-deficient; the coefficients are not identified"

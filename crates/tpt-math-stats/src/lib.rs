@@ -109,6 +109,7 @@ mod descriptive;
 mod dist;
 mod error;
 mod hypothesis;
+mod kde;
 mod multiple;
 mod nonparametric;
 mod regression;
@@ -131,6 +132,7 @@ pub use hypothesis::{
     try_one_sample_t_test, try_one_way_anova, try_paired_t_test, try_pooled_t_test,
     try_two_sample_t_test, two_sample_t_test,
 };
+pub use kde::{kernel_density, try_kernel_density, KernelDensity};
 pub use multiple::{try_logistic_regression, try_multiple_regression, LogisticFit, MultipleFit};
 pub use nonparametric::{
     kolmogorov_smirnov_two_sample, mann_whitney_u, try_kolmogorov_smirnov_two_sample,
