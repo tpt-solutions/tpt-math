@@ -307,7 +307,10 @@ pub fn try_quantile(samples: &[f64], p: f64) -> Result<f64, StatsError> {
     let high_value = if hi == lo {
         low_value
     } else {
-        work[lo + 1..].iter().copied().fold(f64::INFINITY, |m, v| m.min(v))
+        work[lo + 1..]
+            .iter()
+            .copied()
+            .fold(f64::INFINITY, |m, v| m.min(v))
     };
     Ok(low_value + frac * (high_value - low_value))
 }
@@ -570,11 +573,17 @@ mod selection_tests {
         for len in [1usize, 2, 3, 4, 5, 10, 33, 100, 257] {
             let v: Vec<f64> = (0..len)
                 .map(|_| {
-                    state = state.wrapping_mul(6_364_136_223_846_793_005).wrapping_add(1);
+                    state = state
+                        .wrapping_mul(6_364_136_223_846_793_005)
+                        .wrapping_add(1);
                     ((state >> 11) as f64 / (1u64 << 53) as f64 - 0.5) * 10.0
                 })
                 .collect();
-            assert_eq!(try_median(&v).unwrap(), sorted_median(&v), "median, len {len}");
+            assert_eq!(
+                try_median(&v).unwrap(),
+                sorted_median(&v),
+                "median, len {len}"
+            );
             for p in [0.0, 0.1, 0.25, 0.5, 0.9, 1.0] {
                 assert_eq!(
                     try_quantile(&v, p).unwrap(),
