@@ -237,10 +237,17 @@ pub fn max(samples: &[f64]) -> f64 {
     try_max(samples).unwrap_or_else(|e| panic!("max: {e}"))
 }
 
+/// The `k`-th smallest value (0-based) of `v`, found by selection in O(n) on
+/// average. Reorders `v`. The ordering is `f64::total_cmp`, the same as a sort,
+/// so the value matches the sorted sample exactly.
+fn select_order_statistic(v: &mut [f64], k: usize) -> f64 {
+    *v.select_nth_unstable_by(k, f64::total_cmp).1
+}
+
 /// Median of `samples`: the middle observation, or the mean of the two middle
 /// observations when the sample size is even.
 ///
-/// The input is left untouched; sorting happens on an internal copy.
+/// The input is left untouched; selection happens on an internal copy.
 ///
 /// # Errors
 ///
@@ -258,15 +265,15 @@ pub fn try_median(samples: &[f64]) -> Result<f64, StatsError> {
     check_min_len("samples", samples, 1)?;
     check_all_finite("samples", samples)?;
 
-    let mut sorted = samples.to_vec();
-    sorted.sort_by(f64::total_cmp);
-
-    let mid = sorted.len() / 2;
-    Ok(if sorted.len() % 2 == 1 {
-        sorted[mid]
-    } else {
-        0.5 * (sorted[mid - 1] + sorted[mid])
-    })
+    let mut work = samples.to_vec();
+    let mid = work.len() / 2;
+    if work.len() % 2 == 1 {
+        return Ok(select_order_statistic(&mut work, mid));
+    }
+    // Even length: the two middle order statistics are `mid - 1` and `mid`.
+    let upper = select_order_statistic(&mut work, mid);
+    let lower = select_order_statistic(&mut work[..mid], mid - 1);
+    Ok(0.5 * (lower + upper))
 }
 
 /// Sample `p`-quantile by linear interpolation between order statistics
@@ -289,13 +296,20 @@ pub fn try_quantile(samples: &[f64], p: f64) -> Result<f64, StatsError> {
     if !(0.0..=1.0).contains(&p) {
         return Err(StatsError::ProbabilityOutOfRange { value: p });
     }
-    let mut sorted = samples.to_vec();
-    sorted.sort_by(f64::total_cmp);
-    let h = (sorted.len() - 1) as f64 * p;
+    let mut work = samples.to_vec();
+    let h = (work.len() - 1) as f64 * p;
     let lo = h.floor() as usize;
-    let hi = (lo + 1).min(sorted.len() - 1);
+    let hi = (lo + 1).min(work.len() - 1);
     let frac = h - lo as f64;
-    Ok(sorted[lo] + frac * (sorted[hi] - sorted[lo]))
+    let low_value = select_order_statistic(&mut work, lo);
+    // After selecting `lo`, every later element is >= it, so the next order
+    // statistic is their minimum.
+    let high_value = if hi == lo {
+        low_value
+    } else {
+        work[lo + 1..].iter().copied().fold(f64::INFINITY, |m, v| m.min(v))
+    };
+    Ok(low_value + frac * (high_value - low_value))
 }
 
 /// Sample `p`-quantile; see [`try_quantile`].
@@ -522,5 +536,61 @@ mod tests {
         assert!((excess_kurtosis(&x) + 1.3).abs() < 1e-12);
         // A right-tailed sample has positive skew.
         assert!(skewness(&[1.0, 2.0, 3.0, 10.0]) > 0.0);
+    }
+}
+
+#[cfg(test)]
+mod selection_tests {
+    use super::*;
+
+    /// Reference implementations with a full sort, the previous code path.
+    fn sorted_median(v: &[f64]) -> f64 {
+        let mut s = v.to_vec();
+        s.sort_by(f64::total_cmp);
+        let m = s.len() / 2;
+        if s.len() % 2 == 1 {
+            s[m]
+        } else {
+            0.5 * (s[m - 1] + s[m])
+        }
+    }
+
+    fn sorted_quantile(v: &[f64], p: f64) -> f64 {
+        let mut s = v.to_vec();
+        s.sort_by(f64::total_cmp);
+        let h = (s.len() - 1) as f64 * p;
+        let lo = h.floor() as usize;
+        let hi = (lo + 1).min(s.len() - 1);
+        s[lo] + (h - lo as f64) * (s[hi] - s[lo])
+    }
+
+    #[test]
+    fn selection_matches_sorting_exactly() {
+        let mut state = 12_345_u64;
+        for len in [1usize, 2, 3, 4, 5, 10, 33, 100, 257] {
+            let v: Vec<f64> = (0..len)
+                .map(|_| {
+                    state = state.wrapping_mul(6_364_136_223_846_793_005).wrapping_add(1);
+                    ((state >> 11) as f64 / (1u64 << 53) as f64 - 0.5) * 10.0
+                })
+                .collect();
+            assert_eq!(try_median(&v).unwrap(), sorted_median(&v), "median, len {len}");
+            for p in [0.0, 0.1, 0.25, 0.5, 0.9, 1.0] {
+                assert_eq!(
+                    try_quantile(&v, p).unwrap(),
+                    sorted_quantile(&v, p),
+                    "quantile {p}, len {len}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn duplicates_and_negative_zero_agree_with_sorting() {
+        let v = [2.0, -0.0, 0.0, 2.0, 2.0, -1.0];
+        assert_eq!(try_median(&v).unwrap(), sorted_median(&v));
+        assert_eq!(try_quantile(&v, 0.5).unwrap(), sorted_quantile(&v, 0.5));
+        // The input is not reordered for the caller.
+        assert_eq!(v[0], 2.0);
     }
 }
