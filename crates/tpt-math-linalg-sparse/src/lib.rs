@@ -3316,3 +3316,232 @@ mod solver_path_tests {
         assert_eq!((rep.status, rep.iterations), (SolveStatus::Converged, 0));
     }
 }
+
+#[cfg(all(test, feature = "alloc"))]
+mod gap_tests {
+    use super::*;
+    use alloc::string::ToString;
+
+    /// Symmetric positive-definite tridiagonal, for CG.
+    fn spd_tridiag(n: usize) -> CsrMatrix<f64> {
+        let mut coo = CooMatrix::new(n, n);
+        for i in 0..n {
+            coo.push(i, i, 4.0);
+            if i + 1 < n {
+                coo.push(i, i + 1, -1.0);
+                coo.push(i + 1, i, -1.0);
+            }
+        }
+        coo.to_csr()
+    }
+
+    fn tridiag(n: usize) -> CsrMatrix<f64> {
+        let mut coo = CooMatrix::new(n, n);
+        for i in 0..n {
+            coo.push(i, i, 4.0);
+            if i + 1 < n {
+                coo.push(i, i + 1, -1.5);
+                coo.push(i + 1, i, -0.5);
+            }
+        }
+        coo.to_csr()
+    }
+
+    #[test]
+    fn givens_zeroes_the_second_entry_on_both_branches() {
+        for (a, b) in [
+            (3.0_f64, 4.0_f64),
+            (4.0, 3.0),
+            (-3.0, 4.0),
+            (0.0, 2.0),
+            (5.0, 0.0),
+        ] {
+            let (c, s) = givens(a, b);
+            let r = c * a + s * b;
+            let zero = -s * a + c * b;
+            assert!(zero.abs() < 1e-12, "({a},{b}) gave {zero}");
+            assert!((c * c + s * s - 1.0).abs() < 1e-12);
+            assert!(r.abs() >= 0.0);
+        }
+        let (c, s): (f64, f64) = givens(3.0, 4.0);
+        assert!(
+            (c - 0.6).abs() < 1e-12 && (s - 0.8).abs() < 1e-12,
+            "{c}, {s}"
+        );
+        let (c, s): (f64, f64) = givens(4.0, 3.0);
+        assert!(
+            (c - 0.8).abs() < 1e-12 && (s - 0.6).abs() < 1e-12,
+            "{c}, {s}"
+        );
+        assert_eq!(givens(5.0, 0.0), (1.0, 0.0));
+    }
+
+    #[test]
+    fn cg_on_a_diagonal_matrix_converges_within_the_distinct_eigenvalue_count() {
+        let mut coo = CooMatrix::new(4, 4);
+        for i in 0..4 {
+            coo.push(i, i, (i + 1) as f64);
+        }
+        let a = coo.to_csr();
+        let b = DVector::from_fn(4, |_| 1.0);
+        let (x, rep) = conjugate_gradient_with_report(&a, &b, None, 1e-12, 50).unwrap();
+        assert!(rep.status.is_converged());
+        assert!(
+            rep.iterations >= 1 && rep.iterations <= 4,
+            "{}",
+            rep.iterations
+        );
+        for i in 0..4 {
+            assert!((x[i] - 1.0 / (i + 1) as f64).abs() < 1e-10);
+        }
+    }
+
+    #[test]
+    fn cg_respects_max_iter_and_reports_not_converged_at_the_budget() {
+        let a = spd_tridiag(30);
+        let b = DVector::from_fn(30, |i| i as f64 + 1.0);
+        let (_, rep) = conjugate_gradient_with_report(&a, &b, None, 1e-14, 1).unwrap();
+        assert_eq!(rep.status, SolveStatus::NotConverged);
+        assert_eq!(rep.iterations, 1);
+        let err = report_to_result(DVector::zeros(30), rep);
+        assert_eq!(err, Err(SparseError::NotConverged { iterations: 1 }));
+    }
+
+    #[test]
+    fn a_solved_start_vector_takes_zero_iterations() {
+        let a = spd_tridiag(5);
+        let b = DVector::from_fn(5, |i| i as f64 - 2.0);
+        let (x, _) = conjugate_gradient_with_report(&a, &b, None, 1e-12, 100).unwrap();
+        let (_, rep) = conjugate_gradient_with_report(&a, &b, Some(x), 1e-10, 100).unwrap();
+        assert!(rep.status.is_converged(), "{rep:?}");
+        assert_eq!(rep.iterations, 0);
+    }
+
+    #[test]
+    fn bicgstab_on_the_identity_converges_in_one_iteration() {
+        let mut coo = CooMatrix::new(3, 3);
+        for i in 0..3 {
+            coo.push(i, i, 1.0);
+        }
+        let a = coo.to_csr();
+        let b = DVector::from_fn(3, |i| i as f64 + 1.0);
+        let (x, rep) = bicgstab_with_report(&a, &b, None, 1e-12, 10).unwrap();
+        assert!(rep.status.is_converged());
+        assert_eq!(rep.iterations, 1);
+        assert!((x[2] - 3.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn bicgstab_budget_and_nonsymmetric_convergence() {
+        let a = tridiag(12);
+        let b = DVector::from_fn(12, |i| (i as f64).sin());
+        let (_, rep) = bicgstab_with_report(&a, &b, None, 1e-14, 0).unwrap();
+        assert_eq!(rep.status, SolveStatus::NotConverged);
+        assert_eq!(rep.iterations, 0);
+        let (x, rep) = bicgstab_with_report(&a, &b, None, 1e-12, 200).unwrap();
+        assert!(rep.status.is_converged());
+        let ax = a.matvec(&x).unwrap();
+        for i in 0..12 {
+            assert!((ax[i] - b[i]).abs() < 1e-9);
+        }
+    }
+
+    #[test]
+    fn breakdown_status_maps_to_the_breakdown_error() {
+        let rep = SolveReport {
+            status: SolveStatus::Breakdown,
+            iterations: 3,
+            residual: 1.0,
+        };
+        assert_eq!(
+            report_to_result(DVector::zeros(2), rep),
+            Err(SparseError::Breakdown { iterations: 3 })
+        );
+    }
+
+    #[test]
+    fn gmres_with_a_small_restart_still_converges() {
+        let a = tridiag(15);
+        let b = DVector::from_fn(15, |i| 1.0 + i as f64 * 0.1);
+        let identity = |v: &[f64]| Ok(v.to_vec());
+        let (x, rep) =
+            gmres_right_preconditioned_with_report(&a, &b, None, 1e-11, 3, 500, identity).unwrap();
+        assert!(rep.status.is_converged(), "{rep:?}");
+        let ax = a.matvec(&x).unwrap();
+        for i in 0..15 {
+            assert!((ax[i] - b[i]).abs() < 1e-8);
+        }
+        let (_, rep) =
+            gmres_right_preconditioned_with_report(&a, &b, None, 1e-14, 2, 1, identity).unwrap();
+        assert_eq!(rep.status, SolveStatus::NotConverged);
+    }
+
+    #[test]
+    fn coo_accessors_and_error_messages() {
+        let mut coo = CooMatrix::new(3, 4);
+        coo.push(0, 1, 1.0);
+        coo.push(2, 3, 2.0);
+        assert_eq!((coo.nrows(), coo.ncols(), coo.nnz()), (3, 4, 2));
+        assert!(SparseError::DimensionMismatch {
+            what: "the rhs length"
+        }
+        .to_string()
+        .contains("the rhs length"));
+        assert!(SparseError::NotConverged { iterations: 7 }
+            .to_string()
+            .contains('7'));
+        assert!(SparseError::Breakdown { iterations: 2 }
+            .to_string()
+            .contains('2'));
+    }
+
+    #[test]
+    fn reordered_factors_expose_their_permutation_and_fill() {
+        let a = tridiag(6);
+        let chol = ReorderedCholesky::factor(&a).unwrap();
+        assert_eq!(chol.permutation().len(), 6);
+        assert!(chol.nnz() >= 6);
+        let lu = ReorderedLu::factor(&a, FillOrdering::MinimumDegree).unwrap();
+        assert_eq!(lu.permutation().len(), 6);
+        let mut seen = lu.permutation().to_vec();
+        seen.sort_unstable();
+        assert_eq!(seen, (0..6).collect::<Vec<_>>());
+    }
+
+    /// diag(1, 1, 2, 2, 3, 3): three distinct eigenvalues, each with multiplicity 2.
+    fn repeated_spectrum() -> impl crate::LinearOperator<f64> {
+        crate::matrix_free(6, |x: &[f64], y: &mut [f64]| {
+            for i in 0..x.len() {
+                y[i] = ((i / 2) + 1) as f64 * x[i];
+            }
+        })
+    }
+
+    #[test]
+    fn lanczos_stops_at_the_number_of_distinct_eigenvalues() {
+        let pairs = crate::lanczos(&repeated_spectrum(), 3, 6, crate::Which::Smallest).unwrap();
+        assert_eq!(
+            pairs.krylov_dim, 3,
+            "invariant subspace after three distinct eigenvalues"
+        );
+        for (v, want) in pairs.values.iter().zip([1.0, 2.0, 3.0]) {
+            assert!((v - want).abs() < 1e-9, "{v} vs {want}");
+        }
+        assert!(pairs.residuals.iter().all(|r| *r < 1e-8));
+    }
+
+    #[test]
+    fn arnoldi_stops_at_the_number_of_distinct_eigenvalues() {
+        let ritz = crate::arnoldi(&repeated_spectrum(), 3, 6).unwrap();
+        assert_eq!(ritz.krylov_dim, 3);
+        let mut re: Vec<f64> = ritz.values.iter().map(|e| e.re).collect();
+        re.sort_by(|a, b| a.total_cmp(b));
+        for (v, want) in re.iter().zip([1.0, 2.0, 3.0]) {
+            assert!((v - want).abs() < 1e-9, "{v} vs {want}");
+        }
+        assert!(ritz
+            .residuals
+            .iter()
+            .all(|r| matches!(r, Some(x) if *x < 1e-8)));
+    }
+}
