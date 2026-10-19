@@ -74,6 +74,16 @@ The API surface is small:
 - `magnitude` (per-bin `|X[k]|`, computed with `hypot`) and `power_spectrum`
   (`|X[k]|^2` of a real signal).
 
+## Real transforms and spectra
+
+- `Fft::rfft` and `Fft::irfft` are real-input transforms that return the
+  `n/2 + 1` non-redundant bins. For even `n` they use one complex transform of
+  length `n/2`.
+- `stft` is the short-time Fourier transform. Its frames are complex, so `|·|²`
+  gives the spectrogram.
+- `welch` is the one-sided Welch power spectral density.
+- `fft_convolve` is linear convolution by FFT.
+
 ## Notes
 
 - **Transforms are unnormalized**, exactly as in `rustfft`, FFTW, and NumPy:

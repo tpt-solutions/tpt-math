@@ -10,7 +10,17 @@ Graph mathematics for the `tpt-math` substrate.
   directed `Graph` with `f64` edge capacities — `petgraph` has no built-in
   max-flow (an upstream feature request has been open since 2021).
 * **In-house** shortest-path helpers (`dijkstra`, `astar`) with a `no_std`-safe
-  implementation (on `std` they delegate to `petgraph`'s algorithms).
+  implementation (on `std` they delegate to `petgraph`'s algorithms). `dijkstra`
+  and `astar` panic on negative or NaN weights. `try_dijkstra` and `try_astar`
+  return `Result` with `GraphError::InvalidWeight` instead. `dijkstra_path`
+  returns the node route as well as the cost.
+* **Traversal and structure** — `bfs_order` and `dfs_order` (preorder), `has_path`,
+  `is_cyclic`, `connected_components` (weakly connected for directed graphs),
+  `strongly_connected_components` (Tarjan) and `minimum_spanning_tree` (Kruskal,
+  returned as `(source, target, weight)` triples). These are thin wraps over
+  `petgraph`.
+
+`max_flow` rejects negative, NaN or infinite capacities.
 
 ## Usage
 

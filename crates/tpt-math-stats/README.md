@@ -16,18 +16,29 @@ no second dependency declaration.
 
 ## Features
 
-This crate has no optional features (`default = []`). It requires `std`:
-the panicking wrappers format their error messages.
+* `simd` — the variance sums go through `tpt-simd-reduce`. This is about 7× faster
+  on 10⁶ samples. It sums pairwise rather than with Neumaier compensation, so
+  results differ from the default in the last few units of precision. It is off
+  by default.
+
+It requires `std`: the panicking wrappers format their error messages.
 
 ## What's provided
 
 | Area | Functions |
 |------|-----------|
-| Descriptive | `mean`, `variance`, `std_dev`, `min`, `max`, `median` |
-| Hypothesis tests | `one_sample_t_test`, `two_sample_t_test` (Welch), `chi_squared_goodness_of_fit` |
-| Regression | `pearson_correlation`, `linear_regression` |
+| Descriptive | `mean`, `variance`, `std_dev`, `min`, `max`, `median`, `quantile` (type 7), `skewness`, `excess_kurtosis`, `covariance` |
+| Hypothesis tests | `one_sample_t_test`, `two_sample_t_test` (Welch), `pooled_t_test`, `paired_t_test`, `chi_squared_goodness_of_fit`, `chi_squared_independence` (r×c table), `one_way_anova`, `mann_whitney_u`, `wilcoxon_signed_rank`, `kolmogorov_smirnov_two_sample` |
+| Multiple comparisons | `bonferroni`, `holm`, `benjamini_hochberg` |
+| Resampling | `bootstrap_ci` (percentile interval for any `Fn(&[f64]) -> f64`, seeded) |
+| Correlation | `pearson_correlation`, `spearman_correlation` (tie-corrected), `kendall_tau` (τ-b) |
+| Regression | `linear_regression`, `multiple_regression` (QR least squares), `logistic_regression` (Newton iterations) |
+| Density estimation | `kernel_density` and `KernelDensity` (Gaussian kernel, Silverman's bandwidth by default) |
 | Distributions | `ChiSquared`, `StudentsT`, `Normal` via `ContinuousCDF` |
-| Special functions | `erf`, `erfc`, `gamma`, `lgamma`, `beta`, `beta_reg`, `gamma_p`, `gamma_q` |
+| Special functions | `erf`, `erfc`, `gamma`, `lgamma`, `beta`, `beta_reg`, `gamma_p`, `gamma_q` (re-exported from `tpt-math-prob-core::special`) |
+
+Each `try_*` function returns `StatsError`. The `StatsError` enum is
+`#[non_exhaustive]`, so match it with a wildcard arm.
 
 Every function has a panicking short-named form and a checked `try_*` twin
 returning `StatsError`; the former is exactly the latter unwrapped.
@@ -36,7 +47,7 @@ returning `StatsError`; the former is exactly the latter unwrapped.
 
 ```toml
 [dependencies]
-tpt-math-stats = "0.1"
+tpt-math-stats = "0.2"
 ```
 
 ```rust
@@ -94,6 +105,8 @@ assert!(chi.sf(10.0) < 0.05);
   chi-squared df=1 vs. `erfc`).
 - Sums use compensated (Neumaier) accumulation and variances use the corrected
   two-pass formula, keeping results accurate for long or badly offset samples.
+  `median` and `quantile` select the order statistic in O(n) rather than sorting.
+  `pearson_correlation` rescales its inputs when raw sums would overflow.
 - Documented non-error results: a degenerate (zero standard error) t-test
   returns `(0.0, 1.0)` or `(±∞, 0.0)`; a constant sample makes
   `pearson_correlation` return `NaN` and `linear_regression` return

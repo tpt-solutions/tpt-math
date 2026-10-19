@@ -31,7 +31,7 @@ not currently supported.
 
 ```toml
 [dependencies]
-tpt-math-autodiff-rev = "0.1"
+tpt-math-autodiff-rev = "0.2"
 ```
 
 Build an expression on a tape and read off the whole gradient:
@@ -48,6 +48,11 @@ let g = tape.gradient(z, &[x, y]);
 assert!((g[0] - 4.0).abs() < 1e-9);            // dz/dx = 2x
 assert!((g[1] - 3.0_f64.cos()).abs() < 1e-9);  // dz/dy = cos(y)
 ```
+
+The `Variable` methods cover the usual arithmetic, plus `sin`, `cos`, `tan`,
+`tanh`, `sinh`, `cosh`, `atan`, `atan2`, `exp`, `abs` and `recip`. Mixing a
+`Variable` with an `f64` records a single node. `Op` is public, so exhaustive
+matches on it need a wildcard arm.
 
 When the tape itself is not interesting, `value_and_gradient` creates it, seeds
 one `Variable` per input, and runs the backward pass for you:

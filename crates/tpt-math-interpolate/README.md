@@ -29,11 +29,24 @@ algebra backend.
 * **B-spline basis** — `bspline_basis` (Cox–de Boor recursion) and
   `BsplineCurve`, a weighted sum of basis functions. Basis functions satisfy
   the partition-of-unity property.
+* **Natural cubic spline** — `NaturalCubicSpline` in one dimension, with `eval`,
+  `derivative` and linear extrapolation beyond the nodes.
+* **Multilinear grid** — `MultilinearGrid` for bilinear, trilinear and general
+  multilinear interpolation on a rectilinear grid. Queries outside the grid
+  return `None`.
+* **Scattered data in any dimension** — `RbfInterpolatorNd` (Euclidean distance;
+  the thin-plate kernel gets an affine polynomial tail, which makes the
+  interpolant unique) and `KrigingNd`, whose `predict` returns the mean and the
+  Kriging variance.
+
+`Kriging::new` factors the Kriging matrix up front. A singular system, such as
+duplicate samples with zero nugget, returns `DenseError::Singular` from `new`.
 
 ## Features
 
 * `std` (default) — the allocator plus `std` support of deps.
-* `alloc` — signal allocator availability (dynamic vectors need it).
+* `alloc` — enables the allocating APIs: RBF, Kriging, PCHIP, B-splines and the
+  multi-dimensional and grid types. Dynamic vectors need it.
 
 ## Example
 

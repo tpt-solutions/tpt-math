@@ -31,6 +31,9 @@ between the sparse and dense worlds without conversion.
 * `alloc` — signal allocator availability (sparse containers need it). There is
   no `std`-only API surface, so a `no_std` build just needs
   `default-features = false, features = ["alloc"]` and an allocator.
+* `simd` — `f32`/`f64` CG and BiCGSTAB use `tpt-simd-sparse` for fused vector
+  updates and SpMV. Results agree with the scalar loops to rounding, and the
+  scalar path stays the default. Needs Rust 1.95 or later.
 
 ## Quick start
 
@@ -57,15 +60,31 @@ let x = conjugate_gradient(&a, &b, None, 1e-12, 100).unwrap();
 * `CsrMatrix` / `CscMatrix`: `nrows` / `ncols` / `nnz`, `iter()` over stored
   entries, `transpose()` (CSR ↔ CSC), and `matvec` (`A * x`). The `*` operator
   form `csr * &x` is also provided for CSR.
-* Iterative solvers: `conjugate_gradient`, `bicgstab`, restarted `gmres`
-  (and `gmres_right_preconditioned`), each taking `(a, b, x0, tol, max_iter)`
-  and returning `Result<DVector<T>, SparseError>`.
+* Iterative solvers: `conjugate_gradient` and `bicgstab`, each taking
+  `(a, b, x0, tol, max_iter)`. Restarted `gmres` takes `(a, b, x0, tol, restart,
+  max_iter)`, and `gmres_right_preconditioned` adds a caller-supplied `M⁻¹`.
+  All return `Result<DVector<T>, SparseError>`.
+* Report variants: `conjugate_gradient_with_report`, `bicgstab_with_report` and
+  `gmres_right_preconditioned_with_report` return `(x, SolveReport)` for every
+  outcome, including breakdown and non-convergence. Only a dimension mismatch is
+  an `Err`.
+* Operator form: the `LinearOperator` trait (`nrows`, `ncols`, `apply`) is
+  implemented for `CsrMatrix`. `matrix_free` wraps a closure as a square
+  operator, and `conjugate_gradient_op`, `bicgstab_op` and `gmres_op` accept any
+  operator. `CsrMatrix::matvec_into` writes into a caller-owned buffer.
 * Preconditioners: `jacobi_preconditioned_cg`, `ic0_preconditioned_cg` (IC(0)),
   `gmres_ilu0` (ILU(0)), and `preconditioned_conjugate_gradient` for any SPD
   preconditioner. The factors `Ilu0` and `Ic0` are also public.
+* Eigensolvers: `lanczos` (symmetric operators, full reorthogonalisation, Ritz
+  pairs with residual estimates) and `arnoldi` (general operators, Ritz values
+  of largest modulus).
 * Direct factorisations, reusable for many right-hand sides: `SparseLu` (LU with
   partial pivoting, left-looking) and `SparseCholesky` (SPD). Neither applies a
-  fill-reducing ordering.
+  fill-reducing ordering on its own.
+* Fill-reducing orderings: `reverse_cuthill_mckee` (bandwidth reduction),
+  `minimum_degree_ordering` (exact-degree minimum degree, not AMD), and
+  `permute_symmetric`. `ReorderedCholesky` and `ReorderedLu` apply an ordering
+  and undo it internally, so they solve in the original numbering.
 
 ## License
 

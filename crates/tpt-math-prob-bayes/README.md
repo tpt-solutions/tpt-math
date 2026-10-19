@@ -21,11 +21,28 @@ It is not an umbrella crate.
   crate is *not* `no_std`: it uses `Vec` for MCMC traces, `f64` math from
   `std`, and implements `std::error::Error` for `ParameterError`.
 
+## Samplers and diagnostics
+
+Besides the conjugate updates and the random-walk `Metropolis`:
+
+- `adaptive::run_adaptive_metropolis` is random-walk Metropolis with the Haario
+  proposal covariance (`2.38²/d` scaling). It adapts for a caller-chosen number
+  of iterations, then freezes.
+- `hmc::run_hmc` is Hamiltonian Monte Carlo with a leapfrog integrator, a unit
+  mass matrix and a caller-supplied gradient.
+- `diagnostics` has `split_r_hat` (split-R̂ across chains),
+  `effective_sample_size` (Geyer initial positive sequence) and
+  `importance_estimate` (self-normalised importance sampling, with its ESS).
+
+The MCMC run methods (`run`, `run_with_burn_in`, `run_thinned`) panic when the
+starting state has a NaN log-density, rather than returning a chain that never
+moves.
+
 ## Quick start
 
 ```toml
 [dependencies]
-tpt-math-prob-bayes = "0.1"
+tpt-math-prob-bayes = "0.2"
 tpt-math-prob-core = "0.1"   # for a concrete generator such as SplitMix64
 ```
 

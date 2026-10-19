@@ -9,8 +9,8 @@ depend on one name instead of two.
 
 Part of the [`tpt-math`](https://github.com/tpt-solutions/tpt-math) workspace —
 the numeric substrate for `tpt-science`, `tpt-engineering`, and `tpt-formal`.
-This crate contains no algorithms of its own; it is the top of the autodiff
-layer and only re-exports its siblings:
+This crate is the top of the autodiff layer. It re-exports its two siblings and
+adds a small `derivatives` module on top of them:
 
 | Feature | Re-exported as | Source crate |
 |---|---|---|
@@ -57,6 +57,12 @@ assert!((tape.gradient(y, &[x])[0] - 6.0).abs() < 1e-12);
 
 Taking only what you need works too — `default-features = false` plus
 `features = ["tpt-math-autodiff-fwd"]` gives just `tpt_math_autodiff::fwd`.
+
+The `derivatives` module (always present) builds on the reverse-mode tape.
+`derivatives::jacobian(x, f)` is the exact Jacobian of a vector-valued `f`, with
+one reverse pass per output. `derivatives::hessian(x, f)` takes a scalar `f` and
+returns the Hessian as a central difference of the exact gradient, symmetrised.
+Its error is of order `1e-6` at the test points.
 
 ## Notes
 

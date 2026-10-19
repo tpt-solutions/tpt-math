@@ -2,7 +2,7 @@
 
 Umbrella crate for the `tpt-math` optimisation layer: it re-exports
 `tpt-math-optimize-general` (in-house closure-driven smooth, unconstrained
-minimisers) and `tpt-math-optimize-convex` (a convex QP interface over an
+minimisers, least squares and a small LP solver) and `tpt-math-optimize-convex` (a convex QP interface over an
 in-house dense primal-dual interior-point solver) behind Cargo features.
 Depend on this crate when you want both smooth unconstrained minimisation and
 constrained convex programming from a single dependency line.
@@ -16,7 +16,7 @@ of its own; it is purely a re-export facade over the two leaf crates below it:
 
 | Feature | Re-exported as | Source crate |
 |---|---|---|
-| `tpt-math-optimize-general` | `general` | [`tpt-math-optimize-general`](https://docs.rs/tpt-math-optimize-general) — in-house closure-driven smooth, unconstrained minimisers |
+| `tpt-math-optimize-general` | `general` | [`tpt-math-optimize-general`](https://docs.rs/tpt-math-optimize-general) — in-house closure-driven smooth, unconstrained minimisers, least squares and LP |
 | `tpt-math-optimize-convex` | `convex` | [`tpt-math-optimize-convex`](https://docs.rs/tpt-math-optimize-convex) — convex QPs via an in-house dense interior-point solver |
 
 Both leaf crates take their parameter vectors as `tpt-math-linalg-dense`
@@ -30,9 +30,11 @@ wraps `tpt-math-linalg-dense` (in-house) rather than `nalgebra`.
 
 - `tpt-math-optimize-general` *(default)* — pulls in `tpt-math-optimize-general`
   and exposes it as the `general` module: `minimize_gradient_descent`,
-  `minimize_conjugate_gradient`, `minimize_newton`, their `*_with` variants
-  taking `Options` and returning a `Solution`, plus the unchanged
-  `tpt_math_linalg`/`tpt_math_linalg_dense` re-exports.
+  `minimize_conjugate_gradient`, `minimize_newton`, `minimize_lbfgs`,
+  `minimize_nelder_mead`, `levenberg_marquardt`, `curve_fit` and
+  `linear_program::maximize`, the `*_with` variants taking `Options` and
+  returning a `Solution`, plus the `tpt_math_linalg`/`tpt_math_linalg_dense`
+  re-exports.
 - `tpt-math-optimize-convex` *(default)* — pulls in `tpt-math-optimize-convex`
   and exposes it as the `convex` module: `solve_qp`, the `QuadraticProgram`
   builder, `QpSolution`, `ConvexError`, plus the unchanged
@@ -41,15 +43,15 @@ wraps `tpt-math-linalg-dense` (in-house) rather than `nalgebra`.
   you need — that also drops the corresponding leaf crate from the
   dependency graph.
 
-This crate requires `std`; both leaf crates depend on `tpt-math-linalg-dense`'s
-default (allocator-backed) storage, which is `std`-only, so there is no
-`no_std` configuration of this umbrella.
+This crate requires `std`: the leaf crates are not `#![no_std]` (the convex
+crate's `ConvexError` implements `std::error::Error`), so there is no `no_std`
+configuration of this umbrella.
 
 ## Quick start
 
 ```toml
 [dependencies]
-tpt-math-optimize = "0.1"
+tpt-math-optimize = "0.2"
 ```
 
 Unconstrained minimisation through the `general` module:
@@ -71,8 +73,8 @@ assert!((best[1] - 2.0).abs() < 1e-6);
 A constrained convex QP through the `convex` module:
 
 ```rust
-use tpt_math_linalg_dense::{DMatrix, DVector};
 use tpt_math_optimize::convex::solve_qp;
+use tpt_math_optimize::convex::tpt_math_linalg_dense::{DMatrix, DVector};
 
 // minimize x^2 + y^2  subject to  x + y = 1  ->  (0.5, 0.5)
 let p = DMatrix::from_row_slice(2, 2, &[2.0, 0.0, 0.0, 2.0]);
@@ -90,7 +92,7 @@ Taking only one half:
 
 ```toml
 [dependencies]
-tpt-math-optimize = { version = "0.1", default-features = false, features = ["tpt-math-optimize-convex"] }
+tpt-math-optimize = { version = "0.2", default-features = false, features = ["tpt-math-optimize-convex"] }
 ```
 
 ## Notes

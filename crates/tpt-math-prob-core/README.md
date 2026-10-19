@@ -24,6 +24,13 @@ depends only on `tpt-math-numeric`.
 - `no_std` support: the whole public API (traits, `Standard`, `SplitMix64`)
   works with `default-features = false` — no `std`, no `alloc`, no allocation.
 
+- `special` (requires `std`) — `ln_gamma`, `gamma`, `ln_beta`, `beta`,
+  `ln_binomial`, `ln_factorial`, `xlogy`, `gamma_p` and `gamma_q`,
+  `regularized_incomplete_beta`, `erf` and `erfc`, and the standard normal
+  `standard_normal_cdf`, `standard_normal_pdf` and `standard_normal_quantile`.
+  Both `tpt-math-stats` and `tpt-math-prob-bayes` use these, so the copies are
+  shared. `erf`, `erfc` and the normal CDF keep relative precision in the tails.
+
 `tpt-math-numeric` is re-exported as `tpt_math_prob_core::numeric` so downstream
 crates can reach the scalar traits without adding a second dependency.
 

@@ -40,7 +40,7 @@ chain.set_transition(0, 1, 0.1);
 chain.set_transition(1, 0, 0.5);
 chain.set_transition(1, 1, 0.5);
 
-let pi = chain.stationary();          // power iteration
+let pi = chain.stationary();          // power iteration, with a direct solve for periodic chains
 assert!((pi[0] - 5.0 / 6.0).abs() < 1e-9);
 
 let mut rng = SplitMix64::seed_from_u64(42);
@@ -86,6 +86,9 @@ What is in the box:
   mistake such as an out-of-range index.
 - `sample_categorical` skips negative, infinite and `NaN` weights and returns
   `None` when no positive finite mass remains.
+- `stationary` runs power iteration, and when that has not settled it solves
+  `πP = π` directly. Periodic chains therefore return their stationary
+  distribution. Reducible chains still report `NotConverged`.
 - All sampling is generic over `Rng`, so seeding `SplitMix64` makes a whole
   simulation reproducible. `Distribution`, `Rng`, `Sampler`, `SplitMix64`,
   `Standard` and the `tpt_math_prob_core` module itself are re-exported.

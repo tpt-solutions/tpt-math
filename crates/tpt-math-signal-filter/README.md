@@ -57,6 +57,25 @@ assert!((tapered[2] - 1.0).abs() < 1e-12);  // the centre is untouched
 assert_eq!(apply_window(&frame, Window::Rectangular), frame.to_vec());
 ```
 
+## IIR filters
+
+- `Biquad` is a second-order section (RBJ cookbook forms, direct form II
+  transposed). Its constructors are `lowpass`, `highpass`, `bandpass` (constant
+  0 dB peak gain) and `notch`, and `new` takes raw coefficients. It also has
+  `process`, `filter`, `reset` and `magnitude`.
+- `butterworth_lowpass` and `butterworth_highpass` build an even-order cascade of
+  biquads with −3 dB at the cutoff. `butterworth_bandpass` cascades a high-pass
+  stage at the low edge with a low-pass stage at the high edge.
+- `zero_phase_filter` runs a biquad cascade forwards and backwards (`filtfilt`),
+  with odd-extension padding at the ends. The result has no phase lag.
+
+```rust
+use tpt_math_signal_filter::{butterworth_lowpass, zero_phase_filter};
+
+let stages = butterworth_lowpass(4, 0.1).unwrap();
+let smooth = zero_phase_filter(&stages, &signal);
+```
+
 ## Notes
 
 - **`filter` is centred, not causal.** The output has the same length as the
@@ -80,8 +99,12 @@ assert_eq!(apply_window(&frame, Window::Rectangular), frame.to_vec());
   yields `[1.0]` for every shape.
 - `frequency_response(n)` panics if `n` is smaller than the tap count, which
   would truncate rather than zero-pad the impulse response.
-- Despite the crate description, only FIR filtering is implemented today; IIR
-  designs are not yet part of the public API.
+- `filter_overlap_add` gives the same output as `filter` in `O(n log m)` rather
+  than `O(n·m)`, which pays off for long kernels. It uses the real-input
+  transforms from `tpt-math-signal-fft`.
+- The IIR routines are cascades of second-order sections, not the prototype
+  transforms of a classical design. Band edges of a `butterworth_bandpass` are
+  only approximately −3 dB for narrow bands.
 
 ## License
 

@@ -19,6 +19,9 @@ All arithmetic is generic over `tpt_math_numeric::Scalar` (i.e. any float
 type). Elementwise, scalar, dot/cross and matrix-product ops are implemented.
 Square matrices get closed-form `determinant`/`inverse` via Gauss elimination
 with partial pivoting (exact for 2×2 / 3×3 / 4×4, and works for any size).
+`inverse()` treats pivots below `1e-12` as singular. `inverse_with_tolerance`
+takes an absolute threshold, and `inverse_with_relative_tolerance` a
+scale-invariant one.
 
 ## Features
 

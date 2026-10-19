@@ -1,10 +1,12 @@
 # tpt-math-optimize-general
 
-General numerical optimisation: in-house closure-driven minimisers for the
-common smooth, unconstrained cases (steepest descent, nonlinear conjugate
-gradient, Newton), built directly on `tpt-math-linalg-dense`'s
-`DVector`/`DMatrix`. A cost function and a starting point are enough to get
-an answer, with no external optimisation framework in the dependency graph.
+General numerical optimisation: in-house closure-driven minimisers for smooth,
+unconstrained problems (steepest descent, nonlinear conjugate gradient, Newton,
+L-BFGS, Nelder–Mead), plus Levenberg–Marquardt least squares, curve fitting and
+a small dense linear-programme solver. Everything is built directly on
+`tpt-math-linalg-dense`'s `DVector`/`DMatrix`. A cost function and a starting
+point are enough to get an answer, with no external optimisation framework in
+the dependency graph.
 
 ## Part of tpt-math
 
@@ -18,18 +20,17 @@ in-house storage that `tpt-math-linalg` wraps.
 ## Features
 
 This crate has no optional features: `default = []` and everything described
-here is always available. It is **std-only** — `tpt-math-linalg-dense`'s
-default (allocator-backed) storage requires `std`, so there is no
-`no_std` build.
+here is always available. It is not `#![no_std]`, so it needs `std`.
 
-The dependency set is fixed rather than feature-gated: `tpt-math-linalg` and
-`tpt-math-linalg-dense`.
+The dependency set is fixed rather than feature-gated: `tpt-math-linalg`,
+`tpt-math-linalg-dense`, `tpt-math-numeric` and `tpt-math-autodiff-rev` (the
+last one backs `minimize_lbfgs_autodiff`).
 
 ## Quick start
 
 ```toml
 [dependencies]
-tpt-math-optimize-general = "0.1"
+tpt-math-optimize-general = "0.2"
 ```
 
 Minimise `f(x, y) = (x - 3)² + (y - 2)²` by gradient descent:
@@ -54,7 +55,18 @@ The three convenience solvers:
 | `minimize_gradient_descent` | steepest descent + More-Thuente line search | cost, gradient |
 | `minimize_conjugate_gradient` | nonlinear CG (Polak–Ribière+, with periodic restarts) + More-Thuente line search | cost, gradient |
 | `minimize_newton` | Newton's method (full step, analytic Hessian) | cost, gradient, Hessian |
+| `minimize_lbfgs` | limited-memory BFGS | cost, gradient |
+| `minimize_nelder_mead` | Nelder–Mead simplex (derivative-free) | cost only |
+| `minimize_lbfgs_autodiff` | L-BFGS with gradients from `tpt-math-autodiff-rev` | cost only |
 
+Other entry points:
+
+- `levenberg_marquardt` and `curve_fit` (in `least_squares`) for nonlinear
+  least squares, with optional box bounds through `LeastSquaresOptions`.
+- `linear_program::maximize` for `max cᵀx` subject to `A x ≤ b`, returning an
+  `LpSolution` or an `LpError`.
+
+Each `minimize_*` function has a `*_with` variant where one exists.
 Each has a `*_with` variant that takes `Options` and returns a `Solution`
 reporting the parameter vector, the cost re-evaluated there, the iteration
 count, whether the gradient tolerance was met, and a human-readable
@@ -92,8 +104,9 @@ assert!(solution.cost < 1e-12);
   up front with a clear message.
 - `#![forbid(unsafe_code)]`.
 - This crate is dual-licensed `MIT OR Apache-2.0`, matching the rest of the
-  workspace, and depends only on `tpt-math-linalg`/`tpt-math-linalg-dense`
-  (both also part of this workspace) — no third-party optimisation framework.
+  workspace, and depends only on crates from this workspace (`tpt-math-linalg`,
+  `tpt-math-linalg-dense`, `tpt-math-numeric`, `tpt-math-autodiff-rev`) — no
+  third-party optimisation framework.
 
 ## License
 

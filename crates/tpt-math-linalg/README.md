@@ -36,7 +36,7 @@ needs this crate alone.
 
 ```toml
 [dependencies]
-tpt-math-linalg = "0.1"
+tpt-math-linalg = "0.2"
 ```
 
 ```rust
@@ -61,11 +61,16 @@ assert_eq!(scaled.len(), 2);
 ```
 
 Available operations: `Vec + Vec`, `Vec - Vec`, `-Vec`, `Vec * scalar`,
-`Vec / scalar`, indexing, `len`/`is_empty`, `Vec::zeros`; `Mat + Mat`,
-`Mat - Mat`, `Mat::negate`, `Mat * Mat`, `Mat * Vec`, `Mat::transpose` (which
-swaps the row/column tags), `nrows`/`ncols`, `Mat::zeros`. `from_raw` wraps a
-raw dense value and `raw()` borrows it back, so the full upstream API is always
-one call away.
+`Vec / scalar`, indexing, `len`/`is_empty`, `Vec::zeros`, `Vec::norm` and
+`Vec::dot`; `Mat + Mat`, `Mat - Mat`, `Mat::negate`, `Mat * Mat`, `Mat * Vec`,
+`Mat * scalar`, `Mat / scalar`, `Mat::transpose` (which swaps the row/column
+tags), `nrows`/`ncols`, `Mat::zeros`, and `Mat::solve` and `Mat::inverse` for
+`f64`. `+`, `-` and `*` also work on references (`&Vec`, `&Mat`), at the cost
+of cloning the operands. `from_raw` wraps a raw dense value and `raw()` borrows
+it back, so the full upstream API is always one call away.
+
+`Vec::norm` and `Vec::dot` return a bare scalar, because unit algebra for
+`U * U` is not modelled.
 
 ## Notes
 
@@ -79,14 +84,12 @@ one call away.
 - `tpt_math_linalg::Vec` shadows the standard `Vec` if imported unqualified;
   import it as an alias (`Vec as UnitVec`) in code that also uses
   `alloc::vec::Vec`.
-- `Mat` uses an inherent `negate()` method rather than a `Neg` impl, and scalar
-  `Mul`/`Div` are implemented for `Vec` only.
+- `Mat` uses an inherent `negate()` method rather than a `Neg` impl.
 - **Backend decision:** this crate wraps `tpt-math-linalg-dense` only, never
   `nalgebra`. `nalgebra` is Apache-2.0-only and is disqualified as a wrap target
   by the workspace license policy (ADR-0007); `tpt-math-linalg-dense` is
   implemented in-house without any such dependency, so there is no license
-  exposure. The dense storage lives in `tpt-math-linalg-dense`, which also owns
-  the `ArgminMath` orphan-rule impls that `tpt-math-optimize` needs.
+  exposure.
 
 ## License
 

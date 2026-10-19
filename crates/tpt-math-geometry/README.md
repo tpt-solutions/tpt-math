@@ -53,6 +53,15 @@ let p = Point3::new(FVector3::new([1.0, 0.0, 0.0]));
 let q = iso.transform_point(&p);
 ```
 
+The example also uses `tpt-math-linalg-fixed` directly, so add it to your
+dependencies alongside this crate.
+
+## Notes
+
+- `Rotation::from_matrix` orthonormalises its input and returns `None` for a
+  reflection (determinant `-1`) or a numerically singular matrix.
+- The `UnitQuaternion` product renormalises its result.
+
 ## Features
 
 - `std` *(default)* — enables `tpt-math-linalg-fixed/std` and

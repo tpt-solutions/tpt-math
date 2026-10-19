@@ -154,12 +154,14 @@ Downstream repos depend only on the leaf / umbrella crates they need:
 
 ## Depending on `tpt-math`
 
-Every crate in `crates/*` is published to crates.io — depend on them the
-usual way:
+Every crate in `crates/*` is released to crates.io under its own version, so
+depend on the ones you need the usual way. The facade `tpt-math` and
+`tpt-math-pde-operators` have not had their first release yet; use them from
+git until they do.
 
 ```toml
 [dependencies]
-tpt-math-linalg = "0.1"
+tpt-math-linalg = "0.2"
 tpt-math-prob    = "0.1"
 ```
 
@@ -175,7 +177,7 @@ Or depend on the facade and turn on only the areas you need:
 
 ```toml
 [dependencies]
-tpt-math = { version = "0.1", features = ["linalg", "prob"] }
+tpt-math = { git = "https://github.com/tpt-solutions/tpt-math", package = "tpt-math", features = ["linalg", "prob"] }
 ```
 
 ```rust
@@ -185,6 +187,11 @@ use tpt_math::prelude::*;
 The `simd` features on `tpt-math-linalg-dense` and `tpt-math-linalg-sparse` need
 Rust 1.95+ (edition 2024 dependencies); the default build keeps the workspace
 MSRV of 1.85.
+
+**Stability.** The crates are pre-1.0. Under pre-1.0 SemVer a breaking change
+bumps the minor version and anything else bumps the patch. Public error and
+status enums are `#[non_exhaustive]`, so matching on them needs a wildcard arm.
+Each crate's `CHANGELOG.md` records what changed in every release.
 
 Pin to a commit or tag for reproducibility. The workspace also ships local
 tooling so you can sanity-check an integration before publishing:

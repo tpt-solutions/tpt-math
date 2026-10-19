@@ -25,6 +25,12 @@ fixed-size `[T; N]` array inside `Dual`, so it builds and runs unchanged with
 `default-features = false`. Transcendental functions come from the `Float`
 trait, which resolves to `libm` in `no_std` builds.
 
+`Dual` covers `+`, `-`, `*`, `/` (also against a plain scalar), `sqrt`, `powi`,
+`powf`, `tan`, `tanh`, `atan` and `abs`. It implements `Float` for `Dual<f64, N>`,
+so generic numerical code written for `Float`, such as the fixed-size ODE
+solvers in `tpt-math-numeric`, runs on dual numbers and returns exact
+derivatives. `floor`, `round` and `signum` have zero derivative.
+
 ## Quick start
 
 ```toml

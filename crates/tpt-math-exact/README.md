@@ -61,6 +61,27 @@ assert_eq!(a.intersect(&b), Some(Interval::new(rat(-1), rat(2))));
 `Rational` is an alias for `BigRational`; `BigInt` and `BigUint` are re-exported
 too, so consumers normally need only this crate.
 
+## Rigorous numerics
+
+The `roots` module and `certify` give enclosures that provably contain the
+answer:
+
+- `roots::isolate_roots` bisects on an interval extension and returns boxes that
+  provably contain every root. `poly_enclosure` builds a valid extension for a
+  polynomial, and `poly_eval` and `has_sign_change` give point evaluation and a
+  Bolzano certificate.
+- `roots::newton_refine` runs interval Newton refinement of a root enclosure. It
+  returns `None` when a box is proven root-free.
+- `roots::validated_euler` and `roots::validated_euler_system` enclose the
+  solution of a scalar ODE, or of a system, at the end of an interval. Each step
+  uses an a-priori (Picard–Lindelöf) box.
+- `certify::certified_solve` returns certified enclosures of the solution of a
+  linear system with `f64` data, by the Krawczyk operator. The approximate
+  inverse is only a preconditioner, and the contraction test and the enclosure
+  use exact rational arithmetic. A system the method cannot contract is reported
+  as `CertifyError::NotContracting`, which is not a claim that the system has no
+  solution.
+
 ## Notes
 
 - `Interval<T>` is generic: the endpoints only have to be `Clone + PartialOrd`
@@ -68,11 +89,11 @@ too, so consumers normally need only this crate.
   arithmetic impls. It works with `i64` or `BigRational`; `f64` intervals are
   not supported by the `Ord`-bound methods, which is deliberate — this crate is
   about exactness.
-- `Interval::new` only `debug_assert!`s that `lo <= hi`, so a release build will
-  silently construct an inverted interval if you hand it one.
+- `Interval::new` panics when `lo > hi`, in release builds as well as debug.
 - `Add`, `Sub` and `Mul` are implemented for both owned and borrowed intervals.
-  There is **no** `Div`: dividing by an interval that straddles zero has no
-  single-interval answer, so that decision is left to the caller.
+  Use `div_nonzero` for division. It is defined only when the divisor excludes
+  zero, so dividing by an interval that straddles zero is left to the caller.
+  Addition and subtraction use two endpoint operations each.
 - `midpoint` additionally requires `Div` and `FromPrimitive` on the endpoint
   type, and is exact for rationals (no "average of two bignums" rounding).
 - `num-bigint` and `num-rational` are dual-licensed `MIT OR Apache-2.0`, in line

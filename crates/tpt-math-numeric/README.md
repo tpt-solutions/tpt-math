@@ -11,17 +11,39 @@ supertrait meaning "a floating-point scalar type we can do math on".
 `tpt-math-numeric` is the bottom layer of
 [tpt-math](https://github.com/tpt-solutions/tpt-math): every other crate in the
 workspace either depends on it directly or is generic over the traits it
-re-exports. It deliberately contains no algorithms — only the trait vocabulary
-(`Float`, `Num`, `NumCast`, `FloatConst`, `Real`, the `Checked*` family, …) so
-that higher layers agree on one numeric hierarchy instead of each importing
-`num-traits` with its own feature set.
+re-exports. Its core is the trait vocabulary (`Float`, `Num`, `NumCast`,
+`FloatConst`, `Real`, the `Checked*` family, …) so that higher layers agree on
+one numeric hierarchy instead of each importing `num-traits` with its own
+feature set. It also carries a set of `no_std`-friendly numerical routines,
+listed under [Modules](#modules).
 
 ## Features
 
 - `std` *(default)* — enables `num-traits`' `std`-dependent items.
-- `alloc` — signals that an allocator is available; adds no dependencies.
+- `alloc` — enables `extern crate alloc`. The dense-output and event ODE code,
+  and the `sensitivity` module, need it.
 - `libm` — re-exports `libm` so callers can do transcendental math on `no_std`
   targets.
+
+## Modules
+
+- `report` — `SolveReport<T>` and `SolveStatus` (`Converged`, `NotConverged`,
+  `Breakdown`), shared by the solver crates.
+- `quadrature` — `simpson`, `gauss_legendre` (fixed `N`-point rule) and
+  `adaptive_gauss_legendre`, plus `gauss_kronrod_15` and
+  `adaptive_gauss_kronrod`. The adaptive Kronrod rule handles integrable
+  endpoint singularities such as `1/√x`.
+- `roots` — `bisect` and `brent` bracketing root finders, returning `RootError`
+  on failure.
+- `ode` — `rk4_step` and `rk4_integrate` on fixed-size state arrays;
+  `dopri5_integrate` (adaptive Dormand–Prince 5(4), integrating backwards when
+  `t1 < t0`); `dopri5_dense`, which returns a `DenseSolution` with `eval(t)` at
+  any time in the span; and `dopri5_events`, which locates sign changes of an
+  event function by bisection on the dense output.
+- `stiff` — `rosenbrock2_integrate`, the L-stable second-order Rosenbrock method
+  ROS2 with step-doubling error control. It takes the Jacobian.
+- `sensitivity` (`alloc`) — `forward_sensitivity`, which integrates a system and
+  its parameter sensitivities `∂y/∂p` together.
 
 The crate is `#![no_std]` unconditionally; the `std` feature only widens what
 `num-traits` itself offers. `num-traits` is always built with its `libm`
@@ -31,7 +53,7 @@ backend, so float math works without `std`.
 
 ```toml
 [dependencies]
-tpt-math-numeric = "0.1"
+tpt-math-numeric = "0.2"
 ```
 
 ```rust
@@ -61,7 +83,7 @@ re-exports the checked-arithmetic traits, `Pow`, `Inv`, `PrimInt`,
 
 - On `no_std` targets, disable default features and enable `libm` if you need
   `libm`'s free functions directly:
-  `tpt-math-numeric = { version = "0.1", default-features = false, features = ["libm"] }`.
+  `tpt-math-numeric = { version = "0.2", default-features = false, features = ["libm"] }`.
 - `Scalar` intentionally requires `Float`, so integer types do **not** implement
   it; use the re-exported `Num`/`PrimInt` bounds for integer-generic code.
 - Upstream `num-traits` is `MIT OR Apache-2.0` and the optional `libm` is MIT,

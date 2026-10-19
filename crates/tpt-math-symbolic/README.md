@@ -30,7 +30,7 @@ and it depends on nothing except `num-traits` plus, optionally,
 
 ```toml
 [dependencies]
-tpt-math-symbolic = "0.1"
+tpt-math-symbolic = "0.2"
 ```
 
 Build `(3x + 1)^2`, differentiate it with respect to `x`, simplify, and evaluate:
@@ -63,6 +63,23 @@ With `features = ["exact"]` the same tree can carry exact coefficients via
 `ExprRational` (`Expr<Rational>`), evaluated through `Symbolic::eval` with a
 `HashMap<String, Rational>` environment.
 
+Other entry points:
+
+- `parse_expr` parses infix text such as `x^2 + sin(x)` into an `Expr`. Exponents
+  must be non-negative integer literals. Errors are positioned `ParseError`s.
+- `Expr::to_latex` renders LaTeX.
+- `compile` and `Expr::compile` turn an expression into a closure over an ordered
+  variable list. Variable and function names are checked at compile time, and
+  the closure returns the same values as `eval`, including `None` on division by
+  zero.
+
+```rust
+use tpt_math_symbolic::parse_expr;
+
+let expr = parse_expr::<f64>("x^2 + sin(x)").unwrap();
+println!("{}", expr.to_latex());
+```
+
 ## Notes
 
 - The `Coefficient` trait is the extension point: implement it (a field-like
@@ -75,8 +92,12 @@ With `features = ["exact"]` the same tree can carry exact coefficients via
   `sin`/`ln`/`sqrt` node does not.
 - `Expr::eval` returns `None` for an unbound variable or a division by an
   exactly-zero denominator, rather than panicking.
-- `simplify` performs constant folding and sum/product flattening; it is not a
-  full normal form and does not currently expand or collect like terms.
+- `simplify` performs constant folding, sum and product flattening, and merges
+  like terms (`2x + 3x` becomes `5x`). It is a normal form: a second pass returns
+  the first pass's output. It does not expand products. Sums and products are
+  ordered by their printed form, so term order can differ from earlier versions.
+- Unknown function names stay symbolic. `simplify` leaves them unfolded, and
+  `eval` returns `None`.
 - Dual-licensed `MIT OR Apache-2.0`, matching the rest of the workspace, which is
   the point of the crate: it replaces copyleft-licensed CAS options. Its only
   mandatory dependency, `num-traits`, is `MIT OR Apache-2.0` too.

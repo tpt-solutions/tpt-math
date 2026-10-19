@@ -23,6 +23,23 @@ is the `rand_distr` bridge plus ergonomic constructors.
 - `no_std` support: the crate is `#![no_std]` and `#![forbid(unsafe_code)]`.
   Build with `default-features = false` for bare-metal targets; float math is
   delegated to `rand_distr` (which falls back to `num-traits`/`libm`).
+- `multivariate` — the multivariate normal in `multivariate::MultivariateNormal`,
+  with a log-density based on the dense Cholesky factor. It needs `std`.
+
+## Density functions
+
+The `density` module (requires `std`) gives closed-form PDF/PMF, CDF, quantile
+and moment functions as free functions, which need no sampler:
+
+- Continuous: `normal_*`, `exponential_*`, `gamma_*` (plus `gamma_sf`), `beta_*`,
+  `uniform_*`, `student_t_*`, `cauchy_*`, `chi_squared_*`, `lognormal_*` and
+  `weibull_*`.
+- Discrete: `poisson_pmf`, `poisson_cdf`, `poisson_quantile`, `binomial_*` and
+  `negative_binomial_*`.
+- Moments: each family has a `*_moments` function returning `(mean, variance)`.
+
+Quantiles of the continuous families without a closed form invert their CDFs by
+bisection. Cauchy is closed form. Invalid parameters return `NaN`.
 
 ## Quick start
 

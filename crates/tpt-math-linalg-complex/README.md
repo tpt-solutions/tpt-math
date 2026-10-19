@@ -12,10 +12,16 @@ exposure). Built on `tpt-math-linalg-dense`'s storage pattern.
 * `ComplexDVector<T>` / `ComplexDMatrix<T>` — dynamically-sized complex vectors
   and matrices, stored column-major (same layout as `tpt-math-linalg-dense`).
 * `ComplexDMatrix::lu` / `solve` / `inverse` — partial-pivot complex LU.
+  `lu_with_tolerance` takes an absolute pivot threshold and
+  `lu_with_relative_tolerance` a scale-invariant one.
+* `ComplexDMatrix::det` (from the LU factors) and `ComplexDMatrix::product`
+  (matrix product for `f64`; the `*` operator stays generic over the scalar).
 * `ComplexDMatrix::cholesky` — Cholesky factorisation of a Hermitian
   positive-definite matrix, with `Cholesky::solve`.
-* `ComplexDMatrix::eigenvalues` — shifted-QR eigenvalue solver for general
-  complex matrices.
+* `ComplexDMatrix::eigenvalues` — Hessenberg reduction and Wilkinson-shifted QR
+  for general complex matrices. It panics on a non-square matrix or on
+  non-convergence. `try_eigenvalues` returns `ComplexDenseError::NotConverged`
+  instead.
 
 ## Usage
 
@@ -32,6 +38,9 @@ assert_eq!(z * z, Complex::new(-1.0, 0.0));
 
 * `std` (default) — enable the allocator and `std` support of dependencies.
 * `alloc` — signal allocator availability (dynamic vectors need it).
+* `simd` — `solve`, `inverse` and `lu` use `tpt-simd-blas` for matrices of order
+  64 and above. Needs Rust 1.95 or later.
+* `simd-runtime` — `simd`, plus run-time AVX2 detection.
 
 ## License
 

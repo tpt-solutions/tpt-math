@@ -15,6 +15,32 @@ implementation dropped that dependency for a zero-license-risk, in-repo design.)
 * `DVector<T>` — a dynamically-sized column vector.
 * `DMatrix<T>` — a dynamically-sized, column-major matrix.
 
+## Operations
+
+* Arithmetic: `+`, `-`, `*` and scalar `*` / `/`, plus in-place `+=`, `-=`,
+  `*=`, `/=`, `axpy(α, x)`, and the allocation-free `mul_vector_into` and
+  `mul_matrix_into`. `DMatrix::<f64>::par_mul` is the multi-threaded product
+  under `rayon`.
+* Dense solvers: `solve` and `inverse` (partial-pivot LU). `Lu` is a reusable
+  factorisation, with `with_pivot_tolerance` and `with_relative_tolerance` for
+  the singularity test, and `solve_matrix` for many right-hand sides.
+  `solve_with_report` returns a `SolveDiagnostics`, with the residual, the
+  backward error, the 1-norm condition number and an `ill_conditioned` flag.
+* Factorisations: `Cholesky` (reusable, with `solve`, `det`) and `Qr`
+  (Householder). `DMatrix::cholesky`, `det`, `symmetric_eigen` (cyclic Jacobi,
+  ascending eigenvalues) and `eigenvalues` (Hessenberg reduction with Francis
+  double-shift QR, returning `Eigenvalue { re, im }`) are the matrix-level
+  entry points.
+* Least squares and SVD: `least_squares`, `solve_min_norm`, `pseudo_inverse`,
+  `svd` (thin one-sided Jacobi), `singular_values`, `rank` and `cond`.
+* Other: `matrix_exp` (scaling and squaring with Padé(13)),
+  `eigenvector_for_eigenvalue` (inverse iteration for a known real eigenvalue),
+  `solve_banded` (banded LU with partial pivoting) and `solve_tridiagonal`.
+
+Iterative routines (SVD sweeps, eigenvector iteration) return
+`DenseError::NoConvergence` when they run out of budget. `DenseError` is
+`#[non_exhaustive]`, so match it with a wildcard arm.
+
 ## Features
 
 | Feature | Enables | Notes |

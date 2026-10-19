@@ -25,6 +25,20 @@ crate; `tpt-math-units` is its only dependency.
 | `optimize` | `["dep:tpt-math-optimize-general", "dep:tpt-math-numeric"]` | Units-aware minimisation (`solve::minimize_dimensioned`). |
 | `autodiff` | `["dep:tpt-math-autodiff-rev"]` | Units-aware gradients (`solve::gradient_dimensioned`). |
 
+## Units-aware solvers
+
+With `ode`, `optimize` or `autodiff` enabled, the `solve` module runs numerical
+routines on dimensioned values. Every quantity is checked on the way in and out.
+
+- `solve::dopri5_dimensioned` (`ode`) integrates `y′ = f(t, y)`.
+- `solve::minimize_dimensioned` (`optimize`) runs L-BFGS on dimensioned
+  parameters.
+- `solve::gradient_dimensioned` (`autodiff`) attaches the dimension
+  `cost / parameter` to a reverse-mode gradient.
+
+Failures come back as `SolveError`: `Unit` for a dimension mismatch, `Ode` for
+an integrator failure, or `Optimize` for an optimiser failure.
+
 ## Quick start
 
 ```toml
@@ -103,9 +117,11 @@ functions `lookup`, `lookup_unit` and `convert` operate on the process-wide
   absurd case of an exponent overflowing `i8`. `Neg` is always infallible.
 - Unit symbols are case sensitive, as SI requires: `"m"` is metre, `"T"` is
   tesla, `"t"` is tonne.
-- Symbols are looked up whole; there is no unit-expression parser. Compound
-  units such as `"m/s"`, `"km/h"` and `"kWh"` are entries in the 158-symbol
-  built-in table (or in your own registry), not parsed compositions.
+- Symbols are looked up whole. Named compound units such as `"km/h"` and `"kWh"`
+  are entries in the 158-symbol built-in table (or in your own registry).
+  `from_str` also accepts a product of base units such as `"m^2·kg·s^-2"`, which
+  is what `Display` prints for compound units, so `Display` and `FromStr`
+  round-trip.
 - Degrees Celsius and Fahrenheit work through the affine `offset` field of
   `UnitDef` (`base = value * scale + offset`).
 - Dimension exponents are `i8`; the `checked_mul`, `checked_div`,

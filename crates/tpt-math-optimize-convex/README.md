@@ -28,14 +28,14 @@ The `tpt-math-linalg-dense` (in-house) types are re-exported via
 
 ```toml
 [dependencies]
-tpt-math-optimize-convex = "0.1"
+tpt-math-optimize-convex = "0.2"
 ```
 
 `solve_qp` covers the common form — quadratic cost, equality constraints and
 per-variable bounds:
 
 ```rust
-use tpt_math_linalg_dense::{DMatrix, DVector};
+use tpt_math_optimize_convex::tpt_math_linalg_dense::{DMatrix, DVector};
 use tpt_math_optimize_convex::solve_qp;
 
 // minimize x² + y²  subject to  x + y = 1   ->   (0.5, 0.5)
@@ -53,8 +53,8 @@ assert!((x[0] - 0.5).abs() < 1e-6 && (x[1] - 0.5).abs() < 1e-6);
 with the primal vector, the objective value and a `QpStatus`:
 
 ```rust
-use tpt_math_linalg_dense::{DMatrix, DVector};
 use tpt_math_optimize_convex::QuadraticProgram;
+use tpt_math_optimize_convex::tpt_math_linalg_dense::{DMatrix, DVector};
 
 // minimize x² + y²  subject to  x + y = 1,  x ≥ 0,  y ≥ 0
 let qp = QuadraticProgram::new(DVector::from_vec(vec![0.0, 0.0]))
@@ -89,7 +89,7 @@ and `linear_cost(q)`.
   else is reported as a `Solver` error. The solver also reports infeasible or
   unbounded problems as `Solver` errors.
 - This crate is dual-licensed `MIT OR Apache-2.0`, and depends only on
-  `tpt-math-linalg-dense` (in-house, no external backend) — the old `clarabel`
+  `tpt-math-linalg` and `tpt-math-linalg-dense` (in-house, no external backend) — the old `clarabel`
   (Apache-2.0-only) backend was removed to satisfy the workspace license policy
   (ADR-0007).
 - `#![forbid(unsafe_code)]`.
