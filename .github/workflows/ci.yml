@@ -189,7 +189,9 @@ jobs:
           tool: cargo-semver-checks
       - name: Check against the PR base branch
         if: github.event_name == 'pull_request'
-        run: cargo semver-checks check-release --workspace --baseline-rev ${{ github.event.pull_request.base.sha }}
+        # tpt-math and tpt-math-pde-operators have no crates.io release yet, so there is
+        # no baseline to compare. Remove the excludes after their first publish.
+        run: cargo semver-checks check-release --workspace --exclude tpt-math --exclude tpt-math-pde-operators --baseline-rev ${{ github.event.pull_request.base.sha }}
       - name: Check against the crates.io baseline
         if: github.event_name == 'push'
-        run: cargo semver-checks check-release --workspace
+        run: cargo semver-checks check-release --workspace --exclude tpt-math --exclude tpt-math-pde-operators
