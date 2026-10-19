@@ -1468,7 +1468,7 @@ constant kernel) are checked in debug builds, and in release with the
       crate and that the README crate count matches `cargo metadata`
       Status: Done: the facade check walks the `[dependencies]` of every crate from `tpt-math` and fails on any crate it cannot reach. The README crate count is compared with `cargo metadata`.
 - [x] Occasional `cargo-mutants` run to measure test strength
-      Status: Done for `tpt-math-graph` (cargo-mutants 27.1): 134 mutants, 75 caught, 16 missed, 6 timeouts, 37 unviable. The misses cluster in the comparisons of `try_dijkstra`, `dijkstra_path` and `try_astar`, which is where the next tests should go. Other crates have not been run; each run takes minutes, so it stays an occasional check.
+      Status: Done for `tpt-math-graph` (cargo-mutants 27.1): 134 mutants, 16 missed before the new tests and 5 after. The 5 are equivalent for output: three are `<` vs `<=` on ties, which change the chosen path but not its cost, and two are A* priority changes that cannot change the answer when the heuristic is non-negative. For `tpt-math-numeric` (all features): 1043 mutants, 235 missed. Most survivors change time arguments or intermediate iterates that the final answer does not depend on, so they are accepted rather than tested. For `tpt-math-linalg-sparse`: 1176 mutants, 127 missed after the edge tests (down from 160). The rest are convergence and breakdown comparisons in the iterative cores and SIMD-only paths, accepted for the same reason. Mutation runs are occasional checks, not a coverage target.
 
 ### H.5 Innovation (pick one or two)
 
