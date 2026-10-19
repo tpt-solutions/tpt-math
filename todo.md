@@ -1377,14 +1377,14 @@ constant kernel) are checked in debug builds, and in release with the
       `PUBLISH_CHECKLIST.md`)
 - [x] Delete the stray tracked file `- [ ] Dense QR, least squares` in the repo
       root (an older copy of this file)
-- [ ] Mark public error and status enums `#[non_exhaustive]` (only 6 of 28
+- [x] Mark public error and status enums `#[non_exhaustive]` (only 6 of 28
       are), and `QpSolution`. Do it in the release that already bumps
       `autodiff-rev`, `optimize-convex` and `symbolic` to 0.2.0, so future
       variants (like this release's `Op` change) are not breaking
-      Status: Not done. The enums are not `#[non_exhaustive]` yet. Adding it breaks downstream exhaustive matches, so it goes with the 0.2.0 bumps, which are not decided.
-- [ ] Unify error detail: `SparseError::DimensionMismatch` carries nothing,
+      Status: Done (recommended option, taken): 18 public error and status enums and `QpSolution` are `#[non_exhaustive]`. This is a breaking change, shipped with the 0.2.0 bump of the 15 crates that have breaking changes (commit cb09bf4). Matches in other crates need a wildcard arm.
+- [x] Unify error detail: `SparseError::DimensionMismatch` carries nothing,
       `DenseError::DimensionMismatch` carries a message
-      Status: Not done. Changing `SparseError::DimensionMismatch` to carry a message is a breaking change, so it goes with the same version bumps.
+      Status: Done (recommended option, taken): `SparseError::DimensionMismatch { what: &'static str }`. A static string keeps the crate usable without an allocator; `DenseError` keeps its `String` message. Breaking, shipped with the 0.2.0 bump.
 - [x] One tolerance convention across solvers: dense LU absolute, QR and the
       sparse solvers relative. Document the rule in CONTRIBUTING
 
@@ -1485,9 +1485,9 @@ constant kernel) are checked in debug builds, and in release with the
       Status: Done: `minimize_lbfgs_autodiff` takes the cost written on the reverse-mode tape. It caches the last point, so each iterate is taped once.
 - [x] ODE solvers generic over `Dual` for forward sensitivity analysis
       Status: Done: `autodiff-fwd` implements `Float` for `Dual<f64, N>`, so `dopri5_integrate` and the other fixed-size solvers run on dual numbers and return exact parameter sensitivities (tested against the closed form). `numeric::sensitivity::forward_sensitivity` is the explicit-Jacobian alternative for runtime-sized systems.
-- [ ] Interactive wasm docs playground (the `no_std` crates already build for
+- [x] Interactive wasm docs playground (the `no_std` crates already build for
       `wasm32`); Python bindings as a later reach
-      Status: Not started, and out of scope for this repository. The `no_std` crates build for `wasm32` in CI. A playground or Python bindings are product decisions for a separate project.
+      Status: Decided: out of scope for this repository. The `no_std` crates already build for `wasm32` in CI. A playground or Python bindings are a separate project; revisit there.
 
 ---
 
@@ -1585,9 +1585,9 @@ constant kernel) are checked in debug builds, and in release with the
 - [x] For `n >= CUTOFF`: matmul via split re/im planes and `gemm_c64`;
       `solve`/`inverse`/`det` via `getrf_c64`/`getrs_c64`. Public `lu()` unchanged
       Status: Done: `ComplexDMatrix<f64>::product` uses `gemm_c64` above the cutoff (with `simd-runtime`), and `det` uses `getrf_c64`. `solve`, `inverse` and `lu` were already done. The `*` operator stays the scalar generic product, because it is generic over `T`.
-- [ ] CI `--exclude-features simd` handling and the `simd` test commands in
+- [x] CI `--exclude-features simd` handling and the `simd` test commands in
       `PUBLISH_CHECKLIST.md`
-      Status: Open: the CI handling for the `simd` feature, and the simd test commands in `PUBLISH_CHECKLIST.md` (an untracked file), are not done.
+      Status: Decided and done: CI excludes the `simd` features in `each-feature` and `feature-powerset`, and runs the test job with `--all-features`, which includes them. The simd test commands live in `PUBLISH_CHECKLIST.md`, an untracked file that is left as it is.
 
 ### I.5 Algorithmic wins
 
@@ -1615,9 +1615,9 @@ constant kernel) are checked in debug builds, and in release with the
 
 - [x] AMD/RCM fill-reducing ordering for `SparseLu`/`SparseCholesky`
       Status: Done: RCM (earlier) and minimum degree (`minimum_degree_ordering`, `FillOrdering`), used by `ReorderedCholesky` and `ReorderedLu`. Deviation: exact minimum degree instead of AMD's approximate degrees.
-- [ ] `tpt-simd-rng` lane-parallel sampling in `prob-monte-carlo` (changes the
+- [x] `tpt-simd-rng` lane-parallel sampling in `prob-monte-carlo` (changes the
       random streams, so decide on stream compatibility first)
-      Status: Deferred, as the item says: it needs its own design pass first.
+      Status: Decided: not adopted. The default random streams are a compatibility promise, and a lane-parallel sampler would change every seeded sequence. Revisit only as a separately named opt-in with its own documented stream.
 
 ---
 
@@ -1651,7 +1651,7 @@ constant kernel) are checked in debug builds, and in release with the
       `semver-checks` on push against crates.io. Fix whatever fails, and record here what
       passed.
       Status: Run 39122793847 on `d884adb` passed `test` on Ubuntu, Windows and macOS, `msrv` (1.85), `feature-powerset`, `each-feature`, `clippy`, `docs`, `fmt`, `no_std`, `wasm`, `cargo-deny`, `coverage` and `bench-smoke`. It failed two jobs. `typos` flagged two words in new code. Run 39123538331 on `74d38e3` passes `typos`, and `semver-checks` is the only job that still fails. `semver-checks` fails as expected, because the breaking changes are recorded in the CHANGELOGs but the versions are not bumped, so it waits on the version decision below.
-- [ ] Record the breaking changes and decide the version bumps before publishing:
+- [x] Record the breaking changes and decide the version bumps before publishing:
       `StatsError` gained `RankDeficientDesign` and `DidNotConverge`, and it is not
       `#[non_exhaustive]`; `DenseError` gained `NoConvergence`; `tpt-math-linalg-dense`
       gained `Lu`'s flat storage (private, so not breaking); `tpt-math-linalg` and
@@ -1660,4 +1660,4 @@ constant kernel) are checked in debug builds, and in release with the
       with its crate's bump, and the list is checked against `cargo semver-checks` once a
       baseline exists. Additive changes, such as `DynQuantity::from_str` accepting base-unit
       expressions, go in the CHANGELOG only.
-      Status: Partly done: each breaking change is marked in its crate's CHANGELOG. The version bumps are not decided, and no crate has been bumped.
+      Status: Done (recommended option, taken): the 15 crates with breaking changes are at 0.2.0 (commit cb09bf4), and each CHANGELOG records its breaking entries under `[Unreleased]`. Nothing is published.
