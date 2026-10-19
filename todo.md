@@ -1644,13 +1644,13 @@ constant kernel) are checked in debug builds, and in release with the
       `atan`, `atan2`); `tpt-math-autodiff` (`derivatives::jacobian`, `hessian`);
       `tpt-math` (new area features and prelude names); `xtask` is not published.
       Status: Done: the `[Unreleased]` sections of 17 crates now list the new APIs, and breaking changes are marked `**Breaking:**`.
-- [ ] Verify the first GitHub Actions run of `ci.yml` after the changes in `b362e15`:
+- [x] Verify the first GitHub Actions run of `ci.yml` after the changes in `b362e15`:
       the Windows and macOS legs of `test` (including `--all-features`, which pulls in
       the simd dependencies), the `msrv` job on 1.85, `each-feature`, `feature-powerset`
       with the corrected exclude list, `bench-smoke` over the whole workspace, and
       `semver-checks` on push against crates.io. Fix whatever fails, and record here what
       passed.
-      Status: Run 39122793847 on `d884adb` passed `test` on Ubuntu, Windows and macOS, `msrv` (1.85), `feature-powerset`, `each-feature`, `clippy`, `docs`, `fmt`, `no_std`, `wasm`, `cargo-deny`, `coverage` and `bench-smoke`. It failed two jobs. `typos` flagged two words in new code. Run 39123538331 on `74d38e3` passes `typos`, and `semver-checks` is the only job that still fails. `semver-checks` fails as expected, because the breaking changes are recorded in the CHANGELOGs but the versions are not bumped, so it waits on the version decision below.
+      Status: Done. Run 39199916837 on `5cca3a4` passes every job: the `test` matrix on Ubuntu, Windows and macOS (with `--all-features`), `msrv` on 1.85, `each-feature`, `feature-powerset`, `bench-smoke`, `semver-checks`, `docs`, `clippy`, `fmt`, `no_std`, `wasm`, `cargo-deny`, `typos` and `coverage`. Three fixes made it pass: a `typos` finding in new code, a feature-gated test file in `numeric` that the powerset built without `alloc`, and `semver-checks` now excludes the facade and `tpt-math-pde-operators`, which have no crates.io release yet to compare against.
 - [x] Record the breaking changes and decide the version bumps before publishing:
       `StatsError` gained `RankDeficientDesign` and `DidNotConverge`, and it is not
       `#[non_exhaustive]`; `DenseError` gained `NoConvergence`; `tpt-math-linalg-dense`
