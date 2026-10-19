@@ -29,6 +29,10 @@ All notable changes to this crate are documented here. Format based on
 - `Expr::to_latex`: LaTeX output for an expression.
 - `compile`, `Expr::compile`, `Compiled` and `CompileError`: compiles an expression to a closure over an ordered variable list. Variable and function names are checked at compile time, and the closure returns the same values as `eval`, including `None` on division by zero.
 
+### Changed
+
+- **Breaking (0.2.0):** the public error and status enums are `#[non_exhaustive]`, so matches in other crates need a wildcard arm. The crate is bumped to 0.2.0 for this and for the other breaking changes listed above.
+
 ## [0.1.0]
 
 - Initial workspace release.

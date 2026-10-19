@@ -8,6 +8,7 @@ use crate::Boundary;
 
 /// Errors from constructing a [`Grid`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum GridError {
     /// An axis has no cells.
     ZeroExtent {

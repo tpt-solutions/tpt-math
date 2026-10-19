@@ -64,6 +64,7 @@ pub use tpt_math_linalg_dense;
 
 /// Errors returned by the QP solvers in this crate.
 #[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
 pub enum ConvexError {
     /// A matrix or vector had an incompatible dimension (e.g. `A_eq` column
     /// count does not match the number of variables `n`).
@@ -100,6 +101,7 @@ impl std::error::Error for ConvexError {}
 /// Outcome of a single interior-point solve, used by the status field of
 /// [`QpSolution`].
 #[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
 pub enum QpStatus {
     /// The optimizer converged to a solution within tolerance.
     Solved,
@@ -111,6 +113,7 @@ pub enum QpStatus {
 
 /// A successful solution to a quadratic program.
 #[derive(Debug, Clone)]
+#[non_exhaustive]
 pub struct QpSolution {
     /// The optimal primal variable vector `x`.
     pub x: DVector<f64>,

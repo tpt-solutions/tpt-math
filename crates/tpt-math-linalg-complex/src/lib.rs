@@ -652,6 +652,7 @@ impl<T: fmt::Debug> fmt::Debug for ComplexDMatrix<T> {
 /// Errors returned by the complex dense linear-algebra routines.
 #[cfg(feature = "alloc")]
 #[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
 pub enum ComplexDenseError {
     /// The matrix is (numerically) singular.
     Singular {

@@ -29,6 +29,10 @@ and this project adheres to semantic versioning.
 - `has_path`, `is_cyclic`, `connected_components` (weakly connected for directed graphs) and `strongly_connected_components` (Tarjan), thin wraps over `petgraph`.
 - `minimum_spanning_tree`: Kruskal spanning forest as `(source, target, weight)` triples. Requires `N: Clone`, because the wrapped `petgraph` iterator does.
 
+### Changed
+
+- **Breaking (0.2.0):** the public error and status enums are `#[non_exhaustive]`, so matches in other crates need a wildcard arm. The crate is bumped to 0.2.0 for this and for the other breaking changes listed above.
+
 ## [0.1.0] - 2026-08-19
 
 ### Added

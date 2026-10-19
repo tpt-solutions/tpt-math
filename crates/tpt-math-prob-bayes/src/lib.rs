@@ -82,6 +82,7 @@ pub use tpt_math_prob_core::{Distribution, Rng, Sampler};
 /// Returned by the `try_new` constructors; the panicking `new` constructors
 /// report the same condition in their panic message.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum ParameterError {
     /// The parameter was `NaN` or infinite.
     NotFinite {

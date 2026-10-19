@@ -41,7 +41,7 @@
 //! let expected = DVector::from_vec(vec![1.0 / 11.0, 7.0 / 11.0]);
 //! assert!((x[0] - expected[0]).abs() < 1e-10);
 //! assert!((x[1] - expected[1]).abs() < 1e-10);
-//! # let _ = SparseError::DimensionMismatch;
+//! # let _ = SparseError::DimensionMismatch { what: "operands have incompatible dimensions" };
 //! ```
 
 extern crate alloc;
@@ -73,10 +73,14 @@ use tpt_math_numeric::{SolveReport, SolveStatus};
 
 /// Errors returned by the sparse solvers and operators.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum SparseError {
     /// A matrix/vector dimension pairing was incompatible (e.g. a matrix with
     /// `ncols` columns multiplied by a vector whose length differs).
-    DimensionMismatch,
+    DimensionMismatch {
+        /// What was incompatible, as a static description.
+        what: &'static str,
+    },
     /// The iterative solver reached `max_iter` without meeting the tolerance.
     /// `iterations` reports how many iterations were run.
     NotConverged {
@@ -94,8 +98,8 @@ pub enum SparseError {
 impl core::fmt::Display for SparseError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
-            SparseError::DimensionMismatch => {
-                write!(f, "sparse matrix/vector dimension mismatch")
+            SparseError::DimensionMismatch { what } => {
+                write!(f, "sparse matrix/vector dimension mismatch: {what}")
             }
             SparseError::NotConverged { iterations } => {
                 write!(
@@ -264,10 +268,12 @@ impl<T: Scalar> CsrMatrix<T> {
     ///
     /// # Errors
     ///
-    /// Returns [`SparseError::DimensionMismatch`] if `x.len() != ncols()`.
+    /// Returns [`SparseError::DimensionMismatch { what: "operands have incompatible dimensions" }`] if `x.len() != ncols()`.
     pub fn matvec(&self, x: &DVector<T>) -> Result<DVector<T>, SparseError> {
         if x.len() != self.ncols {
-            return Err(SparseError::DimensionMismatch);
+            return Err(SparseError::DimensionMismatch {
+                what: "operands have incompatible dimensions",
+            });
         }
         let mut y = vec![T::zero(); self.nrows];
         self.matvec_into(x.as_slice(), &mut y)?;
@@ -282,11 +288,13 @@ impl<T: Scalar> CsrMatrix<T> {
     ///
     /// # Errors
     ///
-    /// Returns [`SparseError::DimensionMismatch`] if `x.len() != ncols()` or
+    /// Returns [`SparseError::DimensionMismatch { what: "operands have incompatible dimensions" }`] if `x.len() != ncols()` or
     /// `y.len() != nrows()`.
     pub fn matvec_into(&self, x: &[T], y: &mut [T]) -> Result<(), SparseError> {
         if x.len() != self.ncols || y.len() != self.nrows {
-            return Err(SparseError::DimensionMismatch);
+            return Err(SparseError::DimensionMismatch {
+                what: "operands have incompatible dimensions",
+            });
         }
         for (i, yi) in y.iter_mut().enumerate() {
             let mut s = T::zero();
@@ -373,10 +381,12 @@ impl<T: Scalar> CscMatrix<T> {
     ///
     /// # Errors
     ///
-    /// Returns [`SparseError::DimensionMismatch`] if `x.len() != ncols()`.
+    /// Returns [`SparseError::DimensionMismatch { what: "operands have incompatible dimensions" }`] if `x.len() != ncols()`.
     pub fn matvec(&self, x: &DVector<T>) -> Result<DVector<T>, SparseError> {
         if x.len() != self.ncols {
-            return Err(SparseError::DimensionMismatch);
+            return Err(SparseError::DimensionMismatch {
+                what: "operands have incompatible dimensions",
+            });
         }
         let nrows = self.nrows;
         let mut y_data = vec![T::zero(); nrows];
@@ -542,7 +552,7 @@ fn to_csc_impl<T: Scalar + Copy>(
 ///
 /// # Errors
 ///
-/// Returns [`SparseError::DimensionMismatch`] if `a` is not square or `b`'s
+/// Returns [`SparseError::DimensionMismatch { what: "operands have incompatible dimensions" }`] if `a` is not square or `b`'s
 /// length does not match `a.nrows()`. Returns [`SparseError::NotConverged`] if
 /// the method fails to reach `tol` within `max_iter` steps (or breaks down).
 #[cfg(feature = "alloc")]
@@ -565,7 +575,7 @@ pub fn conjugate_gradient<T: Scalar + Copy + 'static>(
 ///
 /// # Errors
 ///
-/// Returns [`SparseError::DimensionMismatch`] if `a` is not square or `b`'s
+/// Returns [`SparseError::DimensionMismatch { what: "operands have incompatible dimensions" }`] if `a` is not square or `b`'s
 /// length does not match `a.nrows()`, or if a supplied `x0` has the wrong length.
 #[cfg(feature = "alloc")]
 pub fn conjugate_gradient_with_report<T: Scalar + Copy + 'static>(
@@ -580,7 +590,9 @@ pub fn conjugate_gradient_with_report<T: Scalar + Copy + 'static>(
         || b.len() != a.nrows()
         || x0.as_ref().is_some_and(|v| v.len() != a.nrows())
     {
-        return Err(SparseError::DimensionMismatch);
+        return Err(SparseError::DimensionMismatch {
+            what: "operands have incompatible dimensions",
+        });
     }
     #[cfg(feature = "simd")]
     {
@@ -924,6 +936,10 @@ fn report_to_result<T>(x: DVector<T>, report: SolveReport<T>) -> Result<DVector<
         SolveStatus::Breakdown => Err(SparseError::Breakdown {
             iterations: report.iterations,
         }),
+        // Unknown future statuses are reported as a breakdown: not converged, reason unknown.
+        _ => Err(SparseError::Breakdown {
+            iterations: report.iterations,
+        }),
     }
 }
 
@@ -936,7 +952,7 @@ fn report_to_result<T>(x: DVector<T>, report: SolveReport<T>) -> Result<DVector<
 ///
 /// # Errors
 ///
-/// Returns [`SparseError::DimensionMismatch`] if the dimensions are
+/// Returns [`SparseError::DimensionMismatch { what: "operands have incompatible dimensions" }`] if the dimensions are
 /// incompatible, and [`SparseError::NotConverged`] if the method does not reach
 /// `tol` within `max_iter` steps or encounters a breakdown.
 #[cfg(feature = "alloc")]
@@ -956,7 +972,7 @@ pub fn bicgstab<T: Scalar + Copy + 'static>(
 ///
 /// # Errors
 ///
-/// Returns [`SparseError::DimensionMismatch`] for incompatible dimensions only.
+/// Returns [`SparseError::DimensionMismatch { what: "operands have incompatible dimensions" }`] for incompatible dimensions only.
 #[cfg(feature = "alloc")]
 pub fn bicgstab_with_report<T: Scalar + Copy + 'static>(
     a: &CsrMatrix<T>,
@@ -970,7 +986,9 @@ pub fn bicgstab_with_report<T: Scalar + Copy + 'static>(
         || b.len() != a.nrows()
         || x0.as_ref().is_some_and(|v| v.len() != a.nrows())
     {
-        return Err(SparseError::DimensionMismatch);
+        return Err(SparseError::DimensionMismatch {
+            what: "operands have incompatible dimensions",
+        });
     }
     #[cfg(feature = "simd")]
     {
@@ -1131,7 +1149,7 @@ fn givens<T: Scalar + Copy>(a: T, b: T) -> (T, T) {
 ///
 /// # Errors
 ///
-/// Returns [`SparseError::DimensionMismatch`] if `a` is not square, or `b` or
+/// Returns [`SparseError::DimensionMismatch { what: "operands have incompatible dimensions" }`] if `a` is not square, or `b` or
 /// `x0` has the wrong length. Returns [`SparseError::NotConverged`] if the
 /// tolerance is not met within `max_iter` steps, and [`SparseError::Breakdown`]
 /// if the Hessenberg system becomes singular.
@@ -1201,7 +1219,7 @@ where
 ///
 /// # Errors
 ///
-/// Returns [`SparseError::DimensionMismatch`] for incompatible dimensions, and
+/// Returns [`SparseError::DimensionMismatch { what: "operands have incompatible dimensions" }`] for incompatible dimensions, and
 /// propagates any error from `precond`.
 #[cfg(feature = "alloc")]
 pub fn gmres_right_preconditioned_with_report<T, P>(
@@ -1218,7 +1236,9 @@ where
     P: Fn(&[T]) -> Result<Vec<T>, SparseError>,
 {
     if a.nrows() != a.ncols() || b.len() != a.nrows() {
-        return Err(SparseError::DimensionMismatch);
+        return Err(SparseError::DimensionMismatch {
+            what: "operands have incompatible dimensions",
+        });
     }
     gmres_core(
         b.len(),
@@ -1254,7 +1274,11 @@ where
     let m = restart.max(1);
     let mut x: Vec<T> = match x0 {
         Some(v) if v.len() == n => v.as_slice().to_vec(),
-        Some(_) => return Err(SparseError::DimensionMismatch),
+        Some(_) => {
+            return Err(SparseError::DimensionMismatch {
+                what: "operands have incompatible dimensions",
+            })
+        }
         None => vec![T::zero(); n],
     };
     let b_slice = b.as_slice();
@@ -1456,12 +1480,18 @@ where
     P: Fn(&DVector<T>) -> Result<DVector<T>, SparseError>,
 {
     if a.nrows() != a.ncols() || b.len() != a.nrows() {
-        return Err(SparseError::DimensionMismatch);
+        return Err(SparseError::DimensionMismatch {
+            what: "operands have incompatible dimensions",
+        });
     }
     let n = b.len();
     let mut x: Vec<T> = match x0 {
         Some(v) if v.len() == n => v.as_slice().to_vec(),
-        Some(_) => return Err(SparseError::DimensionMismatch),
+        Some(_) => {
+            return Err(SparseError::DimensionMismatch {
+                what: "operands have incompatible dimensions",
+            })
+        }
         None => vec![T::zero(); n],
     };
     let b_slice = b.as_slice();
@@ -1555,7 +1585,9 @@ pub fn jacobi_preconditioned_cg<T: Scalar + Copy + 'static>(
     max_iter: usize,
 ) -> Result<DVector<T>, SparseError> {
     if a.nrows() != a.ncols() || b.len() != a.nrows() {
-        return Err(SparseError::DimensionMismatch);
+        return Err(SparseError::DimensionMismatch {
+            what: "operands have incompatible dimensions",
+        });
     }
     let n = b.len();
 
@@ -1598,12 +1630,14 @@ impl SparseCholesky {
     ///
     /// # Errors
     ///
-    /// Returns [`SparseError::DimensionMismatch`] if `a` is not square, and
+    /// Returns [`SparseError::DimensionMismatch { what: "operands have incompatible dimensions" }`] if `a` is not square, and
     /// [`SparseError::Breakdown`] if a pivot is not positive, which means the
     /// matrix is not positive definite.
     pub fn factor(a: &CsrMatrix<f64>) -> Result<Self, SparseError> {
         if a.nrows() != a.ncols() {
-            return Err(SparseError::DimensionMismatch);
+            return Err(SparseError::DimensionMismatch {
+                what: "operands have incompatible dimensions",
+            });
         }
         let n = a.nrows();
         let mut columns: Vec<Vec<(usize, f64)>> = Vec::with_capacity(n);
@@ -1662,10 +1696,12 @@ impl SparseCholesky {
     ///
     /// # Errors
     ///
-    /// Returns [`SparseError::DimensionMismatch`] if `b` has the wrong length.
+    /// Returns [`SparseError::DimensionMismatch { what: "operands have incompatible dimensions" }`] if `b` has the wrong length.
     pub fn solve(&self, b: &DVector<f64>) -> Result<DVector<f64>, SparseError> {
         if b.len() != self.n {
-            return Err(SparseError::DimensionMismatch);
+            return Err(SparseError::DimensionMismatch {
+                what: "operands have incompatible dimensions",
+            });
         }
         let mut x: Vec<f64> = b.as_slice().to_vec();
         // Forward substitution L y = b, column by column.
@@ -1714,12 +1750,14 @@ impl Ilu0 {
     ///
     /// # Errors
     ///
-    /// Returns [`SparseError::DimensionMismatch`] if `a` is not square, and
+    /// Returns [`SparseError::DimensionMismatch { what: "operands have incompatible dimensions" }`] if `a` is not square, and
     /// [`SparseError::Breakdown`] if a row has no diagonal entry or a pivot is
     /// zero.
     pub fn factor(a: &CsrMatrix<f64>) -> Result<Self, SparseError> {
         if a.nrows() != a.ncols() {
-            return Err(SparseError::DimensionMismatch);
+            return Err(SparseError::DimensionMismatch {
+                what: "operands have incompatible dimensions",
+            });
         }
         let n = a.nrows();
         let mut rows: Vec<Vec<(usize, f64)>> = vec![Vec::new(); n];
@@ -1775,10 +1813,12 @@ impl Ilu0 {
     ///
     /// # Errors
     ///
-    /// Returns [`SparseError::DimensionMismatch`] if `r` has the wrong length.
+    /// Returns [`SparseError::DimensionMismatch { what: "operands have incompatible dimensions" }`] if `r` has the wrong length.
     pub fn apply(&self, r: &DVector<f64>) -> Result<DVector<f64>, SparseError> {
         if r.len() != self.n {
-            return Err(SparseError::DimensionMismatch);
+            return Err(SparseError::DimensionMismatch {
+                what: "operands have incompatible dimensions",
+            });
         }
         let mut y: Vec<f64> = r.as_slice().to_vec();
         // Forward substitution with unit lower L.
@@ -1822,13 +1862,15 @@ impl Ic0 {
     ///
     /// # Errors
     ///
-    /// Returns [`SparseError::DimensionMismatch`] if `a` is not square, and
+    /// Returns [`SparseError::DimensionMismatch { what: "operands have incompatible dimensions" }`] if `a` is not square, and
     /// [`SparseError::Breakdown`] if a column has no diagonal entry or a pivot is
     /// not positive. A non-positive pivot means the incomplete factor does not
     /// exist for this pattern, which can happen even for an SPD matrix.
     pub fn factor(a: &CsrMatrix<f64>) -> Result<Self, SparseError> {
         if a.nrows() != a.ncols() {
-            return Err(SparseError::DimensionMismatch);
+            return Err(SparseError::DimensionMismatch {
+                what: "operands have incompatible dimensions",
+            });
         }
         let n = a.nrows();
         // Lower-triangle columns of A: lower[j] holds (i, A_ij) for i ≥ j.
@@ -1901,7 +1943,7 @@ impl Ic0 {
     ///
     /// # Errors
     ///
-    /// Returns [`SparseError::DimensionMismatch`] if `r` has the wrong length.
+    /// Returns [`SparseError::DimensionMismatch { what: "operands have incompatible dimensions" }`] if `r` has the wrong length.
     pub fn apply(&self, r: &DVector<f64>) -> Result<DVector<f64>, SparseError> {
         self.factor.solve(r)
     }
@@ -1961,12 +2003,14 @@ impl SparseLu {
     ///
     /// # Errors
     ///
-    /// Returns [`SparseError::DimensionMismatch`] if `a` is not square, and
+    /// Returns [`SparseError::DimensionMismatch { what: "operands have incompatible dimensions" }`] if `a` is not square, and
     /// [`SparseError::Breakdown`] at step `k` if column `k` has no usable pivot,
     /// which means the matrix is singular (structurally or numerically).
     pub fn factor(a: &CsrMatrix<f64>) -> Result<Self, SparseError> {
         if a.nrows() != a.ncols() {
-            return Err(SparseError::DimensionMismatch);
+            return Err(SparseError::DimensionMismatch {
+                what: "operands have incompatible dimensions",
+            });
         }
         let n = a.nrows();
         // Column-wise copy of A.
@@ -2081,10 +2125,12 @@ impl SparseLu {
     ///
     /// # Errors
     ///
-    /// Returns [`SparseError::DimensionMismatch`] if `b` has the wrong length.
+    /// Returns [`SparseError::DimensionMismatch { what: "operands have incompatible dimensions" }`] if `b` has the wrong length.
     pub fn solve(&self, b: &DVector<f64>) -> Result<DVector<f64>, SparseError> {
         if b.len() != self.n {
-            return Err(SparseError::DimensionMismatch);
+            return Err(SparseError::DimensionMismatch {
+                what: "operands have incompatible dimensions",
+            });
         }
         // Forward substitution L y = P b, in pivot-step order.
         let mut w: Vec<f64> = b.as_slice().to_vec();
@@ -2226,12 +2272,16 @@ mod lu_tests {
         let rect = CooMatrix::<f64>::new(2, 3).to_csr();
         assert!(matches!(
             SparseLu::factor(&rect),
-            Err(SparseError::DimensionMismatch)
+            Err(SparseError::DimensionMismatch {
+                what: "operands have incompatible dimensions"
+            })
         ));
         let lu = SparseLu::factor(&from_dense(&[&[2.0, 0.0], &[0.0, 2.0]])).unwrap();
         assert!(matches!(
             lu.solve(&DVector::from_vec(vec![1.0])),
-            Err(SparseError::DimensionMismatch)
+            Err(SparseError::DimensionMismatch {
+                what: "operands have incompatible dimensions"
+            })
         ));
     }
 }
@@ -2330,7 +2380,9 @@ mod ic0_tests {
         let rect = CooMatrix::<f64>::new(2, 3).to_csr();
         assert!(matches!(
             Ic0::factor(&rect),
-            Err(SparseError::DimensionMismatch)
+            Err(SparseError::DimensionMismatch {
+                what: "operands have incompatible dimensions"
+            })
         ));
         let mut coo = CooMatrix::<f64>::new(2, 2);
         coo.push(0, 0, 2.0);
@@ -2486,7 +2538,9 @@ mod cholesky_tests {
         let factor = SparseCholesky::factor(&laplacian_2d(2)).unwrap();
         assert_eq!(
             factor.solve(&DVector::from_vec(vec![1.0])),
-            Err(SparseError::DimensionMismatch)
+            Err(SparseError::DimensionMismatch {
+                what: "operands have incompatible dimensions"
+            })
         );
     }
 }
@@ -2642,13 +2696,17 @@ mod gmres_tests {
         let b = DVector::from_vec(vec![1.0, 2.0]);
         assert_eq!(
             gmres(&a, &b, None, 1e-10, 3, 10),
-            Err(SparseError::DimensionMismatch)
+            Err(SparseError::DimensionMismatch {
+                what: "operands have incompatible dimensions"
+            })
         );
         let b = DVector::from_vec(vec![1.0, 2.0, 3.0]);
         let bad_guess = DVector::from_vec(vec![0.0]);
         assert_eq!(
             gmres(&a, &b, Some(bad_guess), 1e-10, 3, 10),
-            Err(SparseError::DimensionMismatch)
+            Err(SparseError::DimensionMismatch {
+                what: "operands have incompatible dimensions"
+            })
         );
     }
 }
@@ -2696,11 +2754,15 @@ mod tests {
         let mut short = [0.0; 1];
         assert_eq!(
             a.matvec_into(&x, &mut short),
-            Err(SparseError::DimensionMismatch)
+            Err(SparseError::DimensionMismatch {
+                what: "operands have incompatible dimensions"
+            })
         );
         assert_eq!(
             a.matvec_into(&[1.0], &mut y),
-            Err(SparseError::DimensionMismatch)
+            Err(SparseError::DimensionMismatch {
+                what: "operands have incompatible dimensions"
+            })
         );
     }
 
@@ -2805,7 +2867,12 @@ mod tests {
     fn spmv_dimension_mismatch() {
         let a = dense_2x2_csr();
         let x = DVector::from_vec(vec![1.0_f64]);
-        assert_eq!(a.matvec(&x), Err(SparseError::DimensionMismatch));
+        assert_eq!(
+            a.matvec(&x),
+            Err(SparseError::DimensionMismatch {
+                what: "operands have incompatible dimensions"
+            })
+        );
     }
 
     #[test]
@@ -2880,11 +2947,15 @@ mod tests {
         let bad = DVector::from_vec(vec![0.0_f64; 3]);
         assert_eq!(
             conjugate_gradient(&a, &b, Some(bad.clone()), 1e-10, 10).unwrap_err(),
-            SparseError::DimensionMismatch
+            SparseError::DimensionMismatch {
+                what: "operands have incompatible dimensions"
+            }
         );
         assert_eq!(
             bicgstab(&a, &b, Some(bad), 1e-10, 10).unwrap_err(),
-            SparseError::DimensionMismatch
+            SparseError::DimensionMismatch {
+                what: "operands have incompatible dimensions"
+            }
         );
     }
 
@@ -2977,11 +3048,15 @@ mod tests {
         let b = DVector::from_vec(vec![1.0_f64]);
         assert_eq!(
             conjugate_gradient(&a, &b, None, 1e-12, 10),
-            Err(SparseError::DimensionMismatch)
+            Err(SparseError::DimensionMismatch {
+                what: "operands have incompatible dimensions"
+            })
         );
         assert_eq!(
             bicgstab(&a, &b, None, 1e-12, 10),
-            Err(SparseError::DimensionMismatch)
+            Err(SparseError::DimensionMismatch {
+                what: "operands have incompatible dimensions"
+            })
         );
     }
 }
@@ -3059,7 +3134,9 @@ mod report_tests {
         let b = DVector::from_vec(vec![1.0, 2.0]);
         assert!(matches!(
             conjugate_gradient_with_report(&a, &b, None, 1e-8, 10),
-            Err(SparseError::DimensionMismatch)
+            Err(SparseError::DimensionMismatch {
+                what: "operands have incompatible dimensions"
+            })
         ));
     }
 }

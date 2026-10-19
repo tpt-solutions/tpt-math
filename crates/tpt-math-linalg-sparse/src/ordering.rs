@@ -99,7 +99,7 @@ fn pseudo_peripheral(adj: &[Vec<usize>], start: usize) -> usize {
 ///
 /// # Errors
 ///
-/// Returns [`SparseError::DimensionMismatch`] if `a` is not square.
+/// Returns [`SparseError::DimensionMismatch { what: "operands have incompatible dimensions" }`] if `a` is not square.
 ///
 /// # Examples
 ///
@@ -118,7 +118,9 @@ fn pseudo_peripheral(adj: &[Vec<usize>], start: usize) -> usize {
 pub fn reverse_cuthill_mckee(a: &CsrMatrix<f64>) -> Result<Vec<usize>, SparseError> {
     let n = a.nrows();
     if a.ncols() != n {
-        return Err(SparseError::DimensionMismatch);
+        return Err(SparseError::DimensionMismatch {
+            what: "operands have incompatible dimensions",
+        });
     }
     let adj = symmetric_adjacency(a);
     let mut visited = vec![false; n];
@@ -164,7 +166,7 @@ pub fn reverse_cuthill_mckee(a: &CsrMatrix<f64>) -> Result<Vec<usize>, SparseErr
 ///
 /// # Errors
 ///
-/// Returns [`SparseError::DimensionMismatch`] if `a` is not square.
+/// Returns [`SparseError::DimensionMismatch { what: "operands have incompatible dimensions" }`] if `a` is not square.
 ///
 /// # Examples
 ///
@@ -190,7 +192,9 @@ pub fn reverse_cuthill_mckee(a: &CsrMatrix<f64>) -> Result<Vec<usize>, SparseErr
 pub fn minimum_degree_ordering(a: &CsrMatrix<f64>) -> Result<Vec<usize>, SparseError> {
     let n = a.nrows();
     if a.ncols() != n {
-        return Err(SparseError::DimensionMismatch);
+        return Err(SparseError::DimensionMismatch {
+            what: "operands have incompatible dimensions",
+        });
     }
     let mut adj: Vec<BTreeSet<usize>> = vec![BTreeSet::new(); n];
     for (i, j, _) in a.iter() {
@@ -205,7 +209,9 @@ pub fn minimum_degree_ordering(a: &CsrMatrix<f64>) -> Result<Vec<usize>, SparseE
         let next = (0..n)
             .filter(|&v| !eliminated[v])
             .min_by_key(|&v| (adj[v].len(), v))
-            .ok_or(SparseError::DimensionMismatch)?;
+            .ok_or(SparseError::DimensionMismatch {
+                what: "operands have incompatible dimensions",
+            })?;
         eliminated[next] = true;
         order.push(next);
         let neighbours: Vec<usize> = adj[next].iter().copied().collect();
@@ -231,7 +237,7 @@ pub fn minimum_degree_ordering(a: &CsrMatrix<f64>) -> Result<Vec<usize>, SparseE
 ///
 /// # Errors
 ///
-/// Returns [`SparseError::DimensionMismatch`] if `a` is not square or `perm`
+/// Returns [`SparseError::DimensionMismatch { what: "operands have incompatible dimensions" }`] if `a` is not square or `perm`
 /// is not a permutation of `0..n`.
 pub fn permute_symmetric(
     a: &CsrMatrix<f64>,
@@ -239,12 +245,16 @@ pub fn permute_symmetric(
 ) -> Result<CsrMatrix<f64>, SparseError> {
     let n = a.nrows();
     if a.ncols() != n || perm.len() != n {
-        return Err(SparseError::DimensionMismatch);
+        return Err(SparseError::DimensionMismatch {
+            what: "operands have incompatible dimensions",
+        });
     }
     let mut new_of = vec![usize::MAX; n];
     for (new, &old) in perm.iter().enumerate() {
         if old >= n || new_of[old] != usize::MAX {
-            return Err(SparseError::DimensionMismatch);
+            return Err(SparseError::DimensionMismatch {
+                what: "operands have incompatible dimensions",
+            });
         }
         new_of[old] = new;
     }
@@ -272,7 +282,7 @@ impl ReorderedCholesky {
     /// # Errors
     ///
     /// Returns the errors of [`SparseCholesky::factor`] for the permuted matrix,
-    /// and [`SparseError::DimensionMismatch`] for a non-square `a`.
+    /// and [`SparseError::DimensionMismatch { what: "operands have incompatible dimensions" }`] for a non-square `a`.
     pub fn factor(a: &CsrMatrix<f64>) -> Result<Self, SparseError> {
         let perm = reverse_cuthill_mckee(a)?;
         let permuted = permute_symmetric(a, &perm)?;
@@ -295,11 +305,13 @@ impl ReorderedCholesky {
     ///
     /// # Errors
     ///
-    /// Returns [`SparseError::DimensionMismatch`] if `b` has the wrong length.
+    /// Returns [`SparseError::DimensionMismatch { what: "operands have incompatible dimensions" }`] if `b` has the wrong length.
     pub fn solve(&self, b: &DVector<f64>) -> Result<DVector<f64>, SparseError> {
         let n = self.perm.len();
         if b.len() != n {
-            return Err(SparseError::DimensionMismatch);
+            return Err(SparseError::DimensionMismatch {
+                what: "operands have incompatible dimensions",
+            });
         }
         let permuted_rhs = DVector::from_fn(n, |new| b[self.perm[new]]);
         let y = self.factor.solve(&permuted_rhs)?;
@@ -327,7 +339,7 @@ impl FillOrdering {
     ///
     /// # Errors
     ///
-    /// Returns [`SparseError::DimensionMismatch`] if `a` is not square.
+    /// Returns [`SparseError::DimensionMismatch { what: "operands have incompatible dimensions" }`] if `a` is not square.
     pub fn permutation(self, a: &CsrMatrix<f64>) -> Result<Vec<usize>, SparseError> {
         match self {
             FillOrdering::ReverseCuthillMckee => reverse_cuthill_mckee(a),
@@ -368,7 +380,7 @@ impl ReorderedLu {
     /// # Errors
     ///
     /// Returns the errors of [`SparseLu::factor`] for the permuted matrix, and
-    /// [`SparseError::DimensionMismatch`] for a non-square `a`.
+    /// [`SparseError::DimensionMismatch { what: "operands have incompatible dimensions" }`] for a non-square `a`.
     pub fn factor(a: &CsrMatrix<f64>, ordering: FillOrdering) -> Result<Self, SparseError> {
         let perm = ordering.permutation(a)?;
         let permuted = permute_symmetric(a, &perm)?;
@@ -385,11 +397,13 @@ impl ReorderedLu {
     ///
     /// # Errors
     ///
-    /// Returns [`SparseError::DimensionMismatch`] if `b` has the wrong length.
+    /// Returns [`SparseError::DimensionMismatch { what: "operands have incompatible dimensions" }`] if `b` has the wrong length.
     pub fn solve(&self, b: &DVector<f64>) -> Result<DVector<f64>, SparseError> {
         let n = self.perm.len();
         if b.len() != n {
-            return Err(SparseError::DimensionMismatch);
+            return Err(SparseError::DimensionMismatch {
+                what: "operands have incompatible dimensions",
+            });
         }
         let permuted_rhs = DVector::from_fn(n, |new| b[self.perm[new]]);
         let y = self.lu.solve(&permuted_rhs)?;

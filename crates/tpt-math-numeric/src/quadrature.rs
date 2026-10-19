@@ -107,6 +107,7 @@ where
 
 /// Failure mode of [`adaptive_gauss_legendre`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum QuadratureError {
     /// A panel still failed its error test at the maximum bisection depth. The
     /// integrand is probably non-smooth or singular there.

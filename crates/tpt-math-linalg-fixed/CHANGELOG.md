@@ -11,7 +11,6 @@ and this project adheres to SemVer.
 
 - `Matrix::inverse_with_tolerance` and `inverse_with_relative_tolerance`. `inverse()` keeps its `1e-12` default.
 
-
 ### Changed
 
 - **Breaking:** `Matrix::from_columns` takes `C` columns, each of length `R`. The old signature had the dimensions swapped, so it only worked for square matrices.
@@ -19,6 +18,10 @@ and this project adheres to SemVer.
 ### Fixed
 
 - `from_columns` no longer indexes out of bounds for non-square matrices.
+
+### Changed
+
+- **Breaking (0.2.0):** the crate is bumped to 0.2.0 for the breaking changes listed above. It has no error or status enums, so this entry is not about `#[non_exhaustive]`.
 
 ## [0.1.0] - Unreleased
 

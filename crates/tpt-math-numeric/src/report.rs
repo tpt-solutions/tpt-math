@@ -2,6 +2,7 @@
 
 /// How an iterative solve ended.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum SolveStatus {
     /// The residual met the requested tolerance.
     Converged,

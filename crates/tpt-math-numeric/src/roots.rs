@@ -4,6 +4,7 @@ use crate::Scalar;
 
 /// Errors from the bracketing root finders.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum RootError {
     /// `f(a)` and `f(b)` have the same sign, so the interval brackets no root.
     NoSignChange,

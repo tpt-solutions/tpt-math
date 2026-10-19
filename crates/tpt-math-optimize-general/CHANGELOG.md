@@ -51,6 +51,10 @@ All notable changes to this crate are documented here. Format based on
 
 - `minimize_lbfgs_autodiff`: L-BFGS with the gradient from reverse-mode autodiff. The cost is written once on the tape. The last evaluated point is cached, so each iterate is taped once. This adds a dependency on `tpt-math-autodiff-rev`.
 
+### Changed
+
+- **Breaking (0.2.0):** the public error and status enums are `#[non_exhaustive]`, so matches in other crates need a wildcard arm. The crate is bumped to 0.2.0 for this and for the other breaking changes listed above.
+
 ## [0.1.0]
 
 - Initial workspace release.

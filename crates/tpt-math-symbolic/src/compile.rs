@@ -16,6 +16,7 @@ type Node<C> = Box<dyn Fn(&[C]) -> Option<C>>;
 
 /// Why an expression could not be compiled.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum CompileError {
     /// The expression uses a variable that is not in the argument list.
     UnknownVariable(String),

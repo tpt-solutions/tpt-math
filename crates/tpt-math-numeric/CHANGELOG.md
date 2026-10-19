@@ -31,6 +31,10 @@ All notable changes to this crate are documented here. Format based on
 
 - `sensitivity::forward_sensitivity`, with `Sensitivities`: forward sensitivity analysis, integrating `y' = f(t, y, p)` and `∂y/∂p` together as the augmented variational system. It takes explicit Jacobians with respect to the state and the parameters, and uses a runtime-sized Dormand–Prince (`dopri5_vec`). It is not generic over a dual-number scalar, because `Dual` has no `Float` implementation.
 
+### Changed
+
+- **Breaking (0.2.0):** the public error and status enums are `#[non_exhaustive]`, so matches in other crates need a wildcard arm. The crate is bumped to 0.2.0 for this and for the other breaking changes listed above.
+
 ## [0.1.0]
 
 - Initial workspace release.

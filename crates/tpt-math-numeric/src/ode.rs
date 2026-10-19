@@ -76,6 +76,7 @@ where
 
 /// Failure modes of the adaptive integrators in this module.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum OdeError {
     /// The integrator used its whole attempt budget before reaching `t1`.
     MaxStepsExceeded,

@@ -18,3 +18,7 @@ and this project adheres to SemVer.
   conservation, skew-symmetry, Laplacian symmetry and sign, and constant kernel.
   `Operators::new` enforces them in debug builds and under the `contracts`
   feature.
+
+### Changed
+
+- **Breaking (0.2.0):** the public error and status enums are `#[non_exhaustive]`, so matches in other crates need a wildcard arm. The crate is bumped to 0.2.0 for this and for the other breaking changes listed above.

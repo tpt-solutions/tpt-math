@@ -19,6 +19,10 @@ All notable changes to this crate are documented here. Format based on
   unchanged; the dense `DVector`/`DMatrix` types now back the phantom-unit
   wrappers.
 
+### Changed
+
+- **Breaking (0.2.0):** the crate is bumped to 0.2.0 for the breaking changes listed above. It has no error or status enums, so this entry is not about `#[non_exhaustive]`.
+
 ## [0.1.0]
 
 - Initial workspace release.

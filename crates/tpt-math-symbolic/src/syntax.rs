@@ -24,6 +24,7 @@ const KNOWN_FUNCTIONS: [&str; 12] = [
 
 /// Why an expression string failed to parse.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum ParseError {
     /// The input ended while more was expected.
     UnexpectedEnd,

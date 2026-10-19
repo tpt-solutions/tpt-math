@@ -958,6 +958,7 @@ impl<T: fmt::Debug> fmt::Debug for DMatrix<T> {
 /// Errors returned by the fallible dense linear-algebra routines.
 #[cfg(feature = "alloc")]
 #[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
 pub enum DenseError {
     /// The matrix is (numerically) singular and cannot be inverted/solved.
     Singular {

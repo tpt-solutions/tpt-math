@@ -41,6 +41,10 @@ and this project adheres to semantic versioning.
 - `ComplexDMatrix<f64>::product`: matrix product. With `simd-runtime` and order 64 or more it uses `gemm_c64`. The `*` operator is unchanged, since it is generic over the scalar type.
   Measured with `simd-runtime` against the scalar product on the same machine: 64 → 270 µs to 64 µs, 128 → 2.07 ms to 0.37 ms, 256 → 20.0 ms to 3.1 ms.
 
+### Changed
+
+- **Breaking (0.2.0):** the public error and status enums are `#[non_exhaustive]`, so matches in other crates need a wildcard arm. The crate is bumped to 0.2.0 for this and for the other breaking changes listed above.
+
 ## [0.1.0] - 2026-08-19
 
 ### Added

@@ -20,6 +20,7 @@ use tpt_math_numeric::{SolveReport, SolveStatus};
 
 /// Why a least-squares run stopped.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum LsTermination {
     /// The (projected) gradient's infinity norm fell to the tolerance.
     GradientConverged,

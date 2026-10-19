@@ -26,7 +26,7 @@ pub trait LinearOperator<T> {
     ///
     /// # Errors
     ///
-    /// Returns [`SparseError::DimensionMismatch`] if `x` or `y` has the wrong
+    /// Returns [`SparseError::DimensionMismatch { what: "operands have incompatible dimensions" }`] if `x` or `y` has the wrong
     /// length.
     fn apply(&self, x: &[T], y: &mut [T]) -> Result<(), SparseError>;
 }
@@ -117,7 +117,9 @@ where
 
     fn apply(&self, x: &[T], y: &mut [T]) -> Result<(), SparseError> {
         if x.len() != self.n || y.len() != self.n {
-            return Err(SparseError::DimensionMismatch);
+            return Err(SparseError::DimensionMismatch {
+                what: "operands have incompatible dimensions",
+            });
         }
         (self.apply)(x, y);
         Ok(())
@@ -132,7 +134,7 @@ where
 ///
 /// # Errors
 ///
-/// Returns [`SparseError::DimensionMismatch`] if the operator is not square, if
+/// Returns [`SparseError::DimensionMismatch { what: "operands have incompatible dimensions" }`] if the operator is not square, if
 /// `b` does not match it, or if `x0` has the wrong length. A solver that fails
 /// to converge returns its last iterate with a non-converged report.
 pub fn conjugate_gradient_op<T, Op>(
@@ -148,7 +150,9 @@ where
 {
     let n = op.nrows();
     if op.ncols() != n || b.len() != n || x0.as_ref().is_some_and(|v| v.len() != n) {
-        return Err(SparseError::DimensionMismatch);
+        return Err(SparseError::DimensionMismatch {
+            what: "operands have incompatible dimensions",
+        });
     }
     cg_core(n, |p, ap| op.apply(p, ap), b, x0, tol, max_iter)
 }
@@ -160,7 +164,7 @@ where
 ///
 /// # Errors
 ///
-/// Returns [`SparseError::DimensionMismatch`] if the operator is not square, if
+/// Returns [`SparseError::DimensionMismatch { what: "operands have incompatible dimensions" }`] if the operator is not square, if
 /// `b` does not match it, or if `x0` has the wrong length.
 pub fn bicgstab_op<T, Op>(
     op: &Op,
@@ -175,7 +179,9 @@ where
 {
     let n = op.nrows();
     if op.ncols() != n || b.len() != n || x0.as_ref().is_some_and(|v| v.len() != n) {
-        return Err(SparseError::DimensionMismatch);
+        return Err(SparseError::DimensionMismatch {
+            what: "operands have incompatible dimensions",
+        });
     }
     crate::bicgstab_core(n, |p, out| op.apply(p, out), b, x0, tol, max_iter)
 }
@@ -187,7 +193,7 @@ where
 ///
 /// # Errors
 ///
-/// Returns [`SparseError::DimensionMismatch`] for incompatible dimensions, and
+/// Returns [`SparseError::DimensionMismatch { what: "operands have incompatible dimensions" }`] for incompatible dimensions, and
 /// propagates any error from `precond`.
 #[allow(clippy::too_many_arguments)]
 pub fn gmres_op<T, Op, P>(
@@ -206,7 +212,9 @@ where
 {
     let n = op.nrows();
     if op.ncols() != n || b.len() != n {
-        return Err(SparseError::DimensionMismatch);
+        return Err(SparseError::DimensionMismatch {
+            what: "operands have incompatible dimensions",
+        });
     }
     crate::gmres_core(
         n,
@@ -257,7 +265,7 @@ pub struct LanczosEigenpairs {
 ///
 /// # Errors
 ///
-/// Returns [`SparseError::DimensionMismatch`] if the operator is not square, or
+/// Returns [`SparseError::DimensionMismatch { what: "operands have incompatible dimensions" }`] if the operator is not square, or
 /// if `k` is zero or larger than the operator size.
 ///
 /// # Examples
@@ -290,7 +298,9 @@ where
 {
     let n = op.nrows();
     if op.ncols() != n || k == 0 || k > n {
-        return Err(SparseError::DimensionMismatch);
+        return Err(SparseError::DimensionMismatch {
+            what: "operands have incompatible dimensions",
+        });
     }
     let m_max = steps.clamp(k, n);
 
@@ -351,7 +361,9 @@ where
     });
     let (ritz, s) = t
         .symmetric_eigen()
-        .map_err(|_| SparseError::DimensionMismatch)?;
+        .map_err(|_| SparseError::DimensionMismatch {
+            what: "operands have incompatible dimensions",
+        })?;
 
     // Sort ascending, then take the requested end. Fewer than `k` pairs come
     // back only when the Krylov space became invariant before reaching `k`.
@@ -538,7 +550,7 @@ pub struct ArnoldiRitz {
 ///
 /// # Errors
 ///
-/// Returns [`SparseError::DimensionMismatch`] if the operator is not square, or if
+/// Returns [`SparseError::DimensionMismatch { what: "operands have incompatible dimensions" }`] if the operator is not square, or if
 /// `k` is zero or larger than the operator size, and
 /// [`SparseError::NotConverged`] if the Hessenberg eigenvalue iteration fails.
 ///
@@ -564,7 +576,9 @@ where
 {
     let n = op.nrows();
     if op.ncols() != n || k == 0 || k > n {
-        return Err(SparseError::DimensionMismatch);
+        return Err(SparseError::DimensionMismatch {
+            what: "operands have incompatible dimensions",
+        });
     }
     let m_max = steps.clamp(k, n);
 

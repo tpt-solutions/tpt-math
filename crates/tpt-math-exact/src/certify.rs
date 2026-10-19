@@ -17,6 +17,7 @@ use crate::{Interval, Rational};
 
 /// Why a certified solve could not produce an enclosure.
 #[derive(Clone, Debug, PartialEq)]
+#[non_exhaustive]
 pub enum CertifyError {
     /// `a` is not `n × n` for `n = b.len()`.
     DimensionMismatch,

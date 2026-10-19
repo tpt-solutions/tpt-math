@@ -14,6 +14,7 @@
 
 /// Outcome of a linear program.
 #[derive(Clone, Debug, PartialEq)]
+#[non_exhaustive]
 pub enum LpStatus {
     /// An optimal vertex was found.
     Optimal,
@@ -36,6 +37,7 @@ pub struct LpSolution {
 
 /// Errors from [`maximize`].
 #[derive(Clone, Debug, PartialEq)]
+#[non_exhaustive]
 pub enum LpError {
     /// `A` does not have one row per entry of `b`, or a row does not have one
     /// entry per variable in `c`.

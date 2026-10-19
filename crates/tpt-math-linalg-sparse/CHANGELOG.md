@@ -65,6 +65,10 @@ and this project adheres to SemVer.
 - `minimum_degree_ordering` and `FillOrdering`: a minimum-degree fill-reducing ordering, with exact degrees on the elimination graph. This is the idea AMD approximates; it is not AMD, and it costs more on very large matrices.
 - `ReorderedLu`: sparse LU after a symmetric fill-reducing permutation, solving in the original numbering. `ReorderedCholesky::factor_with` takes a `FillOrdering`.
 
+### Changed
+
+- **Breaking (0.2.0):** `SparseError::DimensionMismatch` carries `what: &'static str`, describing the incompatible operands, and the enum is `#[non_exhaustive]`.
+
 ## [0.1.0] - 2026-08-19
 
 ### Added

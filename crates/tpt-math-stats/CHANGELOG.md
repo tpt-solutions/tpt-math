@@ -47,6 +47,10 @@ All notable changes to this crate are documented here. Format based on
 - `median` and `quantile` select the order statistic in O(n) with `select_nth_unstable_by`, not by a full sort. Results are identical to the sorted version.
 - **Breaking:** `StatsError` gained `RankDeficientDesign`, `DidNotConverge` and `NonPositiveParameter`. The enum is not `#[non_exhaustive]`, so exhaustive matches need new arms.
 
+### Changed
+
+- **Breaking (0.2.0):** the public error and status enums are `#[non_exhaustive]`, so matches in other crates need a wildcard arm. The crate is bumped to 0.2.0 for this and for the other breaking changes listed above.
+
 ## [0.1.0]
 
 - Initial workspace release.

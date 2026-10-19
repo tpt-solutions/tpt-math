@@ -59,6 +59,7 @@ pub use petgraph::{Directed, Undirected};
 
 /// Errors returned by the graph algorithms in this crate.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum GraphError {
     /// The requested operation cannot run because the source equals the sink.
     SourceEqualsSink,

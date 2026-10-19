@@ -1082,7 +1082,7 @@ dependencies = [
 
 [[package]]
 name = "tpt-math-autodiff-rev"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "criterion",
  "tpt-math-autodiff-fwd",
@@ -1133,7 +1133,7 @@ dependencies = [
 
 [[package]]
 name = "tpt-math-graph"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "criterion",
  "petgraph",
@@ -1142,7 +1142,7 @@ dependencies = [
 
 [[package]]
 name = "tpt-math-interpolate"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "approx",
  "criterion",
@@ -1152,7 +1152,7 @@ dependencies = [
 
 [[package]]
 name = "tpt-math-linalg"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "criterion",
  "tpt-math-linalg-dense",
@@ -1162,7 +1162,7 @@ dependencies = [
 
 [[package]]
 name = "tpt-math-linalg-complex"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "approx",
  "criterion",
@@ -1173,7 +1173,7 @@ dependencies = [
 
 [[package]]
 name = "tpt-math-linalg-dense"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "criterion",
  "rayon",
@@ -1183,7 +1183,7 @@ dependencies = [
 
 [[package]]
 name = "tpt-math-linalg-fixed"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "criterion",
  "tpt-math-numeric",
@@ -1191,7 +1191,7 @@ dependencies = [
 
 [[package]]
 name = "tpt-math-linalg-sparse"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "criterion",
  "tpt-math-linalg-dense",
@@ -1201,7 +1201,7 @@ dependencies = [
 
 [[package]]
 name = "tpt-math-numeric"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "criterion",
  "libm",
@@ -1218,7 +1218,7 @@ dependencies = [
 
 [[package]]
 name = "tpt-math-optimize-convex"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "criterion",
  "tpt-math-linalg",
@@ -1227,7 +1227,7 @@ dependencies = [
 
 [[package]]
 name = "tpt-math-optimize-general"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "criterion",
  "tpt-math-autodiff-rev",
@@ -1238,7 +1238,7 @@ dependencies = [
 
 [[package]]
 name = "tpt-math-pde-operators"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "criterion",
  "proptest",
@@ -1258,7 +1258,7 @@ dependencies = [
 
 [[package]]
 name = "tpt-math-prob-bayes"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "criterion",
  "tpt-math-prob-core",
@@ -1347,7 +1347,7 @@ dependencies = [
 
 [[package]]
 name = "tpt-math-stats"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "criterion",
  "tpt-math-linalg-dense",
@@ -1357,7 +1357,7 @@ dependencies = [
 
 [[package]]
 name = "tpt-math-symbolic"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "criterion",
  "num-traits",
