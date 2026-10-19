@@ -21,7 +21,7 @@ minor, anything else the patch). Confirm each one before publishing.
 - [ ] **Refresh `Cargo.lock`** for `tpt-math-pde-operators` (`cargo update -p tpt-math-pde-operators`).
       Needs the sibling checkout, per `todo.md`.
 - [ ] **Stray tracked file in the repo root**, named `- [ ] Dense QR, least squares`
-      (60 KB, tracked by git). It looks like a mis-saved todo paste. Confirm it is
+      (60 KB, tracked by git). It looks like a badly saved todo paste. Confirm it is
       not wanted, then delete it.
 - [ ] **Decide on the `tpt-math` facade crate.** It is not published yet. The name
       check returned 404 (free) at the time, so recheck it right before publishing.
