@@ -3,6 +3,8 @@
 //! tests leave unconstrained (time arguments, interval endpoints, step sizes,
 //! error messages).
 
+#![cfg(feature = "alloc")]
+
 use tpt_math_numeric::ode::{
     dopri5_dense, dopri5_events, dopri5_integrate, rk4_integrate, rk4_step, Crossing, OdeError,
 };
