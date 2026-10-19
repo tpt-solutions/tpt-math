@@ -1,118 +1,134 @@
 # crates.io Publish Checklist — next update release
 
-Status as of 2026-10-18. Built from the `[Unreleased]` section of each crate's
+Status as of 2026-10-20. Built from the `[Unreleased]` section of each crate's
 `CHANGELOG.md`, `todo.md`, `release-plz.toml` and the crate manifests. The repo
-has no git tags, so the CHANGELOGs are the source of truth.
+has no git tags until section 6, so the CHANGELOGs were the source of truth.
 
-Version bumps are **suggestions** (pre-1.0 SemVer: a breaking change bumps the
-minor, anything else the patch). Confirm each one before publishing.
+**Release status: published.** All 28 changed crates are on crates.io at the
+versions below, and each has a git tag. Items still open are in section 6.
+
+Commits on master:
+
+- `3187a22` — version bumps and the CHANGELOG heading merge
+- `2e8c74b` — CHANGELOG stamping and the linalg-dense README fix (the published commit)
+- CI commit — the semver job no longer excludes the facade or `pde-operators`
+
+Tags: `tpt-math-<crate>-v<version>` for each of the 27 crates, and `tpt-math-v0.1.0`
+for the facade, all on `2e8c74b`.
+
+Version bumps follow pre-1.0 SemVer: a breaking change bumps the minor, anything
+else the patch.
 
 ---
 
 ## 1. Blockers — resolve before publishing
 
-- [ ] **Stale `release-plz.toml` comment.** It says the simd crates are path
-      dependencies on a sibling checkout, which `todo.md` (item 7.5) says was
-      fixed. Update the comment, then decide whether `publish = false` can go.
-- [ ] **`tpt-math-pde-operators` registry entry.** Add its `tpt-rust-map/registry.toml`
-      entry (`domain = "math.pde"`, `no_std = true`, `wraps = []`,
-      `status = "planned"` → `"git"`). That file is in a sibling repo, so this
-      needs the other checkout.
-- [ ] **Refresh `Cargo.lock`** for `tpt-math-pde-operators` (`cargo update -p tpt-math-pde-operators`).
-      Needs the sibling checkout, per `todo.md`.
-- [ ] **Stray tracked file in the repo root**, named `- [ ] Dense QR, least squares`
-      (60 KB, tracked by git). It looks like a badly saved todo paste. Confirm it is
-      not wanted, then delete it.
-- [ ] **Decide on the `tpt-math` facade crate.** It is not published yet. The name
-      check returned 404 (free) at the time, so recheck it right before publishing.
-      Publish it in this release, or hold it back.
-- [ ] **Confirm current crates.io versions** of every crate below. Some (e.g.
-      `tpt-math-geometry`, `tpt-math-prob-markov`) are already at 0.1.1, so
-      the bumps below may need adjusting.
+- [x] **Stale `release-plz.toml` comment.** Updated: the comment now says the
+      simd crates are published on crates.io.
+- [x] **`tpt-math-pde-operators` registry entry.** Present in `tpt-rust-map/registry.toml`
+      with `domain = "math.pde"`, `no_std = true`, `status = "git"`.
+- [x] **Refresh `Cargo.lock`** for `tpt-math-pde-operators`. Lockfile has it at 0.2.0.
+- [x] **Stray tracked file** named `- [ ] Dense QR, least squares`. Not in the repo
+      root and not tracked by git. Nothing to delete.
+- [x] **`tpt-math` facade.** Published in this release (0.1.0). The name was free
+      on crates.io (404) when rechecked before publishing.
+- [x] **Confirm current crates.io versions.** Checked. Two decisions followed from
+      it: `geometry` moved to 0.2.0 (not 0.1.2) because `from_matrix` now rejects
+      reflections, and `prob-markov` moved to 0.1.2 (not 0.2.0) because the
+      behaviour change does not change any signature.
 
 ## 2. Per-crate release plan
 
-Dependency bumps follow the version bump: update `[workspace.dependencies]` in
-the root `Cargo.toml` (currently `version = "0.1.0"` for most) **and** each
-crate's own `version`, or the published crates will pull in the old releases.
+Released versions. The earlier suggested table was out of date: it predated the
+0.2.0 bumps. Now that every crate is published, this table records what went out.
 
-| Crate | Now | Suggested | Unreleased changes |
+| Crate | Was on crates.io | Released | Unreleased changes |
 |---|---|---|---|
-| `tpt-math-numeric` | 0.1.0 | 0.1.1 | `report` module (`SolveReport`); Gauss–Kronrod 15 and adaptive GK |
-| `tpt-math-prob-core` | 0.1.0 | 0.1.1 | `special` module (gamma, beta, erf, normal CDF/quantile) |
-| `tpt-math-prob-dist` | 0.1.0 | 0.1.1 | Fix: `student_t_cdf` near the centre |
-| `tpt-math-prob-bayes` | 0.1.0 | 0.1.1 | `adaptive` (adaptive Metropolis), `hmc` (HMC); uses new `prob-core::special` |
-| `tpt-math-prob-markov` | 0.1.1 | 0.2.0 | **Behaviour change:** `stationary` now solves directly for periodic chains |
-| `tpt-math-prob-monte-carlo` | 0.1.0 | 0.1.1 | `integrate_par` behind `rayon` |
-| `tpt-math-stats` | 0.1.0 | 0.1.1 | Special functions re-exported from `prob-core` |
-| `tpt-math-autodiff-fwd` | 0.1.0 | 0.1.1 | `sqrt`, `powi`, `powf`, `tan`, `tanh`, `atan`, `abs`, `Dual` ∘ scalar |
-| `tpt-math-autodiff-rev` | 0.1.0 | 0.2.0 | **Breaking:** `Op` enum gained variants (exhaustive matches break); `abs`, `Powi(a,0)` fix |
-| `tpt-math-symbolic` | 0.1.0 | 0.2.0 | **Behaviour change:** sum/product term order changes; new functions and rules |
-| `tpt-math-optimize-general` | 0.1.0 | 0.1.1 | Fix: `numerical_gradient` step scales with `\|x\|` |
-| `tpt-math-optimize-convex` | 0.1.0 | 0.2.0 | **Breaking:** `QpSolution` gained `iterations` (struct literals break) |
-| `tpt-math-signal-fft` | 0.1.0 | 0.1.1 | `rfft` / `irfft` |
-| `tpt-math-signal-filter` | 0.1.0 | 0.1.1 | `filter_par` behind `rayon` |
-| `tpt-math-exact` | 0.1.0 | 0.1.1 | `Interval::div_nonzero`, `roots::newton_refine` |
-| `tpt-math-graph` | 0.1.0 | 0.1.1 | `try_dijkstra`, `try_astar`, `GraphError` |
-| `tpt-math-interpolate` | 0.1.0 | 0.1.1 | Fix: `Pchip::new` with two nodes |
-| `tpt-math-linalg-complex` | 0.1.0 | 0.1.1 | `lu_with_tolerance`, `lu_with_relative_tolerance` |
-| `tpt-math-linalg-dense` | 0.1.0 | 0.1.1 | `par_mul` behind `rayon`; new `simd` deps on `tpt-simd-blas` 0.1.1 |
-| `tpt-math-linalg-fixed` | 0.1.0 | 0.1.1 | `inverse_with_tolerance`, `inverse_with_relative_tolerance` |
-| `tpt-math-linalg-sparse` | 0.1.0 | 0.1.1 | `gmres_right_preconditioned_with_report`; new `simd` dep on `tpt-simd-sparse` 0.1.1 |
-| `tpt-math-linalg` | 0.1.0 | 0.1.1 | Scalar `*`/`/`, `norm`, `dot`, `solve`, `inverse`, by-ref operators |
-| `tpt-math-geometry` | 0.1.1 | 0.1.2 or 0.2.0 | `from_matrix` rejects reflections; quaternion renormalises. **Check:** if `from_matrix` already returned `Option`, patch; otherwise minor |
-| `tpt-math-spatial` | 0.1.0 | 0.1.1 | `Screw::log` uses `atan2` |
-| `tpt-math-units-dyn` | 0.1.0 | 0.1.1 | New `solve` module behind `ode`, `optimize`, `autodiff` features |
-| `tpt-math-pde-operators` | — | 0.1.0 | **New crate, first publish** (blocker above) |
-| `tpt-math-autodiff`, `tpt-math-optimize`, `tpt-math-prob`, `tpt-math-signal`, `tpt-math-units`, `tpt-math-prob-sampler` | 0.1.0 | no change | No unreleased entries. Republish only if a dependency bump requires it |
-| `tpt-math` (facade) | — | 0.1.0 | Not published. See blocker above |
+| `tpt-math-numeric` | 0.1.0 | **0.2.0** | `report`, Gauss–Kronrod 15, adaptive GK, ODE, stiff, sensitivity; breaking (`non_exhaustive`) |
+| `tpt-math-prob-core` | 0.1.0 | 0.1.1 | `special` module; precision fixes for `erf`, `gamma`, `ln_binomial` |
+| `tpt-math-prob-dist` | 0.1.0 | 0.1.1 | `student_t_cdf` fix; density, quantile and moment families |
+| `tpt-math-prob-bayes` | 0.1.0 | **0.2.0** | `adaptive`, `hmc`, diagnostics; breaking |
+| `tpt-math-prob-markov` | 0.1.1 | 0.1.2 | `stationary` solves `πP = π` for periodic chains; Viterbi precompute |
+| `tpt-math-prob-monte-carlo` | 0.1.0 | 0.1.1 | `integrate_par` behind `rayon`; Welford variance |
+| `tpt-math-stats` | 0.1.0 | **0.2.0** | KDE, corrections, bootstrap, multiple testing; breaking |
+| `tpt-math-autodiff-fwd` | 0.1.0 | 0.1.1 | `Float` for `Dual`; `sqrt`, `powi`, `powf`, `tan`, `tanh`, `atan`, `abs` |
+| `tpt-math-autodiff-rev` | 0.1.0 | **0.2.0** | `Op` enum gained variants; breaking |
+| `tpt-math-autodiff` | 0.1.0 | 0.1.1 | `jacobian`, `hessian` (this crate had changes, so the earlier "no change" note was wrong) |
+| `tpt-math-symbolic` | 0.1.0 | **0.2.0** | `compile`, syntax; term-order behaviour change; breaking |
+| `tpt-math-optimize-general` | 0.1.0 | **0.2.0** | least squares, autodiff L-BFGS; breaking |
+| `tpt-math-optimize-convex` | 0.1.0 | **0.2.0** | `QpSolution` is `non_exhaustive`; breaking |
+| `tpt-math-signal-fft` | 0.1.0 | 0.1.1 | `rfft`/`irfft`, `stft`, `welch`, `fft_convolve` |
+| `tpt-math-signal-filter` | 0.1.0 | 0.1.1 | `filter_par` behind `rayon`; biquads, Butterworth, zero-phase |
+| `tpt-math-exact` | 0.1.0 | 0.1.1 | interval division, `newton_refine`, validated Euler, Krawczyk `certified_solve` |
+| `tpt-math-graph` | 0.1.0 | **0.2.0** | `try_dijkstra`, `try_astar`, `GraphError`, connectivity; breaking |
+| `tpt-math-interpolate` | 0.1.0 | **0.2.0** | `NaturalCubicSpline`, `MultilinearGrid`, RBF and Kriging in n-D; breaking |
+| `tpt-math-linalg-complex` | 0.1.0 | **0.2.0** | `simd_lu`, `det`, `product`; breaking |
+| `tpt-math-linalg-dense` | 0.1.0 | **0.2.0** | flat LU, Hessenberg/eigenvalues, banded, diagnostics; breaking |
+| `tpt-math-linalg-fixed` | 0.1.0 | **0.2.0** | `non_exhaustive` error types; breaking |
+| `tpt-math-linalg-sparse` | 0.1.0 | **0.2.0** | `SparseError::DimensionMismatch { what }`; operators, ordering, Lanczos/Arnoldi; breaking |
+| `tpt-math-linalg` | 0.1.0 | **0.2.0** | breaking (follows the linalg family) |
+| `tpt-math-geometry` | 0.1.1 | **0.2.0** | `from_matrix` returns `None` for reflections; breaking |
+| `tpt-math-spatial` | 0.1.0 | **0.2.0** | depends on geometry 0.2.0 (in its public API); `Screw::log` fix |
+| `tpt-math-units-dyn` | 0.1.0 | 0.1.1 | `solve` module behind `ode`, `optimize`, `autodiff`; `FromStr` accepts compound units |
+| `tpt-math-pde-operators` | — | **0.2.0** | **New crate** |
+| `tpt-math` (facade) | — | **0.1.0** | **New crate** |
+| `tpt-math-optimize`, `tpt-math-prob`, `tpt-math-prob-sampler`, `tpt-math-signal`, `tpt-math-units` | 0.1.0 | not released | No source change since 0.1.0 |
 
-Totals: 3 breaking (`autodiff-rev`, `optimize-convex`, `symbolic`), plus
-`prob-markov` behaviour change. Confirm each one.
+Breaking releases (0.2.0): 17 of the 28. That is the 15 crates with breaking
+changes from the earlier session, plus `geometry` and `spatial`. Behaviour-only
+changes that did not need a minor bump: `geometry`'s `from_matrix` (listed as
+breaking in its changelog, see section 7), `prob-markov`, and `exact` (interval
+`new` now panics in release builds too).
 
 ## 3. Pre-publish verification
 
-- [ ] `cargo fmt --check`
-- [ ] `cargo clippy --workspace --all-targets --all-features -- -D warnings`
-- [ ] `cargo test --workspace --all-features` (including doctests)
-- [ ] `cargo xtask check` (matches CI: fmt, clippy, tests, doctests, rustdoc,
-      no_std build, drift check, cargo-deny)
-- [ ] `cargo xtask no-std` (includes `thumbv6m-none-eabi`)
-- [ ] `cargo doc --workspace --all-features` with `RUSTDOCFLAGS=-D warnings`
-- [ ] `cargo deny check`
-- [ ] Simd features pass: `cargo test -p tpt-math-linalg-dense --features simd`
-      and `-p tpt-math-linalg-sparse --features simd` (needs Rust 1.95+)
-- [ ] `cargo package -p <crate> --list` for each crate, to confirm no stray files ship
-- [ ] `cargo publish --dry-run` for each crate, in dependency order
-- [ ] **cargo-semver-checks** on the crates with breaking changes (not yet in CI, per `todo.md`)
-- [ ] `[package.metadata.docs.rs]` sanity check on every crate. `linalg-dense` still
-      uses `features = ["alloc"]`, not `all-features`. Decide whether to switch it now.
+- [x] `cargo fmt --check`
+- [x] `cargo clippy --workspace --all-targets --all-features -- -D warnings`
+- [x] `cargo test --workspace --all-features` (including doctests). 87 result blocks, all passing.
+- [x] `cargo xtask check` (includes fmt, clippy, tests, doctests, rustdoc, no_std, drift, cargo-deny). Exit 0 on the release tree.
+- [x] `cargo xtask no-std` (includes `thumbv6m-none-eabi`)
+- [x] `cargo doc --workspace --all-features` with `RUSTDOCFLAGS=-D warnings`
+- [x] `cargo deny check` (run through `cargo xtask check`)
+- [x] Simd features pass: `-p tpt-math-linalg-dense --features simd` and
+      `-p tpt-math-linalg-sparse --features simd` (toolchain 1.98, above the 1.95 minimum)
+- [x] `cargo package -p <crate> --list` for each crate. No stray files.
+- [~] `cargo publish --dry-run` for each crate, in dependency order. Not possible
+      standalone: a dry-run fails until the crate's workspace dependencies are on
+      crates.io. Each real `cargo publish` ran the same packaging and verification
+      step in order, and all 28 succeeded.
+- [x] **cargo-semver-checks.** Breaking crates passed in the earlier session;
+      the 12 crates with a published baseline and changes passed this session. No
+      baseline for `pde-operators` or the facade.
+- [x] `[package.metadata.docs.rs]` check. `linalg-dense` already uses
+      `all-features = true`, so no change was needed.
 
 ## 4. Docs and metadata
 
-- [ ] Move each crate's `## [Unreleased]` entries under `## [<version>] - 2026-MM-DD`
-      in its `CHANGELOG.md`, and add a fresh empty `## [Unreleased]` above it
-- [ ] Update each crate's README feature table for the new features
-      (`rayon`, `simd`, `simd-runtime`, `ode` / `optimize` / `autodiff` on `units-dyn`)
-- [ ] Confirm READMEs' `no_std` column matches `NO_STD_CRATES` in `xtask`
-      (`cargo xtask drift` checks this)
-- [ ] Check the workspace `rust-version`. The default build stays at 1.85; the
-      `simd` feature needs 1.95 and the docs should say so
+- [x] Each published crate's `## [Unreleased]` entries moved under `## [<version>] - 2026-10-20`, with a fresh empty `## [Unreleased]` above.
+- [x] Feature tables in the READMEs cover `rayon`, `simd`, `simd-runtime`, and `ode` / `optimize` / `autodiff` on `units-dyn`. The `simd-runtime` row in `linalg-dense` was missing its description; fixed.
+- [x] READMEs' `no_std` column matches `NO_STD_CRATES` (checked by `cargo xtask drift`, part of `xtask check`).
+- [x] `rust-version`: the default build stays at 1.85. The simd rows in `linalg-dense` and `linalg-complex` and `linalg-sparse` state that they need 1.95.
 
 ## 5. Publish
 
-- [ ] Publish in dependency order, leaf crates first:
-      `numeric` → `prob-core` → `linalg-dense`, `linalg-complex`, `linalg-fixed`,
-      `prob-dist`, `interpolate`, … → umbrella and facade crates last
-      (generate the exact order from `cargo metadata`)
-- [ ] Wait for each crate to appear in the crates.io index before publishing its dependents
-- [ ] After each publish, confirm the version on crates.io and that docs.rs builds
+- [x] Published in dependency order: leaves first, the facade last (order computed from `cargo metadata`, 28 crates).
+- [x] Each crate was published only after its workspace dependencies appeared in the index. `cargo publish` waits for this by default.
+- [x] After each publish, the version was confirmed on crates.io (all 28 match).
+- [x] docs.rs builds. All 28 are green: `docs.rs/crate/<name>/<version>/status.json` reports `doc_status: true` for every published version, including the facade.
 
 ## 6. After publishing
 
-- [ ] Tag the release in git (none exist yet). Suggest `v<version>` per crate, or
-      one tag for the workspace release
-- [ ] Update `todo.md`: release-plz (7.5) stays unchecked until it can publish
-- [ ] Re-enable `publish = true` in `release-plz.toml` once the first release
-      has been reviewed by hand (per the file's own comment)
-- [ ] Update `Cargo.lock` and commit
+- [x] Tagged the release. Annotated tags `tpt-math-<crate>-v<version>` for each of the 27 crates and `tpt-math-v0.1.0` for the facade, all on `2e8c74b`. Pushed to origin (56 entries from `ls-remote`, which includes peeled tags).
+- [x] Removed the `--exclude tpt-math --exclude tpt-math-pde-operators` flags from the semver job in `.github/workflows/ci.yml`. Pushed.
+- [x] Update `todo.md`: release-plz (7.5) is unchecked until it can publish. Done in the commit that adds this checklist.
+- [ ] Re-enable `publish = true` in `release-plz.toml`. Left as `false` on purpose: the file's comment says to wait until the first release has been reviewed by hand.
+- [x] Updated `Cargo.lock` and committed.
+
+## 7. Open follow-ups
+
+- **Confirmed:** `geometry` stays at 0.2.0. `from_matrix` changed behaviour
+  without a signature change, so semver-checks does not catch it. It is listed as
+  breaking in the changelog and the version reflects that.
+- `todo.md` item 7.5 (release-plz and automation) is reopened until release-plz can
+  publish. The rest of that item is done.
+- `release-plz` publishing stays off until the release has been reviewed by hand.

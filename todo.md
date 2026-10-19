@@ -1250,17 +1250,19 @@ tree.*
       doctests, rustdoc, the no_std build, the drift check and cargo-deny, matching
       the CI jobs. The feature-powerset and bench-smoke jobs need `cargo-hack` and
       are CI-only. `just ci` runs `check`.
-- [x] Automation: release-plz (31-crate ordered publishing), Dependabot
+- [ ] Automation: release-plz (31-crate ordered publishing), Dependabot
       (group `tpt-*`), proptest, cargo-fuzz (symbolic, exact), typos, taplo
-      Status: Done, with release-plz manual until item 2 is published. Dependabot is
+      Status: Open until release-plz can publish. The 0.2.0 and 0.1.x release was
+      done by hand (see PUBLISH_CHECKLIST.md). Publishing in release-plz stays off
+      until that release has been reviewed. Everything else in this item is done. Dependabot is
       configured (weekly, cargo and actions, `tpt-*` grouped). `typos` is pinned to
       `crate-ci/typos@v1.51.1`. `proptest` covers `exact` and `symbolic`. Fuzz
       targets for `symbolic` and `exact` are in `fuzz/`, run weekly on Linux by
       `fuzz.yml`. libFuzzer cannot run on Windows MSVC here: the nightly toolchain
       has no sanitizer runtime and the coverage symbols do not link. `taplo.toml`
       formats the TOML, and CI checks it. `release-plz.toml` opens release PRs with
-      publishing off, from a manual workflow, because `cargo package` cannot run
-      while the simd path dependency is unpublished.
+      publishing off, from a manual workflow. The simd crates are on crates.io, so
+      `cargo package` runs; publishing stays off until the first release is reviewed.
 - [x] `[package.metadata.docs.rs]` (`all-features`, `docsrs` cfg) in each
       crate; feature tables in READMEs; examples for geometry/spatial,
       graph, signal, sparse/complex linalg, `no_std`
