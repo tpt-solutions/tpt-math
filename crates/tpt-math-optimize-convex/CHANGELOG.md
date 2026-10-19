@@ -9,7 +9,6 @@ All notable changes to this crate are documented here. Format based on
 ### Added
 
 - `QpSolution::iterations`: interior-point iterations performed before the solve was accepted. Adding this field breaks code that builds `QpSolution` with a struct literal.
-
 - **`clarabel` backend replaced by an in-house dense primal-dual interior-point
   (Mehrotra predictor-corrector) QP solver.** `clarabel` is Apache-2.0-only and
   disqualified as a wrap target by the workspace license policy (ADR-0007). The
@@ -23,9 +22,6 @@ All notable changes to this crate are documented here. Format based on
 
 - Residual tolerances scale with the problem data, so a uniformly scaled QP converges like the original. The complementarity gap is compared with the objective magnitude.
 - `solve_qp` documents that a solution accepted as `QpStatus::AlmostSolved` is returned as `Ok`. Use `solve_qp_internal` to read the status.
-
-### Changed
-
 - **Breaking (0.2.0):** `QpSolution` is `#[non_exhaustive]`, so build it through the solver, not with a struct literal. The error and status enums are `#[non_exhaustive]` too.
 
 ## [0.1.0]

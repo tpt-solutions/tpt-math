@@ -15,24 +15,15 @@ All notable changes to this crate are documented here. Format based on
 - `roots` module: `bisect` and `brent` bracketing root finders, with `RootError`.
 - `quadrature` module: composite `simpson` rule.
 - `ode` module: fixed-step classical Runge–Kutta, `rk4_step` and `rk4_integrate`, on fixed-size state arrays (no allocation).
-
-### Added
-
 - `ode::dopri5_dense` and `DenseSolution`: adaptive Dormand–Prince 5(4) with cubic Hermite dense output, `eval(t)` at any time within the span.
 - `ode::dopri5_events`, `Crossing`, `Event` and `EventRun`: locates sign changes of an event function `g(t, y)` by bisection on the dense output, with optional termination at the first event.
 - `stiff::rosenbrock2_integrate`: stiff solver, the L-stable second-order Rosenbrock method ROS2 with step-doubling error control. It takes the Jacobian and handles autonomous systems. Non-autonomous systems are made autonomous by adding `t` as a state.
 - The `alloc` feature now enables `extern crate alloc`, which the dense-output and event code needs.
-
-### Changed
-
-- The Dormand–Prince step is shared by `dopri5_integrate`, `dopri5_dense` and `dopri5_events`. `dopri5_integrate` behaves as before.
-
-### Added
-
 - `sensitivity::forward_sensitivity`, with `Sensitivities`: forward sensitivity analysis, integrating `y' = f(t, y, p)` and `∂y/∂p` together as the augmented variational system. It takes explicit Jacobians with respect to the state and the parameters, and uses a runtime-sized Dormand–Prince (`dopri5_vec`). It is not generic over a dual-number scalar, because `Dual` has no `Float` implementation.
 
 ### Changed
 
+- The Dormand–Prince step is shared by `dopri5_integrate`, `dopri5_dense` and `dopri5_events`. `dopri5_integrate` behaves as before.
 - **Breaking (0.2.0):** the public error and status enums are `#[non_exhaustive]`, so matches in other crates need a wildcard arm. The crate is bumped to 0.2.0 for this and for the other breaking changes listed above.
 
 ## [0.1.0]

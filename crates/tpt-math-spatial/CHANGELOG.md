@@ -9,6 +9,7 @@ and this project adheres to SemVer.
 
 ### Changed
 
+- **Breaking (0.2.0):** depends on `tpt-math-geometry` 0.2.0, whose types appear in this crate's public API.
 - `Screw::log` computes the angle as `atan2(sin θ, cos θ)` from the skew part, which stays in domain under rounding.
 
 ## [0.1.0] - 2026-08-19

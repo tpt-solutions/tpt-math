@@ -17,9 +17,6 @@ All notable changes to this crate are documented here. Format based on
 - `gamma` keeps the sign of `Γ(x)` on negative non-integer intervals.
 - Series and continued fractions return `NaN` when they exhaust their iteration budget, instead of an unconverged value.
 - `ln_gamma(±∞)` returns `+∞` rather than `NaN`.
-
-### Fixed
-
 - `ln_binomial` no longer cancels for large `n`. It sums the logarithmic ratios directly for small `k`, so `ln C(10¹⁵, 1)` is `34.54`, where the old three-`ln_gamma` difference returned `36`.
 - `gamma_p` and `gamma_q` return finite values for large shape parameters (about `10⁷` and above). They used to return NaN, which also broke `poisson_cdf(10⁷, 10⁷)` and `chi_squared_cdf(2·10⁷, 2·10⁷)`. For shape `a ≥ 10` the prefactor comes from the Stirling series, and the series and continued fraction get an iteration budget of `max(10 000, 50·√a)`. This is not Temme's expansion.
 

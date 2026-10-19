@@ -1062,7 +1062,7 @@ dependencies = [
 
 [[package]]
 name = "tpt-math-autodiff"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "num-traits",
  "tpt-math-autodiff-fwd",
@@ -1074,7 +1074,7 @@ dependencies = [
 
 [[package]]
 name = "tpt-math-autodiff-fwd"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "criterion",
  "tpt-math-numeric",
@@ -1090,7 +1090,7 @@ dependencies = [
 
 [[package]]
 name = "tpt-math-exact"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "criterion",
  "num-bigint",
@@ -1124,7 +1124,7 @@ dependencies = [
 
 [[package]]
 name = "tpt-math-geometry"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "criterion",
  "tpt-math-linalg-fixed",
@@ -1266,7 +1266,7 @@ dependencies = [
 
 [[package]]
 name = "tpt-math-prob-core"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "criterion",
  "tpt-math-numeric",
@@ -1274,7 +1274,7 @@ dependencies = [
 
 [[package]]
 name = "tpt-math-prob-dist"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "criterion",
  "rand 0.9.5",
@@ -1285,7 +1285,7 @@ dependencies = [
 
 [[package]]
 name = "tpt-math-prob-markov"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "criterion",
  "tpt-math-prob-core",
@@ -1293,7 +1293,7 @@ dependencies = [
 
 [[package]]
 name = "tpt-math-prob-monte-carlo"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "criterion",
  "rayon",
@@ -1318,7 +1318,7 @@ dependencies = [
 
 [[package]]
 name = "tpt-math-signal-fft"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "criterion",
  "rustfft",
@@ -1327,7 +1327,7 @@ dependencies = [
 
 [[package]]
 name = "tpt-math-signal-filter"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "criterion",
  "rayon",
@@ -1337,7 +1337,7 @@ dependencies = [
 
 [[package]]
 name = "tpt-math-spatial"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "criterion",
  "tpt-math-geometry",
@@ -1375,7 +1375,7 @@ dependencies = [
 
 [[package]]
 name = "tpt-math-units-dyn"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "criterion",
  "tpt-math-autodiff-rev",

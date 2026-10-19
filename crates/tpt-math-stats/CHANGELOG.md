@@ -9,6 +9,10 @@ All notable changes to this crate are documented here. Format based on
 ### Changed
 
 - The special functions now live in `tpt-math-prob-core::special`, shared with `tpt-math-prob-bayes`. This module re-exports them under the existing names.
+- **Breaking:** `StatsError` gained `ProbabilityOutOfRange`; exhaustive matches need an arm.
+- `median` and `quantile` select the order statistic in O(n) with `select_nth_unstable_by`, not by a full sort. Results are identical to the sorted version.
+- **Breaking:** `StatsError` gained `RankDeficientDesign`, `DidNotConverge` and `NonPositiveParameter`. The enum is not `#[non_exhaustive]`, so exhaustive matches need new arms.
+- **Breaking (0.2.0):** the public error and status enums are `#[non_exhaustive]`, so matches in other crates need a wildcard arm. The crate is bumped to 0.2.0 for this and for the other breaking changes listed above.
 
 ### Fixed
 
@@ -30,26 +34,10 @@ All notable changes to this crate are documented here. Format based on
 - `try_chi_squared_independence` / `chi_squared_independence`: Pearson test of independence on an r×c table.
 - `quantile`/`try_quantile` (type 7), `skewness`/`try_skewness`, `excess_kurtosis`/`try_excess_kurtosis`.
 - `covariance`/`try_covariance`: sample covariance of paired samples.
-
-### Changed
-
-- **Breaking:** `StatsError` gained `ProbabilityOutOfRange`; exhaustive matches need an arm.
-
-### Added
-
 - `try_multiple_regression` (QR least squares) and `try_logistic_regression` (Newton iterations), with their result types `MultipleFit` and `LogisticFit`.
 - `try_spearman_correlation` (tie-corrected) and `try_kendall_tau` (τ-b).
 - `try_kernel_density`, `kernel_density` and `KernelDensity`: Gaussian kernel density estimate, with Silverman's rule as the default bandwidth.
 - Optional `simd` feature: the variance uses `tpt-simd-reduce`. On 10⁶ samples it runs about 7× faster (3.9 ms → 0.56 ms). It sums pairwise instead of Neumaier-compensated, so results differ in the last few units of precision on ordinary data. It is off by default.
-
-### Changed
-
-- `median` and `quantile` select the order statistic in O(n) with `select_nth_unstable_by`, not by a full sort. Results are identical to the sorted version.
-- **Breaking:** `StatsError` gained `RankDeficientDesign`, `DidNotConverge` and `NonPositiveParameter`. The enum is not `#[non_exhaustive]`, so exhaustive matches need new arms.
-
-### Changed
-
-- **Breaking (0.2.0):** the public error and status enums are `#[non_exhaustive]`, so matches in other crates need a wildcard arm. The crate is bumped to 0.2.0 for this and for the other breaking changes listed above.
 
 ## [0.1.0]
 

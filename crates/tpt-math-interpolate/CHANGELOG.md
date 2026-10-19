@@ -16,6 +16,8 @@ and this project adheres to SemVer.
 
 - **Breaking behaviour:** `Kriging::new` now factors the Kriging matrix and returns `DenseError::Singular` for a singular system (for example duplicate samples with zero nugget). It used to fail only at `predict`.
 - `Kriging::predict` reuses the stored factorisation instead of refactoring per call.
+- The allocating APIs (RBF, Kriging, PCHIP, B-splines and the new types) are gated behind the `alloc` feature. The `std` feature enables it, so default builds are unaffected.
+- **Breaking (0.2.0):** the public error and status enums are `#[non_exhaustive]`, so matches in other crates need a wildcard arm. The crate is bumped to 0.2.0 for this and for the other breaking changes listed above.
 
 ### Added
 
@@ -23,14 +25,6 @@ and this project adheres to SemVer.
 - `KrigingNd`: ordinary Kriging in any dimension, with `predict` returning the mean and the Kriging variance.
 - `NaturalCubicSpline`: natural cubic spline in one dimension, with `eval`, `derivative` and linear extrapolation beyond the nodes.
 - `MultilinearGrid`: bilinear, trilinear and general multilinear interpolation on a rectilinear grid. Queries outside the grid return `None`.
-
-### Changed
-
-- The allocating APIs (RBF, Kriging, PCHIP, B-splines and the new types) are gated behind the `alloc` feature. The `std` feature enables it, so default builds are unaffected.
-
-### Changed
-
-- **Breaking (0.2.0):** the public error and status enums are `#[non_exhaustive]`, so matches in other crates need a wildcard arm. The crate is bumped to 0.2.0 for this and for the other breaking changes listed above.
 
 ## [0.1.0] - 2026-08-19
 

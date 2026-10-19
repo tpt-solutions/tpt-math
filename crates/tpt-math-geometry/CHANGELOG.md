@@ -8,7 +8,7 @@ Semantic Versioning.
 
 ### Changed
 
-- `Rotation::from_matrix` returns `None` for a reflection (determinant -1).
+- **Breaking (0.2.0):** `Rotation::from_matrix` returns `None` for a reflection (determinant -1). Callers that passed reflections in must handle `None`.
 - The `UnitQuaternion` product renormalises its result.
 
 ### Fixed
