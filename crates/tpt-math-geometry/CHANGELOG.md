@@ -6,6 +6,8 @@ Semantic Versioning.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-20
+
 ### Changed
 
 - **Breaking (0.2.0):** `Rotation::from_matrix` returns `None` for a reflection (determinant -1). Callers that passed reflections in must handle `None`.

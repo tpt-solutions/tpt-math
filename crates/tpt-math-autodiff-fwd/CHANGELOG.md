@@ -6,6 +6,8 @@ All notable changes to this crate are documented here. Format based on
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-10-20
+
 ### Added
 
 - `Dual::sqrt`, `powi`, `powf`, `tan`, `tanh`, `atan` and `abs`, with derivatives.

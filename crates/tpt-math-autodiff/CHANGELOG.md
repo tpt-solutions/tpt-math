@@ -6,6 +6,8 @@ All notable changes to this crate are documented here. Format based on
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-10-20
+
 ### Added
 
 - `derivatives::jacobian`: the exact Jacobian, with one reverse pass per output.

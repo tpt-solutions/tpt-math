@@ -6,6 +6,8 @@ All notable changes to this crate are documented here. Format based on
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-20
+
 ### Fixed
 
 - `numerical_gradient` scales its step with the coordinate, `h · max(1, |xᵢ|)`. An absolute step rounded to zero far from the origin and reported a flat gradient, which made the optimiser declare false convergence. Results are unchanged for `|xᵢ| ≤ 1`.

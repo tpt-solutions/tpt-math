@@ -7,6 +7,8 @@ and this project adheres to SemVer.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-20
+
 ### Added
 
 - `Grid` for uniform 1–3D structured grids with per-axis `Boundary`

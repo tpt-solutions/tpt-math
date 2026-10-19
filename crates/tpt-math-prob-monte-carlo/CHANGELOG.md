@@ -6,6 +6,8 @@ All notable changes to this crate are documented here. Format based on
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-10-20
+
 ### Added
 
 - `integrate_par` behind the new `rayon` feature: `integrate` over 64 independent `SplitMix64` streams, merged in a fixed order. The result depends only on the seed and `n`, not on the thread count. It is a different sample from `integrate` with the same seed.

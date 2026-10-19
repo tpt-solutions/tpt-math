@@ -6,6 +6,8 @@ All notable changes to this crate are documented here. Format based on
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-20
+
 ### Changed
 
 - Sums and products are ordered by their printed form. `simplify` is now a normal form: a second pass returns the first pass's output. The order of terms in a simplified sum or product can differ from earlier versions.

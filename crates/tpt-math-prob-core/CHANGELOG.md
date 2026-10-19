@@ -6,6 +6,8 @@ All notable changes to this crate are documented here. Format based on
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-10-20
+
 ### Added
 
 - `special` module (requires `std`): `ln_gamma`, `gamma`, `ln_beta`, `beta`, `ln_binomial`, `ln_factorial`, `xlogy`, `gamma_p`/`gamma_q`, `regularized_incomplete_beta`, `erf`/`erfc`, `standard_normal_cdf`/`pdf`/`quantile`. Consolidates the two previously duplicated copies in `tpt-math-stats` and `tpt-math-prob-bayes`.

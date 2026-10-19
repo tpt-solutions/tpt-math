@@ -6,6 +6,8 @@ All notable changes to this crate are documented here. Format based on
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-20
+
 ### Added
 
 - `Variable::abs` (`Op::Abs`), with derivative `sign(x)` and `0` at the kink.

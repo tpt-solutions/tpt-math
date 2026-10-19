@@ -6,6 +6,8 @@ All notable changes to this crate are documented here. Format based on
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-20
+
 ### Changed
 
 - The special functions now live in `tpt-math-prob-core::special`, shared with `tpt-math-prob-bayes`. This module re-exports them under the existing names.

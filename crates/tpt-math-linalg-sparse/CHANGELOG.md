@@ -7,6 +7,8 @@ and this project adheres to SemVer.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-20
+
 ### Added
 
 - `gmres_right_preconditioned_with_report`: GMRES returning a `SolveReport` for every outcome. The plain `gmres` and `gmres_right_preconditioned` report the same cases as errors, as before.

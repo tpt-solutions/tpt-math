@@ -49,7 +49,7 @@ Iterative routines (SVD sweeps, eigenvector iteration) return
 | `alloc` | `["tpt-math-numeric/alloc"]` | Dynamic vectors/matrices always need an allocator. |
 | `simd` | `["alloc", "dep:tpt-simd-blas"]` | Route `DMatrix * DMatrix`, `DMatrix * DVector`, `DVector::dot` and `norm` to tpt-simd-blas for `f32`/`f64` (other scalar types use the generic loops). Off by default: results reassociate sums, so they can differ from the scalar loops by a few ulps (tpt-simd ADR 0003, tier 2). Adds a `T: 'static` bound to those operations. Enable `simd-runtime` to detect AVX2+FMA at run time. |
 | `rayon` | `["std", "dep:rayon"]` | Multi-threaded `DMatrix::<f64>::par_mul`. Results are bitwise equal to `*`. |
-| `simd-runtime` | `["simd", "tpt-simd-blas/runtime-dispatch"]` |  |
+| `simd-runtime` | `["simd", "tpt-simd-blas/runtime-dispatch"]` | As `simd`, with AVX2+FMA detected at run time. The `simd` features need Rust 1.95 or later; the default build stays at 1.85. |
 
 ## Example
 

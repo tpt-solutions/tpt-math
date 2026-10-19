@@ -6,6 +6,8 @@ All notable changes to this crate are documented here. Format based on
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-20
+
 ### Added
 
 - `adaptive` module: `run_adaptive_metropolis`, adaptive random-walk Metropolis with the Haario proposal covariance (`2.38²/d` scaling), adapted until a caller-chosen iteration and frozen afterwards.

@@ -6,6 +6,8 @@ All notable changes to this crate are documented here. Format based on
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-20
+
 ### Added
 
 - `report` module: `SolveStatus` (`Converged`, `NotConverged`, `Breakdown`) and `SolveReport<T>` { status, iterations, residual }, shared by the solver crates.

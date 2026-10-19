@@ -7,6 +7,8 @@ and this project adheres to semantic versioning.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-20
+
 ### Added
 
 - `try_dijkstra` and `try_astar`, returning `Result`; `GraphError::InvalidWeight`; the `AStarPath` alias.

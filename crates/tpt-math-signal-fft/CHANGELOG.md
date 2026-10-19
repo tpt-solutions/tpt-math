@@ -6,6 +6,8 @@ All notable changes to this crate are documented here. Format based on
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-10-20
+
 ### Added
 
 - `Fft::rfft` and `Fft::irfft`: real-input transforms returning the `n/2 + 1` non-redundant bins. For even `n` they use one complex transform of length `n/2`. Checked against the full transform for even and odd lengths.

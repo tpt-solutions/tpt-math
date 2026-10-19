@@ -6,6 +6,8 @@ All notable changes to this crate are documented here. Format based on
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-10-20
+
 ### Fixed
 
 - `student_t_cdf` lost the centre of the distribution for small `|x|`, because it evaluated the incomplete beta at an argument that rounds to 1. It now uses the `P(|T| ≤ |x|)` identity in whichever form is accurate for that `x`.

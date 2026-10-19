@@ -6,6 +6,8 @@ All notable changes to this crate are documented here. Format based on
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-20
+
 - `Mat<U, V>` scalar `*` and `/`.
 - `Vec::norm` and `Vec::dot`. Both return a bare scalar: unit algebra for `U * U` is not modelled.
 - `Mat::solve` (`A x = b`, `x: Vec<V>`) and `Mat::inverse` (`Mat<V, U>`) for `f64`, with the dense backend's error on singular input.

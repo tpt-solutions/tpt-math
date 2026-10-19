@@ -7,6 +7,8 @@ and this project adheres to SemVer.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-20
+
 ### Fixed
 
 - `Pchip::new` accepts two nodes (it used to index out of bounds).

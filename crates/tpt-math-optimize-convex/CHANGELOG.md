@@ -6,6 +6,8 @@ All notable changes to this crate are documented here. Format based on
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-20
+
 ### Added
 
 - `QpSolution::iterations`: interior-point iterations performed before the solve was accepted. Adding this field breaks code that builds `QpSolution` with a struct literal.

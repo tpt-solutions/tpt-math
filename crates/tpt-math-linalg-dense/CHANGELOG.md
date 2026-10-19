@@ -7,6 +7,8 @@ and this project adheres to SemVer.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-20
+
 ### Added
 
 - `DMatrix::<f64>::par_mul` behind the new `rayon` feature: the product with output columns computed in parallel. The result is bitwise equal to the serial scalar product (without the `simd` feature, that is `*`).

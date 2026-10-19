@@ -7,6 +7,8 @@ and this project adheres to SemVer.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-20
+
 ### Changed
 
 - **Breaking (0.2.0):** depends on `tpt-math-geometry` 0.2.0, whose types appear in this crate's public API.

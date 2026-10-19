@@ -7,6 +7,8 @@ and this project adheres to SemVer.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-20
+
 ### Added
 
 - `Matrix::inverse_with_tolerance` and `inverse_with_relative_tolerance`. `inverse()` keeps its `1e-12` default.

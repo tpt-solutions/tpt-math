@@ -6,6 +6,8 @@ All notable changes to this crate are documented here. Format based on
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-10-20
+
 ### Added
 
 - `FirFilter::filter_par` behind the new `rayon` feature. The output is bitwise identical to `filter`.

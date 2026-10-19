@@ -7,6 +7,8 @@ and this project adheres to semantic versioning.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-20
+
 ### Added
 
 - `ComplexDMatrix::lu_with_tolerance` (absolute pivot threshold) and `lu_with_relative_tolerance` (scale-invariant). `lu()` keeps its `1e-12` default. A zero matrix is always rejected.
