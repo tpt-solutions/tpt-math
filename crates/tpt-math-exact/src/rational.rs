@@ -451,7 +451,9 @@ impl FromStr for BigRational {
         let mut value = parse_digits(digits).ok_or(Invalid)?;
 
         // value * 10^(exponent - frac_len)
-        let shift = exponent.checked_sub(frac_digits.len() as i64).ok_or(Invalid)?;
+        let shift = exponent
+            .checked_sub(frac_digits.len() as i64)
+            .ok_or(Invalid)?;
         let power = u32::try_from(shift.unsigned_abs()).map_err(|_| Invalid)?;
         let scale = BigInt::from(10u32).pow(power);
         if negative {
@@ -807,7 +809,11 @@ mod tests {
             1.0 / 3.0,
         ];
         for &x in &xs {
-            assert_eq!(BigRational::from_float(x).unwrap().nearest_f64(), x, "{x:e}");
+            assert_eq!(
+                BigRational::from_float(x).unwrap().nearest_f64(),
+                x,
+                "{x:e}"
+            );
         }
     }
 
@@ -875,7 +881,10 @@ mod tests {
         let (lo, hi) = q(2, 1).sqrt_bounds(20).unwrap();
         assert!(&lo * &lo <= q(2, 1));
         assert!(&hi * &hi >= q(2, 1));
-        assert_eq!(&hi - &lo, BigRational::new(BigInt::one(), BigInt::one() << 20usize));
+        assert_eq!(
+            &hi - &lo,
+            BigRational::new(BigInt::one(), BigInt::one() << 20usize)
+        );
 
         let (lo, hi) = q(9, 4).sqrt_bounds(10).unwrap();
         assert!(lo <= q(3, 2) && q(3, 2) <= hi);
