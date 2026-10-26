@@ -1,4 +1,5 @@
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use criterion::{criterion_group, criterion_main, Criterion};
+use std::hint::black_box;
 use tpt_math_prob_dist::density::{gamma_cdf, gamma_quantile, normal_cdf, student_t_cdf};
 
 fn bench_density(c: &mut Criterion) {

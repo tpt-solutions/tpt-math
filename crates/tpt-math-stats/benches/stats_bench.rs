@@ -1,4 +1,5 @@
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use criterion::{criterion_group, criterion_main, Criterion};
+use std::hint::black_box;
 use tpt_math_stats::{
     kolmogorov_smirnov_two_sample, try_median, try_quantile, two_sample_t_test, variance,
 };

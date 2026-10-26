@@ -1,4 +1,5 @@
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use criterion::{criterion_group, criterion_main, Criterion};
+use std::hint::black_box;
 use tpt_math_prob_core::SplitMix64;
 use tpt_math_prob_monte_carlo::integrate;
 

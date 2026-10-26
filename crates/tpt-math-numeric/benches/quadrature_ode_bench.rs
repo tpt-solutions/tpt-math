@@ -1,4 +1,5 @@
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use criterion::{criterion_group, criterion_main, Criterion};
+use std::hint::black_box;
 use tpt_math_numeric::ode::dopri5_integrate;
 use tpt_math_numeric::quadrature::{adaptive_gauss_kronrod, gauss_kronrod_15};
 use tpt_math_numeric::roots::brent;

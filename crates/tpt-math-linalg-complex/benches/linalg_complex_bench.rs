@@ -1,4 +1,5 @@
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use criterion::{criterion_group, criterion_main, Criterion};
+use std::hint::black_box;
 use tpt_math_linalg_complex::{Complex, ComplexDMatrix, ComplexDVector};
 
 /// A diagonally dominant complex matrix of order `n`, so it is well conditioned.

@@ -1,4 +1,5 @@
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use criterion::{criterion_group, criterion_main, Criterion};
+use std::hint::black_box;
 use tpt_math_units_dyn::{convert, Dimension, DynQuantity};
 
 fn bench_units(c: &mut Criterion) {
