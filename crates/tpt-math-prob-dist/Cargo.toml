@@ -14,8 +14,9 @@ keywords = ["probability", "distributions", "statistics", "random", "sampling"]
 categories = ["mathematics", "science", "algorithms"]
 
 [dependencies]
-# `rand` 0.9 is the `rand_core`/`RngCore` version that `rand_distr` 0.5 is built
-# against; the adapter in this crate must implement *that* `RngCore`.
+# `rand` 0.10 is the version `rand_distr` 0.6 is built against; the adapter in
+# this crate must implement `rand::TryRng` (infallible, so `rand::Rng` is
+# blanket-implemented for it).
 rand = { workspace = true }
 rand_distr = { workspace = true }
 tpt-math-prob-core = { workspace = true, default-features = false }

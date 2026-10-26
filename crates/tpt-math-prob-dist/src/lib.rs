@@ -7,8 +7,8 @@
 //! This crate wraps the [`rand_distr`] distributions and makes them sampleable
 //! through the minimal [`tpt_math_prob_core::Rng`]/[`Distribution`](`tpt_math_prob_core::Distribution`)
 //! traits used across the `tpt-math-prob-*` family. Because our [`Rng`] is far
-//! smaller than [`rand`]'s [`RngCore`], we provide [`CoreRng`]: a thin adapter
-//! that turns any of our RNGs into a [`rand::RngCore`] so that every
+//! smaller than [`rand`]'s [`rand::Rng`], we provide [`CoreRng`]: a thin adapter
+//! that turns any of our RNGs into a [`rand::TryRng`] so that every
 //! [`rand_distr`] distribution can be sampled without pulling in `rand`'s own
 //! generators.
 //!
@@ -56,16 +56,19 @@ pub use tpt_math_prob_core::{Distribution, Rng, Sampler, SplitMix64, Standard};
 /// The raw [`rand_distr`] distributions, re-exported for direct use.
 ///
 /// Everything in this module is the unmodified `rand_distr` API, which samples
-/// through [`rand::RngCore`]. To sample through our [`Rng`], wrap a value in
+/// through [`rand::Rng`]. To sample through our [`Rng`], wrap a value in
 /// [`Dist`] (or use the constructor functions like [`normal`]).
 pub use rand_distr;
 
-use rand::distr::Distribution as RandDistribution;
-use rand::rand_core::RngCore;
+use core::convert::Infallible;
 
-/// Adapter turning one of our [`Rng`]s into a [`rand::RngCore`].
+use rand::distr::Distribution as RandDistribution;
+use rand::TryRng;
+
+/// Adapter turning one of our [`Rng`]s into a [`rand::TryRng`].
 ///
-/// `rand_distr` distributions are generic over [`rand::RngCore`]; our
+/// `rand_distr` distributions are generic over [`rand::Rng`], which `rand`
+/// blanket-implements for every infallible [`rand::TryRng`]. Our
 /// [`tpt_math_prob_core::Rng`] is deliberately much smaller (it only promises
 /// [`next_u64`](`Rng::next_u64`)). `CoreRng` supplies the missing methods in
 /// terms of `next_u64`, so a distribution can be sampled as
@@ -76,7 +79,7 @@ use rand::rand_core::RngCore;
 /// # Examples
 ///
 /// ```
-/// use rand::RngCore;
+/// use rand::Rng;
 /// use tpt_math_prob_core::SplitMix64;
 /// use tpt_math_prob_dist::CoreRng;
 ///
@@ -88,28 +91,31 @@ use rand::rand_core::RngCore;
 /// ```
 #[derive(Debug)]
 pub struct CoreRng<R: ?Sized>(pub R);
-impl<R: Rng + ?Sized> RngCore for CoreRng<R> {
+impl<R: Rng + ?Sized> TryRng for CoreRng<R> {
+    type Error = Infallible;
+
     #[inline]
-    fn next_u32(&mut self) -> u32 {
-        (self.0.next_u64() >> 32) as u32
+    fn try_next_u32(&mut self) -> Result<u32, Infallible> {
+        Ok((self.0.next_u64() >> 32) as u32)
     }
 
     #[inline]
-    fn next_u64(&mut self) -> u64 {
-        self.0.next_u64()
+    fn try_next_u64(&mut self) -> Result<u64, Infallible> {
+        Ok(self.0.next_u64())
     }
 
     #[inline]
-    fn fill_bytes(&mut self, dst: &mut [u8]) {
+    fn try_fill_bytes(&mut self, dst: &mut [u8]) -> Result<(), Infallible> {
         let mut chunks = dst.chunks_exact_mut(8);
         for chunk in chunks.by_ref() {
-            chunk.copy_from_slice(&self.next_u64().to_le_bytes());
+            chunk.copy_from_slice(&self.0.next_u64().to_le_bytes());
         }
         let rem = chunks.into_remainder();
         if !rem.is_empty() {
-            let bits = self.next_u64().to_le_bytes();
+            let bits = self.0.next_u64().to_le_bytes();
             rem.copy_from_slice(&bits[..rem.len()]);
         }
+        Ok(())
     }
 }
 
@@ -462,6 +468,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rand::Rng as _;
     use tpt_math_prob_core::{Distribution as CoreDist, Rng as CoreRngTrait, SplitMix64};
 
     /// Sample `n` values from `dist` via our [`Rng`] and return the mean.
