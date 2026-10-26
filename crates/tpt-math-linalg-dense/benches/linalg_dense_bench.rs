@@ -1,14 +1,23 @@
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
 use tpt_math_linalg_dense::{DMatrix, DVector};
 
-/// Deterministic, well-conditioned test data (diagonally dominant for LU).
-fn well_conditioned(n: usize) -> DMatrix<f64> {
+/// A diagonally dominant, non-symmetric matrix: solvable and well conditioned.
+fn dominant(n: usize) -> DMatrix<f64> {
     DMatrix::from_fn(n, n, |i, j| {
         if i == j {
-            n as f64
+            n as f64 + 1.0
         } else {
             ((i * 3 + j * 5) as f64).sin()
         }
+    })
+}
+
+/// A symmetric positive-definite matrix, `B Bᵀ + n I`, for Cholesky.
+fn spd(n: usize) -> DMatrix<f64> {
+    let b = DMatrix::from_fn(n, n, |i, j| ((i * 7 + j * 3) as f64).cos());
+    let bbt = b.clone() * b.transpose();
+    DMatrix::from_fn(n, n, |i, j| {
+        bbt[(i, j)] + if i == j { n as f64 } else { 0.0 }
     })
 }
 
@@ -21,13 +30,11 @@ fn bench_matrix_vector(c: &mut Criterion) {
 }
 
 fn bench_matrix_matrix(c: &mut Criterion) {
-    for &n in &[64_usize, 256, 512] {
-        let m = DMatrix::from_fn(n, n, |i, j| (i * 7 + j * 3) as f64);
-        let k = DMatrix::from_fn(n, n, |i, j| (i * 5 + j * 11) as f64);
-        c.bench_function(&format!("dmatrix_dmatrix_mul_{n}"), |b| {
-            b.iter(|| black_box(m.clone()) * black_box(k.clone()))
-        });
-    }
+    let m = DMatrix::from_fn(64, 64, |i, j| (i * 7 + j * 3) as f64);
+    let n = DMatrix::from_fn(64, 64, |i, j| (i * 5 + j * 11) as f64);
+    c.bench_function("dmatrix_dmatrix_mul_64", |b| {
+        b.iter(|| black_box(m.clone()) * black_box(n.clone()))
+    });
 }
 
 /// `solve` (which factors on every call) and `Lu::new` at the sizes in the
@@ -48,26 +55,17 @@ fn bench_lu(c: &mut Criterion) {
 }
 
 fn bench_inverse(c: &mut Criterion) {
-    let m = well_conditioned(32);
+    let m = dominant(128);
+    c.bench_function("dmatrix_inverse_128", |b| {
+        b.iter(|| black_box(&m).inverse().unwrap())
+    });
+}
+
+fn bench_inverse_32(c: &mut Criterion) {
+    let m = dominant(32);
     c.bench_function("dmatrix_inverse_32", |b| {
         b.iter(|| black_box(&m).inverse().unwrap())
     });
-    for &n in &[64_usize, 256] {
-        let m = well_conditioned(n);
-        c.bench_function(&format!("dmatrix_inverse_{n}"), |b| {
-            b.iter(|| black_box(&m).inverse().unwrap())
-        });
-    }
-}
-
-fn bench_solve(c: &mut Criterion) {
-    for &n in &[64_usize, 256] {
-        let m = well_conditioned(n);
-        let rhs = DVector::from_fn(n, |i| i as f64);
-        c.bench_function(&format!("dmatrix_solve_{n}"), |b| {
-            b.iter(|| black_box(&m).solve(black_box(&rhs)).unwrap())
-        });
-    }
 }
 
 fn bench_det(c: &mut Criterion) {
@@ -106,7 +104,12 @@ criterion_group!(
     benches,
     bench_matrix_vector,
     bench_matrix_matrix,
+    bench_lu,
     bench_inverse,
-    bench_solve
+    bench_inverse_32,
+    bench_det,
+    bench_cholesky,
+    bench_svd,
+    bench_matrix_exp
 );
 criterion_main!(benches);
