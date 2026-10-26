@@ -16,7 +16,7 @@ jobs:
         with:
           fetch-depth: 0
       - uses: dtolnay/rust-toolchain@stable
-      - uses: release-plz/action@v0.5.142
+      - uses: release-plz/action@v0.5.145
         with:
           command: release-pr
         env:
