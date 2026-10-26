@@ -32,7 +32,7 @@ Crates are organised into layers; lower layers never depend on higher ones.
 ### Exact & linear algebra
 | Crate | Wraps / consolidates | `no_std` | Notes |
 |-------|----------------------|----------|-------|
-| `tpt-math-exact` | `num-bigint`, `num-rational` | yes (alloc) | Exact rational + interval arithmetic. |
+| `tpt-math-exact` | `num-bigint`, `num-integer` | yes (alloc) | Exact rational + interval arithmetic. |
 | `tpt-math-linalg-dense` | — (in-house; was `faer`) | yes (alloc) | Dense `DVector`/`DMatrix`, column-major `Vec` storage; storage backend for `tpt-math-linalg` / `-optimize`. Optional `simd` (via `tpt-simd-blas`) and `rayon` features. |
 | `tpt-math-linalg` | `tpt-math-linalg-dense` (in-house) | yes | Dimensionally-checked vectors/matrices over the in-house dense backend. |
 | `tpt-math-linalg-fixed` | — (in-house) | yes | Const-generic fixed-size vectors/matrices + closed-form det/inverse; no allocator. |

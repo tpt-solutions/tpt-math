@@ -77,11 +77,12 @@ the raw `rand_distr` module is re-exported for direct use.
 ## Notes
 
 - `CoreRng` is the adapter in the other direction: it turns any
-  `tpt_math_prob_core::Rng` into a `rand::RngCore`, so `rand_distr`
+  `tpt_math_prob_core::Rng` into a `rand::TryRng` (infallible, so `rand::Rng`
+  applies), so `rand_distr`
   distributions can be sampled directly
   (`dist.sample(&mut CoreRng(&mut rng))`). It is zero-cost and stateless.
-- The `rand` version matters: `rand_distr` 0.5 is built against `rand` 0.9, and
-  `CoreRng` implements *that* `RngCore`. Mixing a different `rand` major
+- The `rand` version matters: `rand_distr` 0.6 is built against `rand` 0.10, and
+  `CoreRng` implements *that* `TryRng`. Mixing a different `rand` major
   version in the same graph will not type-check.
 - Constructor errors are flattened to `&'static str` to keep the public surface
   allocation-free and `no_std`-friendly; use `rand_distr`'s own `new` if you

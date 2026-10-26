@@ -6,6 +6,17 @@ All notable changes to this crate are documented here. Format based on
 
 ## [Unreleased]
 
+### Changed
+
+- `BigRational` is now implemented in this crate instead of re-exported from `num-rational`. It is always stored in lowest terms with a positive denominator. The `num-rational` dependency is removed and `num-integer` 0.1 is added; `num-bigint` stays on the 0.4 line.
+
+### Added
+
+- `BigRational` methods beyond the `num-rational` surface: `from_float` (exact conversion of an `f64`), `to_f64_down` and `to_f64_up` (directed-rounding conversion to `f64`), `sqrt_bounds` (rational bounds on a square root), `continued_fraction`, `from_continued_fraction` and `limit_denominator` (best rational approximations), and `to_decimal_string`.
+- `BigRational::pow`, `floor`, `ceil`, `trunc`, `fract`, `round`, `recip` and `abs`, plus `numer`, `denom` and `is_integer`.
+- `FromStr` for `BigRational`, accepting `p/q` fractions and decimals such as `-1.25e3`, with `ParseRationalError` (`Invalid`, `ZeroDenominator`) as the error type.
+- `Zero`, `One`, `ToPrimitive`, `FromPrimitive`, `Ord`, `Hash` and `Display` for `BigRational`, and the usual arithmetic operators (owned and borrowed, including the assigning forms).
+
 ## [0.1.1] - 2026-10-20
 
 ### Added

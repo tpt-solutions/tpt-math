@@ -1,9 +1,8 @@
 # tpt-math-exact
 
 Exact rational and interval arithmetic for the `tpt-math` substrate. It
-thin-wraps [`num-bigint`](https://crates.io/crates/num-bigint) and
-[`num-rational`](https://crates.io/crates/num-rational) to expose
-arbitrary-precision rationals, and layers a generic `Interval<T>` on top so
+builds on [`num-bigint`](https://crates.io/crates/num-bigint) to provide its own
+arbitrary-precision `BigRational`, and layers a generic `Interval<T>` on top so
 that rigorous bounds can be computed without ever accumulating floating-point
 rounding error.
 
@@ -19,7 +18,7 @@ not an umbrella crate; inside the workspace it depends only on
 ## Features
 
 - `std` *(default)* — enables the `std` feature of `tpt-math-numeric`,
-  `num-bigint`, `num-rational` and `num-traits`.
+  `num-bigint`, `num-integer` and `num-traits`.
 - `alloc` — enables `tpt-math-numeric/alloc` for `no_std + alloc` consumers.
 - `no_std` support: the crate is `#![no_std]`, but it always declares
   `extern crate alloc` because arbitrary-precision integers allocate. An
@@ -61,6 +60,23 @@ assert_eq!(a.intersect(&b), Some(Interval::new(rat(-1), rat(2))));
 `Rational` is an alias for `BigRational`; `BigInt` and `BigUint` are re-exported
 too, so consumers normally need only this crate.
 
+## Rational numbers
+
+`BigRational` is always held in lowest terms with a positive denominator, so
+equality and hashing agree with numeric equality. Beyond the arithmetic
+operators it offers exact `from_float`, `pow`, `floor`/`ceil`/`trunc`/`fract`/
+`round`, `FromStr` (`"3/4"`, `"-1.25e3"`), directed-rounding `to_f64_down` and
+`to_f64_up`, `sqrt_bounds`, continued fractions with `limit_denominator`, and
+`to_decimal_string`.
+
+```rust
+use tpt_math_exact::Rational;
+
+let x: Rational = "-1.25e1".parse().unwrap();
+assert_eq!(x, Rational::new((-25).into(), 2.into()));
+assert!(x.to_f64_down() <= -12.5);
+```
+
 ## Rigorous numerics
 
 The `roots` module and `certify` give enclosures that provably contain the
@@ -96,7 +112,7 @@ answer:
   Addition and subtraction use two endpoint operations each.
 - `midpoint` additionally requires `Div` and `FromPrimitive` on the endpoint
   type, and is exact for rationals (no "average of two bignums" rounding).
-- `num-bigint` and `num-rational` are dual-licensed `MIT OR Apache-2.0`, in line
+- `num-bigint` and `num-integer` are dual-licensed `MIT OR Apache-2.0`, in line
   with the workspace policy.
 
 ## License
