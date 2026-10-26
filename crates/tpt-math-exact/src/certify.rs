@@ -10,10 +10,9 @@
 use alloc::{vec, vec::Vec};
 use core::fmt;
 
-use num_rational::BigRational;
-use num_traits::{One, Signed, Zero};
+use num_traits::{One, ToPrimitive, Zero};
 
-use crate::{Interval, Rational};
+use crate::{BigRational, Interval, Rational};
 
 /// Why a certified solve could not produce an enclosure.
 #[derive(Clone, Debug, PartialEq)]
@@ -223,7 +222,6 @@ pub fn certified_solve(a: &[f64], b: &[f64]) -> Result<Vec<Interval<Rational>>, 
 }
 
 fn rat_to_f64(x: &Rational) -> f64 {
-    use num_traits::ToPrimitive;
     x.to_f64().unwrap_or(f64::INFINITY)
 }
 

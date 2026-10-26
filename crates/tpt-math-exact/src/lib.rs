@@ -1,10 +1,12 @@
 #![no_std]
 //! Arbitrary-precision rational arithmetic and interval arithmetic.
 //!
-//! This crate thin-wraps [`num_bigint`] and [`num_rational`] to expose exact
-//! rational numbers ([`BigRational`]), and layers an [`Interval`] type on top
-//! for rigorous (rounding-error-free) bounds. Because the bounds are exact
-//! rationals, interval arithmetic here never accumulates floating-point error.
+//! Arbitrary-precision rational arithmetic and interval arithmetic.
+//!
+//! This crate builds on [`num_bigint`] to provide exact rational numbers
+//! ([`BigRational`]), and layers an [`Interval`] type on top for rigorous
+//! (rounding-error-free) bounds. Because the bounds are exact rationals,
+//! interval arithmetic here never accumulates floating-point error.
 //!
 //! # Features
 //!
@@ -12,13 +14,14 @@
 //! * `alloc` — signal an allocator is available (`no_std + alloc`).
 //!
 //! [`num_bigint`]: num_bigint
-//! [`num_rational`]: num_rational
 
 extern crate alloc;
 
 pub use num_bigint::{BigInt, BigUint};
-pub use num_rational::BigRational;
 pub use tpt_math_numeric as numeric;
+
+mod rational;
+pub use rational::BigRational;
 
 pub mod certify;
 pub mod roots;
@@ -36,8 +39,6 @@ pub type Rational = BigRational;
 ///
 /// ```
 /// use tpt_math_exact::{Interval, Rational};
-/// use num_rational::BigRational;
-/// use num_traits::One;
 ///
 /// let a = Interval::new(Rational::new(1.into(), 1.into()), Rational::new(2.into(), 1.into()));
 /// let b = Interval::new(Rational::new(3.into(), 1.into()), Rational::new(4.into(), 1.into()));
@@ -269,7 +270,6 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use num_rational::BigRational;
 
     fn rat(n: i64) -> BigRational {
         BigRational::new(n.into(), 1.into())
