@@ -190,6 +190,9 @@ jobs:
       - name: Check against the PR base branch
         if: github.event_name == 'pull_request'
         run: cargo semver-checks check-release --workspace --baseline-rev ${{ github.event.pull_request.base.sha }}
+      # tpt-math-splat has never been published, so it has no crates.io baseline
+      # and the registry lookup fails the whole job. Exclude it until its first
+      # release; drop the flag once it is on crates.io.
       - name: Check against the crates.io baseline
         if: github.event_name == 'push'
-        run: cargo semver-checks check-release --workspace
+        run: cargo semver-checks check-release --workspace --exclude tpt-math-splat
