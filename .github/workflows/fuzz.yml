@@ -26,6 +26,11 @@ jobs:
         with:
           tool: cargo-fuzz
       - name: Fuzz ${{ matrix.target }}
+        # The repo-root rust-toolchain.toml pins stable, which overrides the
+        # default set by dtolnay/rust-toolchain. Sanitizer flags need nightly,
+        # so force it here. RUSTUP_TOOLCHAIN takes precedence over directory overrides.
+        env:
+          RUSTUP_TOOLCHAIN: nightly
         run: cargo fuzz run --fuzz-dir fuzz ${{ matrix.target }} -- -max_total_time=300
       - name: Keep any crash reproducer
         if: failure()

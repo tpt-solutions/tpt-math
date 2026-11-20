@@ -359,10 +359,10 @@ impl FirFilter {
             let first = (i + delay + 1).saturating_sub(n);
             let last = (i + delay + 1).min(m);
             let mut acc = 0.0;
-            for k in first..last {
+            for (k, &h) in self.coeffs.iter().enumerate().take(last).skip(first) {
                 let t = i + delay - k;
                 let x = if t >= i { signal[t] } else { history[t % m] };
-                acc += self.coeffs[k] * x;
+                acc += h * x;
             }
             history[i % m] = signal[i];
             signal[i] = acc;

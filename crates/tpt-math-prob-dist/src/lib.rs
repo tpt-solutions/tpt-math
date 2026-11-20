@@ -402,39 +402,75 @@ where
 
 dist!(
     /// `Normal` (Gaussian) distribution, `N(mean, std_dev)`.
-    normal, Normal, Normal, (f64, f64), f64
+    normal,
+    Normal,
+    Normal,
+    (f64, f64),
+    f64
 );
 dist!(
     /// `LogNormal` distribution.
-    lognormal, LogNormal, LogNormal, (f64, f64), f64
+    lognormal,
+    LogNormal,
+    LogNormal,
+    (f64, f64),
+    f64
 );
 dist!(
     /// `Exp` (exponential) distribution with rate `lambda`.
-    exp, Exp, Exp, f64, f64
+    exp,
+    Exp,
+    Exp,
+    f64,
+    f64
 );
 dist!(
     /// `Gamma` distribution with shape and scale.
-    gamma, Gamma, Gamma, (f64, f64), f64
+    gamma,
+    Gamma,
+    Gamma,
+    (f64, f64),
+    f64
 );
 dist!(
     /// `Beta` distribution with shape parameters `alpha`, `beta`.
-    beta, Beta, Beta, (f64, f64), f64
+    beta,
+    Beta,
+    Beta,
+    (f64, f64),
+    f64
 );
 dist!(
     /// `ChiSquared` distribution with `k` degrees of freedom.
-    chi_squared, ChiSquared, ChiSquared, f64, f64
+    chi_squared,
+    ChiSquared,
+    ChiSquared,
+    f64,
+    f64
 );
 dist!(
     /// Student's `t` distribution with `nu` degrees of freedom.
-    student_t, StudentT, StudentT, f64, f64
+    student_t,
+    StudentT,
+    StudentT,
+    f64,
+    f64
 );
 dist!(
     /// `Cauchy` distribution with `median` and `scale`.
-    cauchy, Cauchy, Cauchy, (f64, f64), f64
+    cauchy,
+    Cauchy,
+    Cauchy,
+    (f64, f64),
+    f64
 );
 dist!(
     /// `Poisson` distribution with rate `lambda` (samples returned as `u64`).
-    poisson, Poisson, Poisson, f64, u64
+    poisson,
+    Poisson,
+    Poisson,
+    f64,
+    u64
 );
 
 /// `Uniform` distribution over an inclusive-exclusive range `[low, high)`.
