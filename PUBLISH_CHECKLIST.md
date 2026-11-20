@@ -8,13 +8,12 @@ not against the CHANGELOGs.
 The previous release (2026-10-20) put 28 crates and the facade on crates.io, each
 with a git tag `tpt-math-<crate>-v<version>` (facade: `tpt-math-v0.1.0`).
 
-Against the index today, 33 of the 34 workspace crates match their local version.
-The exception is `tpt-math-splat`, which has never been published.
-
-Crates whose published version is behind the local version: `exact`, `prob-dist`,
-`prob`, `tpt-math`. The first three are breaking changes, so they take a minor
-bump under the pre-1.0 policy. `tpt-math` moves with them because its public
-re-exports change.
+Before this release, 33 of the 34 workspace crates matched their local version. The
+exception was `tpt-math-splat`, which had never been published. Four crates were
+behind their local version: `exact`, `prob-dist`, `prob` and `tpt-math`. The first
+three were breaking changes, so they took a minor bump under the pre-1.0 policy.
+`tpt-math` moved with them because its public re-exports change. All five are now
+on crates.io (section 4).
 
 ## 2. Release queue
 
@@ -67,19 +66,24 @@ Decisions taken in this pass (reverse any of them before publishing):
 
 ## 4. Publish steps
 
-- [ ] Commit the version bumps, changelog and README changes, and the CI change.
-- [ ] `cargo publish -p tpt-math-splat`, then confirm it on the index.
-- [ ] `cargo publish -p tpt-math-exact`, then confirm.
-- [ ] `cargo publish -p tpt-math-prob-dist`, then confirm.
-- [ ] `cargo publish -p tpt-math-prob`, then confirm.
-- [ ] `cargo publish -p tpt-math`, then confirm.
+Published 2026-11-21, in queue order. Each dry run passed (for `prob` and the facade,
+after their dependencies were on the index), and each version was confirmed on the
+sparse index afterwards.
+
+- [x] Version bumps, changelog and README changes committed (`9f096ee` … `c437b2c`).
+- [x] `tpt-math-splat` 0.1.0
+- [x] `tpt-math-exact` 0.2.0
+- [x] `tpt-math-prob-dist` 0.2.0
+- [x] `tpt-math-prob` 0.2.0
+- [x] `tpt-math` 0.2.0 (facade). Root README and facade README updated to point at the
+      published 0.2.0.
 - [ ] Check docs.rs builds for all five at the new versions.
 - [ ] Tag: `tpt-math-splat-v0.1.0`, `tpt-math-exact-v0.2.0`,
       `tpt-math-prob-dist-v0.2.0`, `tpt-math-prob-v0.2.0`, `tpt-math-v0.2.0`.
-- [ ] Remove `--exclude tpt-math-splat` from the push step in
+- [x] Removed `--exclude tpt-math-splat` from the push step in
       `.github/workflows/ci.yml`.
-- [ ] Move each published crate's `## [Unreleased]` heading below the new version
-      heading if the new entries were not stamped before publishing.
+- [x] `## [Unreleased]` headings already sit above the stamped version headings
+      in all five CHANGELOGs.
 
 ## 5. Open items
 

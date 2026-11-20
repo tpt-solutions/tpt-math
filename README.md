@@ -156,9 +156,8 @@ Downstream repos depend only on the leaf / umbrella crates they need:
 ## Depending on `tpt-math`
 
 Every crate in `crates/*` is released to crates.io under its own version, so
-depend on the ones you need the usual way. The facade `tpt-math` 0.1.0 is on
-crates.io; its 0.2.0 release (with the `splat` feature) is not published yet, so
-use git for that until it is.
+depend on the ones you need the usual way. The facade `tpt-math` 0.2.0 (with the
+`splat` feature) is on crates.io, alongside 0.1.0.
 
 ```toml
 [dependencies]

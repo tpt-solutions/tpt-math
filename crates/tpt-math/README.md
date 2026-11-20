@@ -6,7 +6,7 @@ names.
 
 ```toml
 [dependencies]
-tpt-math = { git = "https://github.com/tpt-solutions/tpt-math", package = "tpt-math", features = ["linalg", "exact"] }
+tpt-math = { version = "0.2", features = ["linalg", "exact"] }
 ```
 
 | Feature        | Module          | Area                                                  |
