@@ -7,6 +7,8 @@ and this project adheres to SemVer.
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-11-21
+
 ### Added
 
 - Initial release: packed `Sym3`/`Sym4`, Cholesky / LDLᵀ, SPD inverse and
