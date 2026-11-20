@@ -993,7 +993,7 @@ dependencies = [
 
 [[package]]
 name = "tpt-math"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "tpt-math-autodiff",
  "tpt-math-exact",
@@ -1047,7 +1047,7 @@ dependencies = [
 
 [[package]]
 name = "tpt-math-exact"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "criterion",
  "num-bigint",
@@ -1204,7 +1204,7 @@ dependencies = [
 
 [[package]]
 name = "tpt-math-prob"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "tpt-math-prob-bayes",
  "tpt-math-prob-dist",
@@ -1231,7 +1231,7 @@ dependencies = [
 
 [[package]]
 name = "tpt-math-prob-dist"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "criterion",
  "rand",

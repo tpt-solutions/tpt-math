@@ -58,19 +58,19 @@ tpt-math-linalg-complex = { version = "0.2.0", path = "crates/tpt-math-linalg-co
 petgraph = { version = "0.8", default-features = false }
 tpt-math-units = { version = "0.1.0", path = "crates/tpt-math-units", default-features = false }
 tpt-math-units-dyn = { version = "0.1.1", path = "crates/tpt-math-units-dyn" }
-tpt-math-exact = { version = "0.1.1", path = "crates/tpt-math-exact" }
+tpt-math-exact = { version = "0.2.0", path = "crates/tpt-math-exact" }
 tpt-math-linalg = { version = "0.2.0", path = "crates/tpt-math-linalg" }
 tpt-math-linalg-fixed = { version = "0.2.0", path = "crates/tpt-math-linalg-fixed", default-features = false }
 tpt-math-geometry = { version = "0.2.0", path = "crates/tpt-math-geometry", default-features = false }
 tpt-math-spatial = { version = "0.2.0", path = "crates/tpt-math-spatial" }
 tpt-math-splat = { version = "0.1.0", path = "crates/tpt-math-splat", default-features = false }
 tpt-math-prob-core = { version = "0.1.1", path = "crates/tpt-math-prob-core", default-features = false }
-tpt-math-prob-dist = { version = "0.1.1", path = "crates/tpt-math-prob-dist" }
+tpt-math-prob-dist = { version = "0.2.0", path = "crates/tpt-math-prob-dist" }
 tpt-math-prob-bayes = { version = "0.2.0", path = "crates/tpt-math-prob-bayes" }
 tpt-math-prob-markov = { version = "0.1.2", path = "crates/tpt-math-prob-markov" }
 tpt-math-prob-monte-carlo = { version = "0.1.1", path = "crates/tpt-math-prob-monte-carlo" }
 tpt-math-prob-sampler = { version = "0.1.0", path = "crates/tpt-math-prob-sampler" }
-tpt-math-prob = { version = "0.1.0", path = "crates/tpt-math-prob" }
+tpt-math-prob = { version = "0.2.0", path = "crates/tpt-math-prob" }
 tpt-math-stats = { version = "0.2.0", path = "crates/tpt-math-stats" }
 tpt-math-autodiff-fwd = { version = "0.1.1", path = "crates/tpt-math-autodiff-fwd" }
 tpt-math-autodiff-rev = { version = "0.2.0", path = "crates/tpt-math-autodiff-rev" }
