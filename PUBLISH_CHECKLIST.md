@@ -1,134 +1,99 @@
-# crates.io Publish Checklist — next update release
+# crates.io Publish Checklist — current release queue
 
-Status as of 2026-10-20. Built from the `[Unreleased]` section of each crate's
-`CHANGELOG.md`, `todo.md`, `release-plz.toml` and the crate manifests. The repo
-has no git tags until section 6, so the CHANGELOGs were the source of truth.
+Status as of 2026-11-21. Versions checked against the crates.io sparse index,
+not against the CHANGELOGs.
 
-**Release status: published.** All 28 changed crates are on crates.io at the
-versions below, and each has a git tag. Items still open are in section 6.
+## 1. Where crates.io stands
 
-Commits on master:
+The previous release (2026-10-20) put 28 crates and the facade on crates.io, each
+with a git tag `tpt-math-<crate>-v<version>` (facade: `tpt-math-v0.1.0`).
 
-- `3187a22` — version bumps and the CHANGELOG heading merge
-- `2e8c74b` — CHANGELOG stamping and the linalg-dense README fix (the published commit)
-- CI commit — the semver job no longer excludes the facade or `pde-operators`
+Against the index today, 33 of the 34 workspace crates match their local version.
+The exception is `tpt-math-splat`, which has never been published.
 
-Tags: `tpt-math-<crate>-v<version>` for each of the 27 crates, and `tpt-math-v0.1.0`
-for the facade, all on `2e8c74b`.
+Crates whose published version is behind the local version: `exact`, `prob-dist`,
+`prob`, `tpt-math`. The first three are breaking changes, so they take a minor
+bump under the pre-1.0 policy. `tpt-math` moves with them because its public
+re-exports change.
 
-Version bumps follow pre-1.0 SemVer: a breaking change bumps the minor, anything
-else the patch.
+## 2. Release queue
 
----
+Publish in this order. Each crate depends only on crates earlier in the list or
+already on the index.
 
-## 1. Blockers — resolve before publishing
+| # | Crate | On crates.io | Local | Why |
+|---|---|---|---|---|
+| 1 | `tpt-math-splat` | — | 0.1.0 | New crate. Dry run passes. |
+| 2 | `tpt-math-exact` | 0.1.1 | **0.2.0** | Breaking: `BigRational` is now defined in this crate instead of re-exported from `num-rational`; `num-bigint` moves 0.4 → 0.5. |
+| 3 | `tpt-math-prob-dist` | 0.1.1 | **0.2.0** | Breaking: `CoreRng` implements `rand::TryRng` instead of `rand::RngCore` (rand 0.10). |
+| 4 | `tpt-math-prob` | 0.1.0 | **0.2.0** | Re-exports `tpt-math-prob-dist` as `dist`, so the breaking change reaches users only through a new `prob` release. Needs step 3 on the index first. |
+| 5 | `tpt-math` (facade) | 0.1.0 | **0.2.0** | Re-exports `exact` (breaking) and `prob`; adds the `splat` feature. Needs steps 1, 2 and 4 on the index first. |
 
-- [x] **Stale `release-plz.toml` comment.** Updated: the comment now says the
-      simd crates are published on crates.io.
-- [x] **`tpt-math-pde-operators` registry entry.** Present in `tpt-rust-map/registry.toml`
-      with `domain = "math.pde"`, `no_std = true`, `status = "git"`.
-- [x] **Refresh `Cargo.lock`** for `tpt-math-pde-operators`. Lockfile has it at 0.2.0.
-- [x] **Stray tracked file** named `- [ ] Dense QR, least squares`. Not in the repo
-      root and not tracked by git. Nothing to delete.
-- [x] **`tpt-math` facade.** Published in this release (0.1.0). The name was free
-      on crates.io (404) when rechecked before publishing.
-- [x] **Confirm current crates.io versions.** Checked. Two decisions followed from
-      it: `geometry` moved to 0.2.0 (not 0.1.2) because `from_matrix` now rejects
-      reflections, and `prob-markov` moved to 0.1.2 (not 0.2.0) because the
-      behaviour change does not change any signature.
+Not in the queue, with no release needed:
 
-## 2. Per-crate release plan
+- The other 29 crates pass the semver check against their published version
+  (section 3). Their local manifests now point at `exact` 0.2.0 or `prob-dist`
+  0.2.0 where they depend on them (`symbolic`, `autodiff`). Their published
+  versions still resolve the 0.1.x dependencies, so consumers are unaffected.
+  Release them only when they change; that release will pick up the new
+  dependency.
+- Benchmark files that moved to `std::hint::black_box`, and the `fir.rs` loop
+  tidy in `signal-filter`, are internal. They have no changelog entry and no
+  release.
 
-Released versions. The earlier suggested table was out of date: it predated the
-0.2.0 bumps. Now that every crate is published, this table records what went out.
+Decisions taken in this pass (reverse any of them before publishing):
 
-| Crate | Was on crates.io | Released | Unreleased changes |
-|---|---|---|---|
-| `tpt-math-numeric` | 0.1.0 | **0.2.0** | `report`, Gauss–Kronrod 15, adaptive GK, ODE, stiff, sensitivity; breaking (`non_exhaustive`) |
-| `tpt-math-prob-core` | 0.1.0 | 0.1.1 | `special` module; precision fixes for `erf`, `gamma`, `ln_binomial` |
-| `tpt-math-prob-dist` | 0.1.0 | 0.1.1 | `student_t_cdf` fix; density, quantile and moment families |
-| `tpt-math-prob-bayes` | 0.1.0 | **0.2.0** | `adaptive`, `hmc`, diagnostics; breaking |
-| `tpt-math-prob-markov` | 0.1.1 | 0.1.2 | `stationary` solves `πP = π` for periodic chains; Viterbi precompute |
-| `tpt-math-prob-monte-carlo` | 0.1.0 | 0.1.1 | `integrate_par` behind `rayon`; Welford variance |
-| `tpt-math-stats` | 0.1.0 | **0.2.0** | KDE, corrections, bootstrap, multiple testing; breaking |
-| `tpt-math-autodiff-fwd` | 0.1.0 | 0.1.1 | `Float` for `Dual`; `sqrt`, `powi`, `powf`, `tan`, `tanh`, `atan`, `abs` |
-| `tpt-math-autodiff-rev` | 0.1.0 | **0.2.0** | `Op` enum gained variants; breaking |
-| `tpt-math-autodiff` | 0.1.0 | 0.1.1 | `jacobian`, `hessian` (this crate had changes, so the earlier "no change" note was wrong) |
-| `tpt-math-symbolic` | 0.1.0 | **0.2.0** | `compile`, syntax; term-order behaviour change; breaking |
-| `tpt-math-optimize-general` | 0.1.0 | **0.2.0** | least squares, autodiff L-BFGS; breaking |
-| `tpt-math-optimize-convex` | 0.1.0 | **0.2.0** | `QpSolution` is `non_exhaustive`; breaking |
-| `tpt-math-signal-fft` | 0.1.0 | 0.1.1 | `rfft`/`irfft`, `stft`, `welch`, `fft_convolve` |
-| `tpt-math-signal-filter` | 0.1.0 | 0.1.1 | `filter_par` behind `rayon`; biquads, Butterworth, zero-phase |
-| `tpt-math-exact` | 0.1.0 | 0.1.1 | interval division, `newton_refine`, validated Euler, Krawczyk `certified_solve` |
-| `tpt-math-graph` | 0.1.0 | **0.2.0** | `try_dijkstra`, `try_astar`, `GraphError`, connectivity; breaking |
-| `tpt-math-interpolate` | 0.1.0 | **0.2.0** | `NaturalCubicSpline`, `MultilinearGrid`, RBF and Kriging in n-D; breaking |
-| `tpt-math-linalg-complex` | 0.1.0 | **0.2.0** | `simd_lu`, `det`, `product`; breaking |
-| `tpt-math-linalg-dense` | 0.1.0 | **0.2.0** | flat LU, Hessenberg/eigenvalues, banded, diagnostics; breaking |
-| `tpt-math-linalg-fixed` | 0.1.0 | **0.2.0** | `non_exhaustive` error types; breaking |
-| `tpt-math-linalg-sparse` | 0.1.0 | **0.2.0** | `SparseError::DimensionMismatch { what }`; operators, ordering, Lanczos/Arnoldi; breaking |
-| `tpt-math-linalg` | 0.1.0 | **0.2.0** | breaking (follows the linalg family) |
-| `tpt-math-geometry` | 0.1.1 | **0.2.0** | `from_matrix` returns `None` for reflections; breaking |
-| `tpt-math-spatial` | 0.1.0 | **0.2.0** | depends on geometry 0.2.0 (in its public API); `Screw::log` fix |
-| `tpt-math-units-dyn` | 0.1.0 | 0.1.1 | `solve` module behind `ode`, `optimize`, `autodiff`; `FromStr` accepts compound units |
-| `tpt-math-pde-operators` | — | **0.2.0** | **New crate** |
-| `tpt-math` (facade) | — | **0.1.0** | **New crate** |
-| `tpt-math-optimize`, `tpt-math-prob`, `tpt-math-prob-sampler`, `tpt-math-signal`, `tpt-math-units` | 0.1.0 | not released | No source change since 0.1.0 |
+- The facade goes to 0.2.0 rather than 0.1.1 because its `exact` re-exports
+  change type. The `splat` feature alone would have been a patch release.
+- Changelog entries for the new versions are stamped `2026-11-21`. Change the
+  date if publishing slips.
 
-Breaking releases (0.2.0): 17 of the 28. That is the 15 crates with breaking
-changes from the earlier session, plus `geometry` and `spatial`. Behaviour-only
-changes that did not need a minor bump: `geometry`'s `from_matrix` (listed as
-breaking in its changelog, see section 7), `prob-markov`, and `exact` (interval
-`new` now panics in release builds too).
+## 3. Verification (this pass)
 
-## 3. Pre-publish verification
+- `cargo check --workspace --all-features --all-targets`: passes. Two
+  `unused dependency` warnings are reported; not investigated.
+- `cargo test` for `exact`, `prob-dist`, `splat`, `symbolic`, `autodiff` and
+  `tpt-math` with `--all-features`: all pass, including doctests.
+- `cargo semver-checks check-release --workspace`: all crates report "no change"
+  except the three bumped crates, which report "major change". The tool skips
+  the checks for a 0.x minor bump, so the breaking classification rests on the
+  changelogs and the code diff. The run stops at `tpt-math-splat`: it has no
+  crates.io baseline, so the registry lookup fails. This is the same failure
+  that broke the push job, and the `--exclude tpt-math-splat` in
+  `.github/workflows/ci.yml` stays until splat is published.
+- `cargo publish --dry-run`: passes for `tpt-math-splat`, `tpt-math-exact` and
+  `tpt-math-prob-dist`. `tpt-math-prob` and `tpt-math` cannot be dry-run until
+  their dependencies are on the index.
 
-- [x] `cargo fmt --check`
-- [x] `cargo clippy --workspace --all-targets --all-features -- -D warnings`
-- [x] `cargo test --workspace --all-features` (including doctests). 87 result blocks, all passing.
-- [x] `cargo xtask check` (includes fmt, clippy, tests, doctests, rustdoc, no_std, drift, cargo-deny). Exit 0 on the release tree.
-- [x] `cargo xtask no-std` (includes `thumbv6m-none-eabi`)
-- [x] `cargo doc --workspace --all-features` with `RUSTDOCFLAGS=-D warnings`
-- [x] `cargo deny check` (run through `cargo xtask check`)
-- [x] Simd features pass: `-p tpt-math-linalg-dense --features simd` and
-      `-p tpt-math-linalg-sparse --features simd` (toolchain 1.98, above the 1.95 minimum)
-- [x] `cargo package -p <crate> --list` for each crate. No stray files.
-- [~] `cargo publish --dry-run` for each crate, in dependency order. Not possible
-      standalone: a dry-run fails until the crate's workspace dependencies are on
-      crates.io. Each real `cargo publish` ran the same packaging and verification
-      step in order, and all 28 succeeded.
-- [x] **cargo-semver-checks.** Breaking crates passed in the earlier session;
-      the 12 crates with a published baseline and changes passed this session. No
-      baseline for `pde-operators` or the facade.
-- [x] `[package.metadata.docs.rs]` check. `linalg-dense` already uses
-      `all-features = true`, so no change was needed.
+## 4. Publish steps
 
-## 4. Docs and metadata
+- [ ] Commit the version bumps, changelog and README changes, and the CI change.
+- [ ] `cargo publish -p tpt-math-splat`, then confirm it on the index.
+- [ ] `cargo publish -p tpt-math-exact`, then confirm.
+- [ ] `cargo publish -p tpt-math-prob-dist`, then confirm.
+- [ ] `cargo publish -p tpt-math-prob`, then confirm.
+- [ ] `cargo publish -p tpt-math`, then confirm.
+- [ ] Check docs.rs builds for all five at the new versions.
+- [ ] Tag: `tpt-math-splat-v0.1.0`, `tpt-math-exact-v0.2.0`,
+      `tpt-math-prob-dist-v0.2.0`, `tpt-math-prob-v0.2.0`, `tpt-math-v0.2.0`.
+- [ ] Remove `--exclude tpt-math-splat` from the push step in
+      `.github/workflows/ci.yml`.
+- [ ] Move each published crate's `## [Unreleased]` heading below the new version
+      heading if the new entries were not stamped before publishing.
 
-- [x] Each published crate's `## [Unreleased]` entries moved under `## [<version>] - 2026-10-20`, with a fresh empty `## [Unreleased]` above.
-- [x] Feature tables in the READMEs cover `rayon`, `simd`, `simd-runtime`, and `ode` / `optimize` / `autodiff` on `units-dyn`. The `simd-runtime` row in `linalg-dense` was missing its description; fixed.
-- [x] READMEs' `no_std` column matches `NO_STD_CRATES` (checked by `cargo xtask drift`, part of `xtask check`).
-- [x] `rust-version`: the default build stays at 1.85. The simd rows in `linalg-dense` and `linalg-complex` and `linalg-sparse` state that they need 1.95.
+## 5. Open items
 
-## 5. Publish
+- `release-plz.toml` keeps `publish = false`. The file's comment asks for a manual
+  review of the first release, which this one is not. Leave it unless you decide
+  otherwise.
+- `symbolic` implements its coefficient trait for `tpt_math_exact::BigRational`.
+  Its next release should be checked against `exact` 0.2.0 before publishing.
+- `todo.md` item 7.5 (release-plz) still reflects the earlier state.
 
-- [x] Published in dependency order: leaves first, the facade last (order computed from `cargo metadata`, 28 crates).
-- [x] Each crate was published only after its workspace dependencies appeared in the index. `cargo publish` waits for this by default.
-- [x] After each publish, the version was confirmed on crates.io (all 28 match).
-- [x] docs.rs builds. All 28 are green: `docs.rs/crate/<name>/<version>/status.json` reports `doc_status: true` for every published version, including the facade.
+## 6. Corrections to the previous version of this document
 
-## 6. After publishing
-
-- [x] Tagged the release. Annotated tags `tpt-math-<crate>-v<version>` for each of the 27 crates and `tpt-math-v0.1.0` for the facade, all on `2e8c74b`. Pushed to origin (56 entries from `ls-remote`, which includes peeled tags).
-- [x] Removed the `--exclude tpt-math --exclude tpt-math-pde-operators` flags from the semver job in `.github/workflows/ci.yml`. Pushed.
-- [x] Update `todo.md`: release-plz (7.5) is unchecked until it can publish. Done in the commit that adds this checklist.
-- [ ] Re-enable `publish = true` in `release-plz.toml`. Left as `false` on purpose: the file's comment says to wait until the first release has been reviewed by hand.
-- [x] Updated `Cargo.lock` and committed.
-
-## 7. Open follow-ups
-
-- **Confirmed:** `geometry` stays at 0.2.0. `from_matrix` changed behaviour
-  without a signature change, so semver-checks does not catch it. It is listed as
-  breaking in the changelog and the version reflects that.
-- `todo.md` item 7.5 (release-plz and automation) is reopened until release-plz can
-  publish. The rest of that item is done.
-- `release-plz` publishing stays off until the release has been reviewed by hand.
+- Section 3 said `cargo publish --dry-run` could not run standalone. It can, once
+  the crate's dependencies are on the index; `splat`, `exact` and `prob-dist`
+  now pass.
+- The earlier release table listed 28 crates plus the facade. Every crate in that
+  table is on the index at its listed version; that history lives in the git tags.
