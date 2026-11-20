@@ -13,6 +13,7 @@ members = [
     "crates/tpt-math-linalg-fixed",
     "crates/tpt-math-geometry",
     "crates/tpt-math-spatial",
+    "crates/tpt-math-splat",
     "crates/tpt-math-prob-core",
     "crates/tpt-math-prob-dist",
     "crates/tpt-math-prob-bayes",
@@ -62,6 +63,7 @@ tpt-math-linalg = { version = "0.2.0", path = "crates/tpt-math-linalg" }
 tpt-math-linalg-fixed = { version = "0.2.0", path = "crates/tpt-math-linalg-fixed", default-features = false }
 tpt-math-geometry = { version = "0.2.0", path = "crates/tpt-math-geometry", default-features = false }
 tpt-math-spatial = { version = "0.2.0", path = "crates/tpt-math-spatial" }
+tpt-math-splat = { version = "0.1.0", path = "crates/tpt-math-splat", default-features = false }
 tpt-math-prob-core = { version = "0.1.1", path = "crates/tpt-math-prob-core", default-features = false }
 tpt-math-prob-dist = { version = "0.1.1", path = "crates/tpt-math-prob-dist" }
 tpt-math-prob-bayes = { version = "0.2.0", path = "crates/tpt-math-prob-bayes" }

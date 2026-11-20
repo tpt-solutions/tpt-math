@@ -1,0 +1,37 @@
+[package]
+name = "tpt-math-splat"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "no_std math primitives for 3D/4D Gaussian splatting: symmetric covariance matrices, 4D time-conditioning, spherical harmonics, Morton/Hilbert ordering. No allocator."
+readme = "README.md"
+repository.workspace = true
+homepage.workspace = true
+documentation = "https://docs.rs/tpt-math-splat"
+keywords = ["gaussian-splatting", "covariance", "spherical-harmonics", "hilbert-curve", "no-std"]
+categories = ["mathematics", "graphics", "algorithms", "no-std"]
+
+[dependencies]
+tpt-math-numeric = { workspace = true, default-features = false }
+
+[features]
+default = ["std"]
+std = ["tpt-math-numeric/std"]
+alloc = ["tpt-math-numeric/alloc"]
+
+[lints]
+workspace = true
+
+[dev-dependencies]
+criterion = { workspace = true }
+proptest = { workspace = true }
+
+[[bench]]
+name = "splat_bench"
+harness = false
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
