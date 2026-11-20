@@ -122,8 +122,8 @@ mod tests {
         let n = coeff_count(degree);
         let (nz, nphi) = (400usize, 64usize);
         let mut g = [[0.0; 16]; 16];
-        for iz in 0..nz {
-            let z = -1.0 + 2.0 * (iz as f64 + 0.5) / nz as f64;
+        for izi in 0..nz {
+            let z = -1.0 + 2.0 * (izi as f64 + 0.5) / nz as f64;
             let r = (1.0 - z * z).sqrt();
             for ip in 0..nphi {
                 let phi = 2.0 * core::f64::consts::PI * (ip as f64 + 0.5) / nphi as f64;

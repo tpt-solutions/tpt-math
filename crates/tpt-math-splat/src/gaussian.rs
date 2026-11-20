@@ -192,11 +192,11 @@ pub fn perspective_jacobian<T: Scalar>(p: [T; 3], fx: T, fy: T) -> Option<[[T; 3
     if !(z > T::zero()) || !z.is_finite() {
         return None;
     }
-    let iz = T::one() / z;
-    let iz2 = iz * iz;
+    let inv_z = T::one() / z;
+    let inv_z2 = inv_z * inv_z;
     Some([
-        [fx * iz, T::zero(), -fx * p[0] * iz2],
-        [T::zero(), fy * iz, -fy * p[1] * iz2],
+        [fx * inv_z, T::zero(), -fx * p[0] * inv_z2],
+        [T::zero(), fy * inv_z, -fy * p[1] * inv_z2],
     ])
 }
 
