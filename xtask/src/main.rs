@@ -61,6 +61,7 @@ const NO_STD_CRATES: &[(&str, &str)] = &[
     ("tpt-math-linalg-fixed", ""),
     ("tpt-math-geometry", ""),
     ("tpt-math-spatial", ""),
+    ("tpt-math-splat", ""),
     ("tpt-math-graph", ""),
     ("tpt-math-interpolate", "alloc"),
     ("tpt-math-pde-operators", "alloc"),

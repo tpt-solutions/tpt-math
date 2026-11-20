@@ -17,6 +17,7 @@
 //! | `symbolic`    | [`symbolic`]      | symbolic expressions                   |
 //! | `geometry`    | [`geometry`]      | points, rotations, isometries          |
 //! | `spatial`     | [`spatial`]       | spatial vectors and screw theory       |
+//! | `splat`       | [`splat`]         | Gaussian-splatting primitives          |
 //! | `graph`       | [`graph`]         | graphs, shortest paths, max-flow       |
 //! | `interpolate` | [`interpolate`]   | RBF, kriging, PCHIP, B-splines         |
 //!
@@ -79,6 +80,9 @@ pub use tpt_math_geometry as geometry;
 
 #[cfg(feature = "spatial")]
 pub use tpt_math_spatial as spatial;
+
+#[cfg(feature = "splat")]
+pub use tpt_math_splat as splat;
 
 #[cfg(feature = "graph")]
 pub use tpt_math_graph as graph;

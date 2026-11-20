@@ -40,10 +40,11 @@ Crates are organised into layers; lower layers never depend on higher ones.
 | `tpt-math-linalg-sparse` | — (in-house) | yes (alloc) | Sparse COO/CSR/CSC + iterative CG/BiCGSTAB solvers; hand-rolled, complements `tpt-fem-sparse`. Optional `simd` feature (via `tpt-simd-sparse`) for f32/f64 CG and BiCGSTAB. |
 | `tpt-math-geometry` | `tpt-math-linalg-fixed` (in-house) | yes | Points, rotations, quaternions, isometries, projections; no `nalgebra`. |
 
-### Geometry & spatial
+### Geometry, spatial & splatting
 | Crate | Wraps / consolidates | `no_std` | Notes |
 |-------|----------------------|----------|-------|
 | `tpt-math-spatial` | — (in-house) | yes | Featherstone 6-D spatial vectors, dual quaternions, screw theory; built on `tpt-math-geometry` / `-linalg-fixed`. |
+| `tpt-math-splat` | — (in-house) | yes | 3D/4D Gaussian-splatting primitives: packed SPD covariances, 4D time-conditioning, spherical harmonics, Morton/Hilbert keys. |
 
 ### Graph & interpolation
 | Crate | Wraps / consolidates | `no_std` | Notes |
@@ -144,7 +145,7 @@ Downstream repos depend only on the leaf / umbrella crates they need:
 
 ## Repository layout
 
-- `crates/*` — the 33 library workspace members (32 domain crates plus the `tpt-math` facade).
+- `crates/*` — the 34 library workspace members (33 domain crates plus the `tpt-math` facade).
 - `xtask/` — the developer-tooling crate (`cargo xtask …`).
 - `examples/` — `tpt-math-examples`, four unpublished cross-crate demos.
 - `Cargo.toml` — workspace manifest (`resolver = "2"`, shared `[workspace.package]`).

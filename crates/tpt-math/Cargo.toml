@@ -26,6 +26,7 @@ tpt-math-signal = { workspace = true, optional = true }
 tpt-math-symbolic = { workspace = true, optional = true }
 tpt-math-geometry = { workspace = true, optional = true }
 tpt-math-spatial = { workspace = true, optional = true }
+tpt-math-splat = { workspace = true, optional = true }
 tpt-math-graph = { workspace = true, optional = true }
 tpt-math-interpolate = { workspace = true, optional = true }
 tpt-math-units-dyn = { workspace = true, optional = true }
@@ -50,6 +51,7 @@ signal = ["dep:tpt-math-signal"]
 symbolic = ["dep:tpt-math-symbolic"]
 geometry = ["dep:tpt-math-geometry"]
 spatial = ["dep:tpt-math-spatial"]
+splat = ["dep:tpt-math-splat"]
 graph = ["dep:tpt-math-graph"]
 interpolate = ["dep:tpt-math-interpolate"]
 units-dyn = ["dep:tpt-math-units-dyn"]
@@ -67,6 +69,7 @@ std = [
     "tpt-math-linalg-complex?/std",
     "tpt-math-linalg-fixed?/std",
     "tpt-math-pde-operators?/std",
+    "tpt-math-splat?/std",
 ]
 full = [
     "units-dyn",
@@ -86,6 +89,7 @@ full = [
     "symbolic",
     "geometry",
     "spatial",
+    "splat",
     "graph",
     "interpolate",
 ]

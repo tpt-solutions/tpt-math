@@ -1010,6 +1010,7 @@ dependencies = [
  "tpt-math-prob",
  "tpt-math-signal",
  "tpt-math-spatial",
+ "tpt-math-splat",
  "tpt-math-stats",
  "tpt-math-symbolic",
  "tpt-math-units",
@@ -1298,6 +1299,15 @@ dependencies = [
  "criterion",
  "tpt-math-geometry",
  "tpt-math-linalg-fixed",
+ "tpt-math-numeric",
+]
+
+[[package]]
+name = "tpt-math-splat"
+version = "0.1.0"
+dependencies = [
+ "criterion",
+ "proptest",
  "tpt-math-numeric",
 ]
 
