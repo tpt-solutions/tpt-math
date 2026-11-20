@@ -6,9 +6,11 @@ All notable changes to this crate are documented here. Format based on
 
 ## [Unreleased]
 
-### Changed
+## [0.2.0] - 2026-11-21
 
-- Updated to `rand` 0.10 and `rand_distr` 0.6. The `CoreRng` adapter now implements `rand::TryRng` (infallible), and `rand::Rng` comes from the blanket impl. A dependency graph that pins `rand` 0.9 will no longer type-check against `CoreRng`.
+### Changed (breaking)
+
+- Updated to `rand` 0.10 and `rand_distr` 0.6. The `CoreRng` adapter now implements `rand::TryRng` (infallible) instead of `rand::RngCore`, and `rand::Rng` comes from the blanket impl. A dependency graph that pins `rand` 0.9 will no longer type-check against `CoreRng`. Code that called `RngCore` methods on `CoreRng` should import `rand::Rng` instead.
 
 ## [0.1.1] - 2026-10-20
 

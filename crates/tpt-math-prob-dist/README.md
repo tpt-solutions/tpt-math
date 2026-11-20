@@ -45,7 +45,7 @@ bisection. Cauchy is closed form. Invalid parameters return `NaN`.
 
 ```toml
 [dependencies]
-tpt-math-prob-dist = "0.1"
+tpt-math-prob-dist = "0.2"
 ```
 
 ```rust
@@ -78,8 +78,7 @@ the raw `rand_distr` module is re-exported for direct use.
 
 - `CoreRng` is the adapter in the other direction: it turns any
   `tpt_math_prob_core::Rng` into a `rand::TryRng` (infallible, so `rand::Rng`
-  applies), so `rand_distr`
-  distributions can be sampled directly
+  applies), so `rand_distr` distributions can be sampled directly
   (`dist.sample(&mut CoreRng(&mut rng))`). It is zero-cost and stateless.
 - The `rand` version matters: `rand_distr` 0.6 is built against `rand` 0.10, and
   `CoreRng` implements *that* `TryRng`. Mixing a different `rand` major
