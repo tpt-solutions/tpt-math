@@ -44,7 +44,7 @@ Take only the pieces you need:
 
 ```toml
 [dependencies]
-tpt-math-prob = { version = "0.1", default-features = false, features = [
+tpt-math-prob = { version = "0.2", default-features = false, features = [
     "tpt-math-prob-bayes",
     "tpt-math-prob-sampler",
 ] }
