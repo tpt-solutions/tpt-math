@@ -6,9 +6,13 @@ All notable changes to this crate are documented here. Format based on
 
 ## [Unreleased]
 
-### Changed
+## [0.2.0] - 2026-11-21
 
-- `BigRational` is now implemented in this crate instead of re-exported from `num-rational`. It is always stored in lowest terms with a positive denominator. The `num-rational` dependency is removed and `num-integer` 0.1 is added; `num-bigint` stays on the 0.4 line.
+### Changed (breaking)
+
+- `BigRational` is now implemented in this crate instead of re-exported from `num-rational`. It is always stored in lowest terms with a positive denominator. The `num-rational` dependency is removed and `num-integer` 0.1 is added.
+- `num-bigint` moves from 0.4 to 0.5. `BigInt` and `BigUint` re-exported from this crate are the 0.5 types, so code that mixes them with `num-bigint` 0.4 values no longer type-checks.
+- Code that named `num_rational::BigRational` must use `tpt_math_exact::BigRational` instead.
 
 ### Added
 

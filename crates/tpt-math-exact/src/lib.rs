@@ -1,8 +1,6 @@
 #![no_std]
 //! Arbitrary-precision rational arithmetic and interval arithmetic.
 //!
-//! Arbitrary-precision rational arithmetic and interval arithmetic.
-//!
 //! This crate builds on [`num_bigint`] to provide exact rational numbers
 //! ([`BigRational`]), and layers an [`Interval`] type on top for rigorous
 //! (rounding-error-free) bounds. Because the bounds are exact rationals,

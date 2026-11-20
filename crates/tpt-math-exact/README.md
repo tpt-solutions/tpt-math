@@ -28,7 +28,7 @@ not an umbrella crate; inside the workspace it depends only on
 
 ```toml
 [dependencies]
-tpt-math-exact = "0.1"
+tpt-math-exact = "0.2"
 ```
 
 ```rust
