@@ -27,6 +27,7 @@ tpt-math = { git = "https://github.com/tpt-solutions/tpt-math", package = "tpt-m
 | `symbolic`     | `symbolic`      | symbolic expressions, parsing and compilation         |
 | `geometry`     | `geometry`      | points, rotations, isometries                         |
 | `spatial`      | `spatial`       | spatial vectors and screw theory                      |
+| `splat`        | `splat`         | 3D/4D Gaussian-splatting primitives                   |
 | `graph`        | `graph`         | graphs, shortest paths, max-flow                      |
 | `interpolate`  | `interpolate`   | RBF, kriging, PCHIP, splines, multilinear grids       |
 | `pde-operators`| `pde_operators` | gradient, divergence and Laplacian on structured grids |
